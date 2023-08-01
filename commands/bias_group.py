@@ -2,6 +2,7 @@ import discord
 
 USERNAME_MAP = {
   "Alexrandia": "453573453623328778",
+  "Cats & Kpop": "758818887672004609",
   "Chris Prime!": "227092770110570496",
   "Diana4Dragons": "797897851907866665",
   "HallyU": "904751089633615972",
@@ -130,6 +131,22 @@ BIAS_MAP = {
       "<:gidle:795876356491575318> is the group that got me into Kpop. I like the fact that this is a self product group. I love their concept that consist in creating a unique group by having members with very different charms/abilities and by fully using those abilities in every single song. They are always able to create songs with new and original concepts while having a distinctive style."
     ]),
     'title_track': "[Lion](https://youtu.be/6oanIo_2Z4Q)",
+  },
+  # Cats & Kpop
+  "758818887672004609": {
+    'album': "[The Perfect Red Velvet](https://youtu.be/804vjsGeags)",
+    'bias': "Seulgi",
+    'b_track': "They're the B-Side Queens, so this is always in flux!",
+    'debut_date': "August 1, 2014",
+    'embed_colour': 0xfda487,
+    'filename': "red_velvet.jpeg",
+    'label': "SM Entertainment",
+    'members': "Irene, Joy, Seulgi, Wendy, Yeri",
+    'name': "Red Velvet (레드벨벳)",
+    'reason': '\n'.join([
+      "I chose <:redvelvet:795873702054330408> as my bias group due to their genre versatility and impeccable discography."
+    ]),
+    'title_track': "[Psycho](https://youtu.be/uR8Mrt1IpXg)",
   }
 }
 
