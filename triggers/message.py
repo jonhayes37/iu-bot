@@ -47,10 +47,10 @@ async def reply_with_gif(incoming, content, filename):
 
 def is_subword(text, trigger):
     splits = text.split(trigger)
-    alphanum = re.compile(r'/^[a-zA-Z0-9]+$/')
-    for i in range(len(splits)):
-        pre_match = len(splits[i]) != 0 and re.search(alphanum, splits[i][-1])
-        post_match = len(splits[i+1]) != 0 and re.search(alphanum, splits[i+1][0])
+    alphanum = re.compile(r'^[a-zA-Z0-9]+$')
+    for i in range(len(splits) - 1):
+        pre_match = len(splits[i]) != 0 and alphanum.search(splits[i][-1])
+        post_match = len(splits[i+1]) != 0 and alphanum.search(splits[i+1][0])
         if not pre_match and not post_match:
             return False
 

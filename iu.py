@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
+from commands.poll import generate_poll
 from commands.ultimate_bias import my_ultimate_bias
 from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.member import add_trainee_role, welcome_member
@@ -65,5 +66,12 @@ async def bias_group(interaction, member: typing.Optional[str]):
 @tree.command(name='hallyu-calendar', description="See how to add the HallyU calendar to your own calendar.")
 async def hallyu_calendar(interaction):
     await send_calendar(interaction)
+
+@tree.command(name='poll', description="Create a poll.")
+@discord.app_commands.describe(question='The question you want to ask',
+                               answers='The possible answers, separated by |')
+async def poll(interaction, question: str, answers: str):
+    await generate_poll(interaction, question, answers)
+
 
 client.run(TOKEN)

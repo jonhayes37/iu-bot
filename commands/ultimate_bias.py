@@ -60,7 +60,8 @@ BIAS_MAP = {
 
 async def my_ultimate_bias(interaction, member_name):
     user_id = interaction.user.id
-    username = interaction.user.nick if interaction.user.nick else interaction.user.name
+    username = interaction.user.nick if interaction.user.nick else \
+        interaction.user.display_name if interaction.user.display_name else interaction.user.global_name
 
     # Check for the person requested in the option
     if member_name:
