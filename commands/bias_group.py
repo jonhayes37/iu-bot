@@ -6,6 +6,7 @@ USERNAME_MAP = {
   "Chris Prime!": "227092770110570496",
   "Diana4Dragons": "797897851907866665",
   "HallyU": "904751089633615972",
+  "InsomniAloha": "521827421968924672",
   "Stromsolar": "317621715247300609",
   "Kpopbrandy": "202927629018333184",
   "Xion Rin": "271060400886251530",
@@ -147,6 +148,22 @@ BIAS_MAP = {
       "I chose <:redvelvet:795873702054330408> as my bias group due to their genre versatility and impeccable discography."
     ]),
     'title_track': "[Psycho](https://youtu.be/uR8Mrt1IpXg)",
+  },
+  # InsomniAloha
+  '521827421968924672': {
+    'album': "[Dystopia: The Tree of Language](https://youtu.be/9wA7acMsbw4)",
+    'bias': "JiU (Kim Minji)",
+    'b_track': "[Trap](https://youtu.be/H9AYF1Sl72Q)",
+    'debut_date': "January 13, 2017",
+    'embed_colour': 0x8a3324,
+    'filename': "dreamcatcher.png",
+    'label': "Happyface Entertainment",
+    'members': "Dami, Gahyeon, Handong, JiU, Siyeon, SuA, Yoohyeon",
+    'name': "Dreamcatcher (드림캐쳐)",
+    'reason': '\n'.join([
+      "I love their unique music and sound. Their choreography is always top notch and their live vocals are amazing. Besides being amazing artists they seem to very genuine and down to earth people. When they are off stage it's always fun to watch their antics."
+    ]),
+    'title_track': "[Piri](https://youtu.be/Pq_mbTSR-a0)",
   }
 }
 

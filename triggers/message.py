@@ -35,14 +35,20 @@ TRIGGER_LIST = {
     'step it up': { 'filename': 'kara step.gif' },
     'sticker': { 'content': "Great. Now I'm thinking about \"Sticker\" again.", 'filename': 'nctSticker.gif' },
     'tipsy': { 'content': 'Just a bit tipsy', 'filename': 'drunk.gif' },
-    'very nice': { 'content': '아주 nice!', 'filename': 'veryNice.gif' }
+    'very nice': { 'content': '아주 nice!', 'filename': 'veryNice.gif' },
+    '아주 nice': { 'content': '아주 nice!', 'filename': 'veryNice.gif' },
+    'uhm jung hwa': { 'content': '엄정화 detected - paging <@330890965881585665>!' },
+    '엄정화': { 'content': '엄정화 detected - paging <@330890965881585665>!' },
 }
 
 
 async def reply_with_gif(incoming, content, filename):
-    media_dir = 'gifs' if filename.endswith('.gif') else 'images'
-    new_file = discord.File(f'media/{media_dir}/{filename}', filename=filename)
-    await incoming.reply(content, file=new_file)
+    if filename is not None:
+        media_dir = 'gifs' if filename.endswith('.gif') else 'images'
+        new_file = discord.File(f'media/{media_dir}/{filename}', filename=filename)
+        await incoming.reply(content, file=new_file)
+    else:
+        await incoming.reply(content)
 
 
 def is_subword(text, trigger):
@@ -80,4 +86,5 @@ async def check_message_for_replies(message):
 
 
 async def respond_to_ping(message):
-    await reply_with_gif(message, 'IU at your service!', 'ping.gif')
+    if '<@1132749272488624189>' in message.content:
+        await reply_with_gif(message, 'IU at your service!', 'ping.gif')

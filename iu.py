@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
 from commands.poll import generate_poll
+from commands.rankdown_turn import rankdown_turn, InvalidSongError, SamePlayerEliminationError
 from commands.ultimate_bias import my_ultimate_bias
 from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.member import add_trainee_role, welcome_member
@@ -23,6 +24,7 @@ CHANNELS = {
     'rules': os.getenv('DISCORD_CHANNEL_RULES'),
     'welcome': os.getenv('DISCORD_CHANNEL_WELCOME')
 }
+COMMAND_ERRORS = [InvalidSongError, SamePlayerEliminationError]
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -72,6 +74,17 @@ async def hallyu_calendar(interaction):
                                answers='The possible answers, separated by |')
 async def poll(interaction, question: str, answers: str):
     await generate_poll(interaction, question, answers)
+
+@tree.command(name='rankdown-turn', description="Take your turn in Rankdown")
+@discord.app_commands.describe(song_to_eliminate="The song you're eliminating",
+                               reason_to_eliminate="Why you're eliminating the song",
+                               song_to_nominate="The song you're nominating",
+                               reason_to_nominate="Why you're nominating the song",
+                               next_message="The message for the next player")
+async def rankdown(interaction, song_to_eliminate: str, reason_to_eliminate: str,
+               song_to_nominate: str, reason_to_nominate: str, next_message: typing.Optional[str]):
+    await rankdown_turn(interaction, song_to_eliminate, reason_to_eliminate,
+                        song_to_nominate, reason_to_nominate, next_message)
 
 
 client.run(TOKEN)

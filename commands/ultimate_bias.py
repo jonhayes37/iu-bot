@@ -5,6 +5,7 @@ USERNAME_MAP = {
   "Diana4Dragons": "797897851907866665",
   "HallyU": "904751089633615972",
   "Kpopbrandy": "202927629018333184",
+  "Xion Rin": "271060400886251530",
 }
 
 BIAS_MAP = {
@@ -55,6 +56,18 @@ BIAS_MAP = {
     'name': "Siyoon (시윤)",
     'position': "Main Rapper, Lead Dancer",
     'reason': "I thought long and hard about this and with all the things I have and who and what I talk about most often it had to be Siyoon. I have the most items of her, I did a 1:1 video call fansign with her, I have 2 polas and a fat collection of photocards. As much as I love Sunny of SNSD And multiple members of Loona, Siyoon had my heart from the beginning of RINGXRING and still does. I don't think I've fallen so wholeheartedly for an idol since I found Kpop in 2010. Sunny will always be my 1st Bias but as of 2023 Siyoon is my ultimate Bias!!! I am a Belllie've to my core and as Siyoon once said \"I'M SO HAPPY NOW!\" And with the knowledge that she still remembered my scream of \"I love you, Siyoon!\" 3 whole months later, I'll continue to be happy as long as I know her."
+  },
+  # Xion Rin
+  "271060400886251530": {
+    'birth_name': "Lim Nayoung (임나영)",
+    'birthday': "December 18, 1995",
+    'embed_colour': 0xf24130,
+    'filename': "pristin_nayoung.jpeg",
+    'group': "Pristin (프리스틴)",
+    'hometown': "Seoul, South Korea",
+    'name': "Nayoung (나영)",
+    'position': "Main Dancer, Lead Rapper",
+    'reason': "I think there's something special in your first real love when getting into anything, and Nayoung was that for me. I got into kpop by watching the first season of Produce 101 and I only had one choice the entire show. Lim Nayoung. I watched her grow, I watched her debut, and then redebut, and now I go out of my way to watch every single project she does and buy any bit of merch I can. It's hard to explain why I love her so much, but she's been there from the beginning and I'm not leaving her side any time soon."
   },
 }
 
