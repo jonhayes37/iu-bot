@@ -2,6 +2,7 @@ import discord
 
 USERNAME_MAP = {
   "Alexrandia": "453573453623328778",
+  "Cai": "330890965881585665",
   "Cats & Kpop": "758818887672004609",
   "Chris Prime!": "227092770110570496",
   "Diana4Dragons": "797897851907866665",
@@ -164,6 +165,22 @@ BIAS_MAP = {
       "I love their unique music and sound. Their choreography is always top notch and their live vocals are amazing. Besides being amazing artists they seem to very genuine and down to earth people. When they are off stage it's always fun to watch their antics."
     ]),
     'title_track': "[Piri](https://youtu.be/Pq_mbTSR-a0)",
+  },
+  # Cai
+  '330890965881585665': {
+    'album': "[Prima Donna](https://youtu.be/1tiAOQkMrXw)",
+    'bias': "Eunji",
+    'b_track': "[Miss Agent](https://youtu.be/T2-0at7naVo)",
+    'debut_date': "August 12, 2010",
+    'embed_colour': 0x732788,
+    'filename': "9muses.jpeg",
+    'label': "Star Empire",
+    'members': "Bini, Euaerin, Eunji, Hyemi, Hyuna, Jaekyung, Keumjo, Kyungri, LeeSem, Minha, Rana, Sera, Sojin, Sungah",
+    'name': "9Muses (나인뮤지스)",
+    'reason': '\n'.join([
+      "9Muses had so many lineup changes it can't really be thought of as one group, but over time I grew to love all of them. They're the group that taught me how to be a Kpop fan from enjoying aegyo to coming to terms with how the end product that is Kpop is made. As a group, 9Muses is painfully flawed in shockingly well documented ways that can’t be denied. As an idea, however, 9Muses understood the assignment and consistently provided my favorite kind of concept: The mature sexy concept. In that way, they were brilliant."
+    ]),
+    'title_track': "[Wild](https://youtu.be/fwN_Axs7pL4)",
   }
 }
 

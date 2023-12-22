@@ -86,5 +86,5 @@ async def check_message_for_replies(message):
 
 
 async def respond_to_ping(message):
-    if '<@1132749272488624189>' in message.content:
+    if not message.mention_everyone:
         await reply_with_gif(message, 'IU at your service!', 'ping.gif')

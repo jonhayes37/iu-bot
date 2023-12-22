@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
+from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
 from commands.poll import generate_poll
 from commands.rankdown_turn import rankdown_turn, InvalidSongError, SamePlayerEliminationError
 from commands.ultimate_bias import my_ultimate_bias
@@ -86,5 +87,17 @@ async def rankdown(interaction, song_to_eliminate: str, reason_to_eliminate: str
     await rankdown_turn(interaction, song_to_eliminate, reason_to_eliminate,
                         song_to_nominate, reason_to_nominate, next_message)
 
+@tree.command(name='add-hma-pick', description="Save something you want to remember for the HMAs!")
+@discord.app_commands.describe(pick='The message and/or link you want to remember')
+async def save_pick(interaction, pick: str):
+    await add_hma_pick(interaction, pick)
+
+@tree.command(name='delete-hma-picks', description="Delete your HMA picks to start fresh")
+async def delete_picks(interaction):
+    await delete_hma_picks(interaction)
+
+@tree.command(name='my-hma-picks', description="See your saved HMA picks")
+async def see_picks(interaction):
+    await my_hma_picks(interaction)
 
 client.run(TOKEN)
