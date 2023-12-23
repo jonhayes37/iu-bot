@@ -24,7 +24,7 @@ jobs:
 
       - name: Lint
         run: |
-          pylint .
+          pylint src
           
       - name: Unit test
         run: pytest --cov=.
