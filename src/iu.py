@@ -1,19 +1,20 @@
 """IU Bot for the HallyU Discord server"""
 
 import os
+import typing
 
 import discord
-import typing
 from dotenv import load_dotenv
 
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
 from commands.poll import generate_poll
-from commands.rankdown_turn import rankdown_turn, InvalidSongError, SamePlayerEliminationError
+from commands.rankdown_turn import (InvalidSongError,
+                                    SamePlayerEliminationError, rankdown_turn)
 from commands.ultimate_bias import my_ultimate_bias
-from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.member import add_trainee_role, welcome_member
+from triggers.message import check_message_for_replies, respond_to_ping
 
 # Load env vars, connect to Discord
 load_dotenv()
@@ -57,16 +58,19 @@ async def on_member_join(member):
     await welcome_member(member)
 
 @tree.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
-@discord.app_commands.describe(member='The member whose bias you want to see. Leave empty for your own.')
+@discord.app_commands.describe(member='The member whose bias you want to see. " \
+                               "Leave empty for your own.')
 async def ultimate_bias(interaction, member: typing.Optional[str]):
     await my_ultimate_bias(interaction, member)
 
 @tree.command(name='my-bias-group', description="See who everyone's bias group is!")
-@discord.app_commands.describe(member='The member whose bias group you want to see. Leave empty for your own.')
+@discord.app_commands.describe(member='The member whose bias group you want to see." \
+                               Leave empty for your own.')
 async def bias_group(interaction, member: typing.Optional[str]):
     await my_bias_group(interaction, member)
 
-@tree.command(name='hallyu-calendar', description="See how to add the HallyU calendar to your own calendar.")
+@tree.command(name='hallyu-calendar', description="See how to add the HallyU calendar " \
+              "to your own calendar.")
 async def hallyu_calendar(interaction):
     await send_calendar(interaction)
 

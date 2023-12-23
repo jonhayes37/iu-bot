@@ -1,7 +1,9 @@
 import unittest
+
 from parameterized import parameterized
 
 from triggers.message import is_subword
+
 
 class TestIsSubword(unittest.TestCase):
 
