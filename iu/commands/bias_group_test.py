@@ -3,11 +3,11 @@
 import discord
 import pytest
 from commands.bias_group import my_bias_group
-from testing.interaction import MockInteraction, MockUser
 from common.discord_ids import USERNAMES
+from testing.interaction import MockInteraction, MockUser
 
-main_user = MockUser(id=USERNAMES["HallyU"], name="soshi0805", nick="HallyU")
-not_unlocked_user = MockUser(id="12345", name="soshi", nick="Soshi")
+main_user = MockUser(user_id=USERNAMES["HallyU"], name="soshi0805", nick="HallyU")
+not_unlocked_user = MockUser(user_id="12345", name="soshi", nick="Soshi")
 main_file = discord.File("iu/media/images/snsd.jpg", filename='snsd.jpg')
 main_embed = discord.Embed(title="HallyU's Bias Group",
     type='rich',
@@ -37,11 +37,23 @@ The Nation's Girl Group! These girls and their body of work speaks for itself. N
 @pytest.mark.parametrize(["user", "member", "expected_message", "expected_embed", "expected_file"],
 [
     # User doesn't have command unlocked
-    (not_unlocked_user, "", f"Sorry <@!{not_unlocked_user.id}>, you haven't unlocked a bias group yet!", None, None),
+    (not_unlocked_user,
+     "",
+     f"Sorry <@!{not_unlocked_user.id}>, you haven't unlocked a bias group yet!",
+     None,
+     None),
     # Non-existent member
-    (main_user, "Soshified", f"Sorry <@!{main_user.id}>, Soshified hasn't unlocked a bias group yet!", None, None),
+    (main_user,
+     "Soshified",
+     f"Sorry <@!{main_user.id}>, Soshified hasn't unlocked a bias group yet!",
+     None,
+     None),
     # Run on self (no member)
-    (main_user, "", "", main_embed, main_file),
+    (main_user,
+     "",
+     "",
+     main_embed,
+     main_file),
 ])
 async def test_bias_group(user, member, expected_message, expected_embed, expected_file):
     interaction = MockInteraction(user)

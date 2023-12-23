@@ -12,6 +12,7 @@ class MockResponder:
     """Mock for a discord.InteractionResponse"""
     def __init__(self):
         self.message = None
+        self.ephemeral = False
         self.embed = None
         self.file = None
         self.bot_response = None
@@ -25,19 +26,19 @@ class MockResponder:
 
 class MockUser():
     """Mock for a discord.User"""
-    def __init__(self, id = "", name = "", nick = "", display_name = "", global_name = ""):
-        self.dm = ""
+    def __init__(self, user_id = "", name = "", nick = "", display_name = "", global_name = ""):
+        self.direct_message = ""
         self.mention = name
-        self.id = id
+        self.id = user_id  # pylint: disable=invalid-name
         self.nick = nick
         self.display_name = display_name
         self.global_name = global_name
 
     async def send(self, message):
-        self.dm = message
+        self.direct_message = message
 
     def assert_dm_equals(self, message):
-        assert self.dm == message
+        assert self.direct_message == message
 
 class MockInteraction():
     """Mock for a discord.Interaction"""
@@ -56,8 +57,13 @@ class MockInteraction():
         if embed is None:
             assert self.response.embed is None
         else:
-            assert self.response.embed.title == embed.title and self.response.embed.type == embed.type and self.response.embed.image.url == embed.image.url and self.response.embed.color == embed.color and self.response.embed.fields[0].value == embed.fields[0].value
+            assert self.response.embed.title == embed.title and \
+                self.response.embed.type == embed.type and \
+                self.response.embed.image.url == embed.image.url and \
+                self.response.embed.color == embed.color and \
+                self.response.embed.fields[0].value == embed.fields[0].value
 
     def assert_file_equals(self, file):
-        assert (file is None and self.response.file is None) or self.response.file.fp.read() == file.fp.read() and \
+        assert file is None and self.response.file is None or \
+            self.response.file.fp.read() == file.fp.read() and \
             self.response.file.filename == file.filename
