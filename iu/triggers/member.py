@@ -20,5 +20,5 @@ async def welcome_member(member):
         f'{rules_channel.mention} channel to get started, then head over to ' \
         f'{roles_channel.mention} to get roles for your favourite fandoms! Feel free to share ' \
         f'a bit about yourself in {intro_channel.mention} too.'
-    wave_file = discord.File('media/gifs/iuWave.gif', filename='iuWave.gif')
+    wave_file = discord.File('iu/media/gifs/iuWave.gif', filename='iuWave.gif')
     await welcome_channel.send(message, file=wave_file)

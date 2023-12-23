@@ -89,8 +89,8 @@ BIAS_MAP = {
 }
 
 async def my_ultimate_bias(interaction, member_name):
-    user_id, username, found = user_info_from_interaction(interaction, member_name)
-    if not found:
+    user_id, username, invalid_member = user_info_from_interaction(interaction, member_name)
+    if invalid_member:
         await interaction.response.send_message(
             f"Sorry <@!{user_id}>, {member_name} hasn't unlocked an ultimate bias yet!")
         return
@@ -100,7 +100,7 @@ async def my_ultimate_bias(interaction, member_name):
         await interaction.response.send_message(
             f"Sorry <@!{user_id}>, you haven't unlocked an ultimate bias yet!")
     else:
-        bias_image = discord.File(f"media/images/{bias_info.get('filename')}",
+        bias_image = discord.File(f"iu/media/images/{bias_info.get('filename')}",
                                   filename=bias_info.get('filename'))
         embed = discord.Embed(
             title=f"{username}'s Ultimate Bias",

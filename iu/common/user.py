@@ -13,7 +13,7 @@ def user_info_from_interaction(interaction, member_name):
     if member_name:
         for display, username_id in USERNAMES.items():
             if display.lower() == member_name.lower():
-                return username_id, display, True
+                return username_id, display, False
         invalid_member_name = True
 
     return user_id, username, invalid_member_name
