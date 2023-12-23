@@ -1,3 +1,5 @@
+"""/rankdown-turn command"""
+
 from discord import app_commands
 
 TURN_ORDER = [
@@ -12,17 +14,27 @@ TURN_ORDER = [
     "271060400886251530", # Xion Rin
 ]
 
-class ReasonTooLongError(app_commands.AppCommandError):
+class NoPreviousTurnException(Exception):
+    """Custom exception for no previous turn existing."""
     def __init__(self):
-        self.message = f"Your reasoning is too long! The elimination and nomination reasons should each be less than 2,000 characters."
+        super().__init__("no previous turn found")
+
+class ReasonTooLongError(app_commands.AppCommandError):
+    """Custom command error for a reason that's too long for the Discord API"""
+    def __init__(self):
+        self.message = "Your reasoning is too long! The elimination and nomination reasons " \
+                        "should each be less than 2,000 characters."
         super().__init__(self.message)
 
 class InvalidSongError(app_commands.AppCommandError):
+    """Custom command error for a song that's not in the In Danger list"""
     def __init__(self, song):
-        self.message = f"\"{song}\" was not found in the In Danger list! Make sure you copy the song exactly as it appears in the In Danger list."
+        self.message = f"\"{song}\" was not found in the In Danger list! Make sure you copy " \
+                        "the song exactly as it appears in the In Danger list."
         super().__init__(self.message)
 
 class SamePlayerEliminationError(app_commands.AppCommandError):
+    """Custom command error for a player eliminating a song they nominated"""
     def __init__(self, song):
         self.message = f"You nominated \"{song}\", so you cannot eliminate it!"
         super().__init__(self.message)
@@ -34,8 +46,8 @@ async def get_previous_turn(channel):
     async for message in channel.history(limit=10):
         if "**in danger**" in message.content.lower():
             return message.content
-    
-    raise Exception("no previous turn found")
+
+    raise NoPreviousTurnException
 
 def parse_danger_list(turn_message):
     danger_songs = []
@@ -48,21 +60,22 @@ def parse_danger_list(turn_message):
             break
     return danger_songs
 
-
-def update_danger_list(songs, elim, nom, username):
+async def update_danger_list(channel, elim, nom, username):
+    previous_message = await get_previous_turn(channel)
+    songs = parse_danger_list(previous_message)
     def strip_person(line):
         song_pieces = line.split(' (')
         return ' ('.join(song_pieces[:len(song_pieces) - 1])
-    
+
     clean_songs = list(map(strip_person, songs))
     strip_songs = list(map(str.strip, clean_songs))
     lower_songs = list(map(str.lower, strip_songs))
 
     try:
         elim_index = lower_songs.index(elim.lower())
-    except ValueError:
-        raise InvalidSongError(elim)
-    
+    except ValueError as exc:
+        raise InvalidSongError(elim) from exc
+
     if username.lower() in songs[elim_index].lower():
         raise SamePlayerEliminationError(elim)
 
@@ -79,7 +92,7 @@ def split_turn_message(message):
     messages = []
     message_lines = message.split('\n')
     in_danger_index = message_lines.index("**In Danger**")
-    
+
     elim_nom_message = '\n'.join(message_lines[:in_danger_index])
     if len(elim_nom_message) > 2000:
         for index, line in enumerate(message_lines[:in_danger_index]):
@@ -88,25 +101,23 @@ def split_turn_message(message):
                 nom_message = '\n'.join(message_lines[index:in_danger_index])
                 if len(elim_message) > 2000 or len(nom_message) > 2000:
                     raise ReasonTooLongError
-                else:
-                    messages += [elim_message, nom_message]
+                messages += [elim_message, nom_message]
     else:
         messages.append(elim_nom_message)
-    
+
     messages.append('\n'.join(message_lines[in_danger_index:]))
     return messages
 
-async def rankdown_turn(interaction, elim, elim_reason, nom, nom_reason, next_message):
+async def rankdown_turn(interaction, elim, elim_reason, nom, nom_reason,
+                        next_message = "your turn!"):
     try:
         cur_player_id = interaction.user.id
         username = interaction.user.nick if interaction.user.nick else \
-            interaction.user.display_name if interaction.user.display_name else interaction.user.global_name
-        next_message = next_message if next_message else "your turn!"
+            interaction.user.display_name if interaction.user.display_name else \
+            interaction.user.global_name
         next_player = get_next_player(cur_player_id)
-        
-        previous_message = await get_previous_turn(interaction.channel)
-        in_danger_songs = parse_danger_list(previous_message)
-        updated_danger_songs = update_danger_list(in_danger_songs, elim, nom, username)
+
+        updated_danger_songs = update_danger_list(interaction.channel, elim, nom, username)
         danger_list_str = '\n'.join(updated_danger_songs)
 
         message_content = f"""
@@ -128,5 +139,5 @@ I nominate **{nom}**. {nom_reason}
                 await interaction.channel.send(message)
         else:
             await interaction.response.send_message(message_content)
-    except (InvalidSongError, SamePlayerEliminationError, ReasonTooLongError) as e:
-        await handle_command_error(e, interaction)
+    except (InvalidSongError, SamePlayerEliminationError, ReasonTooLongError) as ex:
+        await handle_command_error(ex, interaction)

@@ -4,8 +4,6 @@ import os
 import typing
 
 import discord
-from dotenv import load_dotenv
-
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
@@ -13,6 +11,7 @@ from commands.poll import generate_poll
 from commands.rankdown_turn import (InvalidSongError,
                                     SamePlayerEliminationError, rankdown_turn)
 from commands.ultimate_bias import my_ultimate_bias
+from dotenv import load_dotenv
 from triggers.member import add_trainee_role, welcome_member
 from triggers.message import check_message_for_replies, respond_to_ping
 
@@ -34,19 +33,17 @@ intents.members = True
 client = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(client)
 
-# client = discord.Client(intents=intents)
-
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
     await tree.sync()
-    print(f'Command tree synced!')
+    print('Command tree synced!')
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
-    
+
     if client.user.mentioned_in(message):
         await respond_to_ping(message)
 

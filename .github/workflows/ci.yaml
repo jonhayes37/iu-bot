@@ -3,7 +3,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  ci:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -24,7 +24,7 @@ jobs:
 
       - name: Lint
         run: |
-          pylint src
+          pylint iu
           
       - name: Unit test
         run: pytest --cov=.
