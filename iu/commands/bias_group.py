@@ -16,7 +16,7 @@ BIAS_MAP = {
     'members': "Hyoyeon, Seohyun, Sooyoung, Sunny, Taeyeon, Tiffany, Yoona, Yuri",
     'name': "Girls' Generation (소녀시대)",
     'reason': '\n'.join([
-      "The Nation's Girl Group! These girls and their body of work speaks for itself." \
+      "The Nation's Girl Group! These girls and their body of work speaks for itself. " \
       "Nobody did it like them.",
       "*Right now, Girls' Generation*",
       "*From now on, Girls' Generation*",
@@ -200,8 +200,8 @@ BIAS_MAP = {
 }
 
 async def my_bias_group(interaction, member_name):
-    user_id, username, found = user_info_from_interaction(interaction, member_name)
-    if not found:
+    user_id, username, invalid_member = user_info_from_interaction(interaction, member_name)
+    if invalid_member:
         await interaction.response.send_message(
             f"Sorry <@!{user_id}>, {member_name} hasn't unlocked a bias group yet!")
         return

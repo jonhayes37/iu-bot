@@ -2,7 +2,7 @@
 
 import pytest
 from commands.poll import generate_poll
-from testing.interaction import MockInteraction
+from testing.interaction import MockInteraction, MockUser
 
 
 @pytest.mark.asyncio()
@@ -16,7 +16,7 @@ from testing.interaction import MockInteraction
      "Sorry HallyU, a maximum of 9 answers are supported per poll! You provided 10.")
 ])
 async def test_poll(answers, expected_message):
-    interaction = MockInteraction("HallyU")
+    interaction = MockInteraction(MockUser(name="HallyU"))
     question = "Is IU the best?"
 
     await generate_poll(interaction, question, answers)

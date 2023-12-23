@@ -12,36 +12,58 @@ class MockResponder:
     """Mock for a discord.InteractionResponse"""
     def __init__(self):
         self.message = None
+        self.ephemeral = False
         self.embed = None
         self.file = None
         self.bot_response = None
 
-    async def send_message(self, message, embed=None, file=None):
+    async def send_message(self, message, embed=None, file=None, ephemeral=False):
         self.message = message
         self.embed = embed
+        self.ephemeral = ephemeral
         self.file = file
         self.bot_response = MockMessage()
 
 class MockUser():
     """Mock for a discord.User"""
-    def __init__(self, name):
+    def __init__(self, user_id = "", name = "", nick = "", display_name = "", global_name = ""):
+        self.direct_message = ""
         self.mention = name
+        self.id = user_id  # pylint: disable=invalid-name
+        self.nick = nick
+        self.display_name = display_name
+        self.global_name = global_name
+
+    async def send(self, message):
+        self.direct_message = message
+
+    def assert_dm_equals(self, message):
+        assert self.direct_message == message
 
 class MockInteraction():
     """Mock for a discord.Interaction"""
-    def __init__(self, username=""):
+    def __init__(self, user=None):
         self.response = MockResponder()
-        self.user = MockUser(username)
+        if user:
+            self.user = user
 
     async def original_response(self):
         return self.response.bot_response
 
-    def assert_message_equals(self, message):
-        assert self.response.message == message
+    def assert_message_equals(self, message, ephemeral=False):
+        assert self.response.message == message and self.response.ephemeral == ephemeral
 
     def assert_embed_equals(self, embed):
-        assert self.response.embed == embed
+        if embed is None:
+            assert self.response.embed is None
+        else:
+            assert self.response.embed.title == embed.title and \
+                self.response.embed.type == embed.type and \
+                self.response.embed.image.url == embed.image.url and \
+                self.response.embed.color == embed.color and \
+                self.response.embed.fields[0].value == embed.fields[0].value
 
     def assert_file_equals(self, file):
-        assert self.response.file.fp.read() == file.fp.read() and \
+        assert file is None and self.response.file is None or \
+            self.response.file.fp.read() == file.fp.read() and \
             self.response.file.filename == file.filename
