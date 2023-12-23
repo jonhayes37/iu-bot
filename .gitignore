@@ -7,4 +7,4 @@ __pycache__/*
 .coverage
 
 # HMA reminders of users
-src/hmas
+iu/hmas
