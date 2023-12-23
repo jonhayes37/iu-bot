@@ -23,10 +23,10 @@ async def my_hma_picks(interaction):
     file_path = filepath_for_user(user_id)
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding="utf-8") as file:
-            lines = [f'- {line}' for line in file.readlines()]
+            lines = [f'- {line}'.strip() for line in file.readlines()]
 
     has_picks = len(lines) > 0
-    message = 'Here are your HMA picks!\n' + ''.join(lines)
+    message = 'Here are your HMA picks!\n' + '\n'.join(lines)
     response_message = "Check your DMs! I've sent your HMA picks there." if has_picks else \
     "You don't have any saved HMA picks yet! Add one by using `/add-hma-pick`."
 
