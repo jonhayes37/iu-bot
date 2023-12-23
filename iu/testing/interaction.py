@@ -4,7 +4,7 @@ class MockMessage:
     """Mock for the response message"""
     def __init__(self):
         self.reactions = []
-    
+
     async def add_reaction(self, emoji):
         self.reactions.append(emoji)
 
@@ -14,6 +14,7 @@ class MockResponder:
         self.message = None
         self.embed = None
         self.file = None
+        self.bot_response = None
 
     async def send_message(self, message, embed=None, file=None):
         self.message = message

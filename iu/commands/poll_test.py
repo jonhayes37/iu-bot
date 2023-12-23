@@ -4,6 +4,7 @@ import pytest
 from commands.poll import generate_poll
 from testing.interaction import MockInteraction
 
+
 @pytest.mark.asyncio()
 @pytest.mark.parametrize(["answers", "expected_message"],
                          [
