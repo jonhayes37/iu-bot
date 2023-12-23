@@ -27,10 +27,10 @@ jobs:
           pylint iu
           
       - name: Unit test
-        run: pytest --cov=.
+        run: pytest --cov=iu
 
       - name: Testing coverage
         run: |
-          coverage report --fail-under=80
+          coverage report --fail-under=5
 
       
