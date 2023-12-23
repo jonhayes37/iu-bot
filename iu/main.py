@@ -1,18 +1,19 @@
 """IU Bot for the HallyU Discord server"""
 
 import os
+import typing
 
 import discord
-import typing
-from dotenv import load_dotenv
-
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
+from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
 from commands.poll import generate_poll
-from commands.rankdown_turn import rankdown_turn, InvalidSongError, SamePlayerEliminationError
+from commands.rankdown_turn import (InvalidSongError,
+                                    SamePlayerEliminationError, rankdown_turn)
 from commands.ultimate_bias import my_ultimate_bias
-from triggers.message import check_message_for_replies, respond_to_ping
+from dotenv import load_dotenv
 from triggers.member import add_trainee_role, welcome_member
+from triggers.message import check_message_for_replies, respond_to_ping
 
 # Load env vars, connect to Discord
 load_dotenv()
@@ -32,19 +33,17 @@ intents.members = True
 client = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(client)
 
-# client = discord.Client(intents=intents)
-
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
     await tree.sync()
-    print(f'Command tree synced!')
+    print('Command tree synced!')
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
-    
+
     if client.user.mentioned_in(message):
         await respond_to_ping(message)
 
@@ -56,16 +55,19 @@ async def on_member_join(member):
     await welcome_member(member)
 
 @tree.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
-@discord.app_commands.describe(member='The member whose bias you want to see. Leave empty for your own.')
+@discord.app_commands.describe(member='The member whose bias you want to see. " \
+                               "Leave empty for your own.')
 async def ultimate_bias(interaction, member: typing.Optional[str]):
     await my_ultimate_bias(interaction, member)
 
 @tree.command(name='my-bias-group', description="See who everyone's bias group is!")
-@discord.app_commands.describe(member='The member whose bias group you want to see. Leave empty for your own.')
+@discord.app_commands.describe(member='The member whose bias group you want to see." \
+                               Leave empty for your own.')
 async def bias_group(interaction, member: typing.Optional[str]):
     await my_bias_group(interaction, member)
 
-@tree.command(name='hallyu-calendar', description="See how to add the HallyU calendar to your own calendar.")
+@tree.command(name='hallyu-calendar', description="See how to add the HallyU calendar " \
+              "to your own calendar.")
 async def hallyu_calendar(interaction):
     await send_calendar(interaction)
 
@@ -86,5 +88,17 @@ async def rankdown(interaction, song_to_eliminate: str, reason_to_eliminate: str
     await rankdown_turn(interaction, song_to_eliminate, reason_to_eliminate,
                         song_to_nominate, reason_to_nominate, next_message)
 
+@tree.command(name='add-hma-pick', description="Save something you want to remember for the HMAs!")
+@discord.app_commands.describe(pick='The message and/or link you want to remember')
+async def save_pick(interaction, pick: str):
+    await add_hma_pick(interaction, pick)
+
+@tree.command(name='delete-hma-picks', description="Delete your HMA picks to start fresh")
+async def delete_picks(interaction):
+    await delete_hma_picks(interaction)
+
+@tree.command(name='my-hma-picks', description="See your saved HMA picks")
+async def see_picks(interaction):
+    await my_hma_picks(interaction)
 
 client.run(TOKEN)
