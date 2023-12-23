@@ -211,7 +211,7 @@ async def my_bias_group(interaction, member_name):
         await interaction.response.send_message(
             f"Sorry <@!{user_id}>, you haven't unlocked a bias group yet!")
     else:
-        bias_image = discord.File(f"media/images/{bias_info.get('filename')}",
+        bias_image = discord.File(f"iu/media/images/{bias_info.get('filename')}",
                                   filename=bias_info.get('filename'))
         embed = discord.Embed(
             title=f"{username}'s Bias Group",

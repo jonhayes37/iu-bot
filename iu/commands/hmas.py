@@ -4,7 +4,7 @@ import os
 
 
 def filepath_for_user(user_id):
-    return f'hmas/{user_id}.txt'
+    return f'iu/hmas/{user_id}.txt'
 
 async def add_hma_pick(interaction, pick):
     user_id = interaction.user.id

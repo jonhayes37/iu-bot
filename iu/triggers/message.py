@@ -60,7 +60,7 @@ TRIGGER_LIST = {
 async def reply_with_gif(incoming, content, filename):
     if filename is not None:
         media_dir = 'gifs' if filename.endswith('.gif') else 'images'
-        new_file = discord.File(f'media/{media_dir}/{filename}', filename=filename)
+        new_file = discord.File(f'iu/media/{media_dir}/{filename}', filename=filename)
         await incoming.reply(content, file=new_file)
     else:
         await incoming.reply(content)
