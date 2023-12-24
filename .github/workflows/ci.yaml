@@ -31,6 +31,6 @@ jobs:
 
       - name: Testing coverage
         run: |
-          coverage report --fail-under=55
+          coverage report --fail-under=70
 
       
