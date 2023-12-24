@@ -1,12 +1,14 @@
 """
 Unit testing for message.py.
 """
-import discord
 import unittest
+
+import discord
 import pytest
-from testing.interaction import MockMessage
 from parameterized import parameterized
-from triggers.message import check_message_for_replies, is_subword, respond_to_ping
+from testing.interaction import MockMessage
+from triggers.message import (check_message_for_replies, is_subword,
+                              respond_to_ping)
 
 
 class TestIsSubword(unittest.TestCase):

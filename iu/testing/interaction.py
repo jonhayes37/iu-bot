@@ -21,12 +21,16 @@ class MockMessage:
             assert not self.responses
         else:
             assert message in self.responses
-    
+
     def assert_reply_file_equals(self, file):
         if file is None:
             assert not self.response_files
         else:
-            assert len(list(filter(lambda x: x is not None and x.filename == file.filename and x.fp.read() == file.fp.read(), self.response_files))) > 0
+            assert len(list(
+                filter(lambda x: x is not None and \
+                        x.filename == file.filename and \
+                        x.fp.read() == file.fp.read(),
+                       self.response_files))) > 0
 
 class MockChannel:
     """Mock for a Discord text channel"""
@@ -96,7 +100,7 @@ class MockResponder:
         self.file = file
         self.bot_response = MockMessage()
 
-class MockUser():
+class MockUser(): # pylint: disable=too-many-instance-attributes
     """Mock for a discord.User"""
     def __init__(self, user_id = "", name = "", nick = "", display_name = "", global_name = ""):
         self.direct_message = ""
