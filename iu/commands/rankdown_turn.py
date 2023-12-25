@@ -78,8 +78,6 @@ async def update_danger_list(channel, elim, nom, username):
     except ValueError as exc:
         raise InvalidSongError(elim) from exc
 
-    print(username.lower())
-    print(songs[elim_index].lower())
     if username.lower() in songs[elim_index].lower():
         raise SamePlayerEliminationError(elim)
 
