@@ -34,22 +34,24 @@ class MockMessage:
 
 class MockChannel:
     """Mock for a Discord text channel"""
-    def __init__(self, name):
+    def __init__(self, name, history=None):
         self.name = name
         self.mention = f'<@!{name}>'
-        self.message = None
+        self.messages = []
         self.embed = None
         self.file = None
+        self.message_history = history if history else []
 
     async def send(self, message, embed=None, file=None):
-        self.message = message
+        self.messages.append(message)
         self.embed = embed
         self.file = file
 
+    async def history(self, limit=1):
+        return self.message_history[:min(limit, len(self.message_history))]
+
     def assert_message_equals(self, message):
-        print(message)
-        print(self.message)
-        assert self.message == message
+        assert message in self.messages
 
     def assert_embed_equals(self, embed):
         if embed is None:
@@ -122,12 +124,12 @@ class MockUser(): # pylint: disable=too-many-instance-attributes
         assert self.direct_message == message
 
     def assert_has_role(self, role):
-        print(self.roles)
         assert len(list(filter(lambda x: x.name == role, self.roles))) > 0
 
 class MockInteraction():
     """Mock for a discord.Interaction"""
-    def __init__(self, user=None):
+    def __init__(self, user=None, channel=None):
+        self.channel = channel
         self.response = MockResponder()
         if user:
             self.user = user

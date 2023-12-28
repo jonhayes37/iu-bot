@@ -17,7 +17,9 @@ TURN_ORDER = [
 class NoPreviousTurnException(Exception):
     """Custom exception for no previous turn existing."""
     def __init__(self):
-        super().__init__("no previous turn found")
+        self.message = "No previous turn was found! " \
+            "The command only supports turns after the first round."
+        super().__init__(self.message)
 
 class ReasonTooLongError(app_commands.AppCommandError):
     """Custom command error for a reason that's too long for the Discord API"""
@@ -43,7 +45,8 @@ async def handle_command_error(error, interaction):
     await interaction.response.send_message(error.message, ephemeral=True)
 
 async def get_previous_turn(channel):
-    async for message in channel.history(limit=10):
+    message_history = await channel.history(limit=10)
+    for message in message_history:
         if "**in danger**" in message.content.lower():
             return message.content
 
@@ -117,11 +120,10 @@ async def rankdown_turn(interaction, elim, elim_reason, nom, nom_reason,
             interaction.user.global_name
         next_player = get_next_player(cur_player_id)
 
-        updated_danger_songs = update_danger_list(interaction.channel, elim, nom, username)
+        updated_danger_songs = await update_danger_list(interaction.channel, elim, nom, username)
         danger_list_str = '\n'.join(updated_danger_songs)
 
-        message_content = f"""
-<@{cur_player_id}>'s turn:
+        message_content = f"""<@{cur_player_id}>'s turn:
 
 I eliminate **{elim}**. {elim_reason}
 
@@ -130,8 +132,7 @@ I nominate **{nom}**. {nom_reason}
 **In Danger**
 {danger_list_str}
 
-<@{next_player}> {next_message}
-"""
+<@{next_player}> {next_message}"""
         if len(message_content) >= 2000:
             messages = split_turn_message(message_content)
             await interaction.response.send_message(messages[0])
@@ -139,5 +140,6 @@ I nominate **{nom}**. {nom_reason}
                 await interaction.channel.send(message)
         else:
             await interaction.response.send_message(message_content)
-    except (InvalidSongError, SamePlayerEliminationError, ReasonTooLongError) as ex:
+    except (InvalidSongError, SamePlayerEliminationError, ReasonTooLongError,
+            NoPreviousTurnException) as ex:
         await handle_command_error(ex, interaction)
