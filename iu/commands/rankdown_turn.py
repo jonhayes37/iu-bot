@@ -17,7 +17,8 @@ TURN_ORDER = [
 class NoPreviousTurnException(Exception):
     """Custom exception for no previous turn existing."""
     def __init__(self):
-        self.message = "No previous turn was found! The command only supports turns after the first round."
+        self.message = "No previous turn was found! " \
+            "The command only supports turns after the first round."
         super().__init__(self.message)
 
 class ReasonTooLongError(app_commands.AppCommandError):
@@ -139,5 +140,6 @@ I nominate **{nom}**. {nom_reason}
                 await interaction.channel.send(message)
         else:
             await interaction.response.send_message(message_content)
-    except (InvalidSongError, SamePlayerEliminationError, ReasonTooLongError, NoPreviousTurnException) as ex:
+    except (InvalidSongError, SamePlayerEliminationError, ReasonTooLongError,
+            NoPreviousTurnException) as ex:
         await handle_command_error(ex, interaction)

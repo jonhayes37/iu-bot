@@ -34,13 +34,13 @@ class MockMessage:
 
 class MockChannel:
     """Mock for a Discord text channel"""
-    def __init__(self, name, history=[]):
+    def __init__(self, name, history=None):
         self.name = name
         self.mention = f'<@!{name}>'
         self.messages = []
         self.embed = None
         self.file = None
-        self.message_history = history
+        self.message_history = history if history else []
 
     async def send(self, message, embed=None, file=None):
         self.messages.append(message)
