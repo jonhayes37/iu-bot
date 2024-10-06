@@ -86,7 +86,7 @@ def find_unique_triggers(text):
     found_triggers = [tr for tr in found_triggers if \
             TRIGGER_LIST.get(tr).get('filename') not in unique_triggers \
             and not unique_triggers.add(TRIGGER_LIST.get(tr).get('filename'))]
-    
+
     def remove_chance(trigger):
         cur_tr = TRIGGER_LIST.get(trigger)
         chance = cur_tr.get('chance')
