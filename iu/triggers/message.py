@@ -87,15 +87,15 @@ def find_unique_triggers(text):
             TRIGGER_LIST.get(tr).get('filename') not in unique_triggers \
             and not unique_triggers.add(TRIGGER_LIST.get(tr).get('filename'))]
 
-    def remove_chance(trigger):
+    def check_chance(trigger):
         cur_tr = TRIGGER_LIST.get(trigger)
         chance = cur_tr.get('chance')
         if chance:
             result = random.random()
-            return result > chance
-        return False
+            return result < chance
+        return True
 
-    return filter(remove_chance, found_triggers)
+    return list(filter(check_chance, found_triggers))
 
 async def send_messages(incoming, triggers):
     for trigger in triggers:
