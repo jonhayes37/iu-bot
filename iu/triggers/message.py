@@ -1,5 +1,6 @@
 """Parsing messages for triggers"""
 
+import random
 import re
 
 import discord
@@ -14,6 +15,7 @@ TRIGGER_LIST = {
     'cream': { 'content': 'Sorry not sorry.',
               'filename': 'cream.gif' },
     'ditto': { 'filename': 'ditto.gif' },
+    'fantastic': { 'filename': 'fantasticBaby.gif' },
     'flute': { 'filename': 'nctSticker.gif' },
     'genie': { 'content': 'Tell me your wish!',
               'filename': 'genie.gif'},
@@ -44,6 +46,7 @@ TRIGGER_LIST = {
                 'filename': 'itzyRyujin.gif' },
     'rollercoaster': { 'filename': 'rollercoaster.gif' },
     'roller coaster': { 'filename': 'rollercoaster.gif' },
+    'something': { 'filename': 'something.gif', 'chance': 0.25 },
     'step it up': { 'filename': 'kara step.gif' },
     'sticker': { 'content': "Great. Now I'm thinking about \"Sticker\" again.",
                  'filename': 'nctSticker.gif' },
@@ -80,9 +83,19 @@ def find_unique_triggers(text):
     found_triggers = [trigger for trigger in TRIGGER_LIST \
                       if trigger in text and not is_subword(text, trigger)]
     unique_triggers = set()
-    return [tr for tr in found_triggers if \
+    found_triggers = [tr for tr in found_triggers if \
             TRIGGER_LIST.get(tr).get('filename') not in unique_triggers \
             and not unique_triggers.add(TRIGGER_LIST.get(tr).get('filename'))]
+    
+    def remove_chance(trigger):
+        cur_tr = TRIGGER_LIST.get(trigger)
+        chance = cur_tr.get('chance')
+        if chance:
+            result = random.random()
+            return result > chance
+        return False
+
+    return filter(remove_chance, found_triggers)
 
 async def send_messages(incoming, triggers):
     for trigger in triggers:
