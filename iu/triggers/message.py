@@ -58,6 +58,7 @@ TRIGGER_LIST = {
                   'filename': 'veryNice.gif' },
     'uhm jung hwa': { 'content': '엄정화 detected - paging <@330890965881585665>!' },
     '엄정화': { 'content': '엄정화 detected - paging <@330890965881585665>!' },
+    'winter': { 'filename': 'winter.gif' },
 }
 
 async def reply_with_gif(incoming, content, filename):
