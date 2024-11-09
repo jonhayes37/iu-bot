@@ -49,7 +49,7 @@ async def on_message(message):
     if client.user.mentioned_in(message):
         await respond_to_ping(message)
 
-    if message.channel == CHANNELS.get('new-releases'):
+    if message.channel_id == CHANNELS.get('new-releases'):
         store_new_release(message)
 
     await check_message_for_replies(message)
@@ -60,8 +60,8 @@ async def on_member_join(member):
     await welcome_member(member)
 
 @tree.command(name='backfill-new-releases', description="[INTERNAL ONLY] Backfills new releases")
-async def backfill(_):
-    channel = CHANNELS.get('new-releases')
+async def backfill(interaction):
+    channel = discord.utils.get(interaction.guild.text_channels, name='new-releases')
     await backfill_releases(channel)
 
 
