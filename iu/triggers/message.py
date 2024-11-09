@@ -125,7 +125,7 @@ def store_new_release(message):
     message_date = message_datetime.strftime('%Y-%m-%d')
     message_year = message_datetime.year
 
-    print(os.cwd())
+    print(os.getcwd())
     with open(f'iu/releases/{message_year}.txt', 'a+') as f:
         lines = map(lambda url: f'{message_date} // {url}', urls)
         f.writelines(lines)
