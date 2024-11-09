@@ -121,8 +121,8 @@ def store_new_release(message):
     2. If the url matches, store it with the message date in a .txt file
     """
     urls = parse_message_for_youtube_url(message)
-    print(f'got urls {urls}')
     if len(urls) > 0:
+        print(f'got urls {urls}')
         message_datetime = message.created_at
         message_date = message_datetime.strftime('%Y-%m-%d')
         message_year = message_datetime.year
