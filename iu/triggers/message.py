@@ -122,7 +122,6 @@ def store_new_release(message):
     """
     urls = parse_message_for_youtube_url(message)
     if len(urls) > 0:
-        print(f'got urls {urls}')
         message_datetime = message.created_at
         message_date = message_datetime.strftime('%Y-%m-%d')
         message_year = message_datetime.year

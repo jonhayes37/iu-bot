@@ -49,9 +49,8 @@ async def on_message(message):
     if client.user.mentioned_in(message):
         await respond_to_ping(message)
 
-    sandbox_channel = discord.utils.get(message.guild.text_channels, name='sandbox')
-    if message.channel == sandbox_channel:
-        print('parsing for release')
+    releases_channel = discord.utils.get(message.guild.text_channels, name='new-releases')
+    if message.channel == releases_channel:
         store_new_release(message)
 
     await check_message_for_replies(message)
