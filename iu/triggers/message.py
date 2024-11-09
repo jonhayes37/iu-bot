@@ -4,7 +4,7 @@ import random
 import re
 
 import discord
-from pathlib import Path
+import os
 
 TRIGGER_LIST = {
     '2am': { 'content': 'Me most nights at 2am', 'filename': 'drunk.gif' },
@@ -121,16 +121,17 @@ def store_new_release(message, separate=False):
     2. If the url matches, store it with the message date in a .txt file
     """
     urls = parse_message_for_youtube_url(message)
-    message_datetime = message.created_at
-    message_date = message_datetime.strftime('%Y-%m-%d')
-    message_year = message_datetime.year
+    if len(urls) > 0:
+        message_datetime = message.created_at
+        message_date = message_datetime.strftime('%Y-%m-%d')
+        message_year = message_datetime.year
 
-    Path("/releases").mkdir(exist_ok=True)
-    filename = f'releases/{message_year}_backfill.txt' if separate else f'releases/{message_year}.txt'
-    with open(filename, 'a+') as f:
-        lines = map(lambda url: f'{message_date} // {url}', urls)
-        f.writelines(lines)
+        filename = f'releases/{message_year}_backfill.txt' if separate else f'releases/{message_year}.txt'
+        with open(filename, 'a+') as f:
+            lines = list(map(lambda url: f'{message_date} // {url}\n', urls))
+            f.writelines(lines)
 
 def parse_message_for_youtube_url(msg):
     youtube_regex = r'((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?'
-    return re.findall(youtube_regex, msg)
+    matches = re.findall(youtube_regex, msg.content)
+    return list(map(lambda match: ''.join(match), matches))

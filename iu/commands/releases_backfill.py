@@ -5,3 +5,4 @@ async def backfill_releases(channel):
     print(f'retrieved {len(messages)} messages')
     for msg in messages:
         store_new_release(msg, True)
+    print('finished!')
