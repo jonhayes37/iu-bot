@@ -1,4 +1,4 @@
-from ..triggers.message import store_new_release
+from triggers.message import store_new_release
 
 async def backfill_releases(channel):
     messages = [message async for message in channel.history(limit=200)]
