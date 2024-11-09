@@ -121,16 +121,17 @@ def store_new_release(message):
     2. If the url matches, store it with the message date in a .txt file
     """
     urls = parse_message_for_youtube_url(message)
-    message_datetime = message.created_at
-    message_date = message_datetime.strftime('%Y-%m-%d')
-    message_year = message_datetime.year
+    print(f'got urls {urls}')
+    if len(urls) > 0:
+        message_datetime = message.created_at
+        message_date = message_datetime.strftime('%Y-%m-%d')
+        message_year = message_datetime.year
 
-    with open(f'iu/releases/{message_year}.txt', 'a+') as f:
-        lines = map(lambda url: f'{message_date} // {url}\n', urls)
-        f.writelines(lines)
+        with open(f'iu/releases/{message_year}.txt', 'a+') as f:
+            lines = map(lambda url: f'{message_date} // {url}\n', urls)
+            f.writelines(lines)
 
 def parse_message_for_youtube_url(msg):
     youtube_regex = r'^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?$'
     matches = re.findall(youtube_regex, msg.content)
-    print(matches)
-    return ''.join(matches)
+    return map(lambda match: ''.join(match), matches)
