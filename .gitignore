@@ -11,3 +11,4 @@ __pycache__/*
 # HMA reminders of users
 iu/hmas
 iu/releases
+iu/scripts/client_secret.json
