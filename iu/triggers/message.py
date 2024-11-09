@@ -125,7 +125,6 @@ def store_new_release(message):
     message_date = message_datetime.strftime('%Y-%m-%d')
     message_year = message_datetime.year
 
-    Path("/releases").mkdir(exist_ok=True)
     with open(f'releases/{message_year}.txt', 'a+') as f:
         lines = map(lambda url: f'{message_date} // {url}', urls)
         f.writelines(lines)
