@@ -126,7 +126,7 @@ def store_new_release(message, separate=False):
         message_date = message_datetime.strftime('%Y-%m-%d')
         message_year = message_datetime.year
 
-        filename = f'releases/{message_year}_backfill.txt' if separate else f'releases/{message_year}.txt'
+        filename = f'iu/releases/{message_year}_backfill.txt' if separate else f'iu/releases/{message_year}.txt'
         with open(filename, 'a+') as f:
             lines = list(map(lambda url: f'{message_date} // {url}\n', urls))
             f.writelines(lines)
