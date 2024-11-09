@@ -125,11 +125,10 @@ def store_new_release(message):
     message_date = message_datetime.strftime('%Y-%m-%d')
     message_year = message_datetime.year
 
-    print(os.getcwd())
     with open(f'iu/releases/{message_year}.txt', 'a+') as f:
-        lines = map(lambda url: f'{message_date} // {url}', urls)
+        lines = map(lambda url: f'{message_date} // {url}\n', urls)
         f.writelines(lines)
 
 def parse_message_for_youtube_url(msg):
     youtube_regex = r'^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?$'
-    return re.findall(youtube_regex, msg.content)
+    return ''.join(re.findall(youtube_regex, msg.content))
