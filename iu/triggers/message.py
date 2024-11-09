@@ -134,4 +134,4 @@ def store_new_release(message):
 def parse_message_for_youtube_url(msg):
     youtube_regex = r'^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?$'
     matches = re.findall(youtube_regex, msg.content)
-    return map(lambda match: ''.join(match), matches)
+    return list(map(lambda match: ''.join(match), matches))
