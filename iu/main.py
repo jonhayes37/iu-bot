@@ -8,12 +8,13 @@ from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
 from commands.poll import generate_poll
+from commands.releases_backfill import backfill_releases
 from commands.rankdown_turn import (InvalidSongError,
                                     SamePlayerEliminationError, rankdown_turn)
 from commands.ultimate_bias import my_ultimate_bias
 from dotenv import load_dotenv
 from triggers.member import add_trainee_role, welcome_member
-from triggers.message import check_message_for_replies, respond_to_ping
+from triggers.message import check_message_for_replies, respond_to_ping, store_new_release
 
 # Load env vars, connect to Discord
 load_dotenv()
@@ -21,6 +22,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 CHANNELS = {
     'introductions': os.getenv('DISCORD_CHANNEL_INTRODUCTIONS'),
+    'new-releases': os.getenv('DISCORD_CHANNEL_NEW_RELEASES'),
     'roles': os.getenv('DISCORD_CHANNEL_ROLES'),
     'rules': os.getenv('DISCORD_CHANNEL_RULES'),
     'welcome': os.getenv('DISCORD_CHANNEL_WELCOME')
@@ -47,12 +49,21 @@ async def on_message(message):
     if client.user.mentioned_in(message):
         await respond_to_ping(message)
 
+    if message.channel == CHANNELS.get('new-releases'):
+        store_new_release(message)
+
     await check_message_for_replies(message)
 
 @client.event
 async def on_member_join(member):
     await add_trainee_role(member)
     await welcome_member(member)
+
+@tree.command(name='backfill-new-releases', description="[INTERNAL ONLY] Backfills new releases")
+async def backfill(_):
+    channel = CHANNELS.get('new-releases')
+    await backfill_releases(channel)
+
 
 @tree.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
 @discord.app_commands.describe(member='The member whose bias you want to see. " \

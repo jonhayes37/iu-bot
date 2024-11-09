@@ -4,6 +4,7 @@ import random
 import re
 
 import discord
+from pathlib import Path
 
 TRIGGER_LIST = {
     '2am': { 'content': 'Me most nights at 2am', 'filename': 'drunk.gif' },
@@ -113,3 +114,22 @@ async def check_message_for_replies(message):
 async def respond_to_ping(message):
     if not message.mention_everyone:
         await reply_with_gif(message, 'IU at your service!', 'ping.gif')
+
+def store_new_release(message):
+    """
+    1. for each msg in new-releases, parse for a youtube url
+    2. If the url matches, store it with the message date in a .txt file
+    """
+    urls = parse_message_for_youtube_url(message)
+    message_datetime = message.created_at
+    message_date = message_datetime.strftime('%Y-%m-%d')
+    message_year = message_datetime.year
+
+    Path("/releases").mkdir(exist_ok=True)
+    with open(f'releases/{message_year}.txt', 'a+') as f:
+        lines = map(lambda url: f'{message_date} // {url}', urls)
+        f.writelines(lines)
+
+def parse_message_for_youtube_url(msg):
+    youtube_regex = r'^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?$'
+    return re.findall(youtube_regex, msg)
