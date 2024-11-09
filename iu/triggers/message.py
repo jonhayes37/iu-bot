@@ -4,7 +4,7 @@ import random
 import re
 
 import discord
-from pathlib import Path
+import os
 
 TRIGGER_LIST = {
     '2am': { 'content': 'Me most nights at 2am', 'filename': 'drunk.gif' },
@@ -125,7 +125,8 @@ def store_new_release(message):
     message_date = message_datetime.strftime('%Y-%m-%d')
     message_year = message_datetime.year
 
-    with open(f'releases/{message_year}.txt', 'a+') as f:
+    print(os.cwd())
+    with open(f'iu/releases/{message_year}.txt', 'a+') as f:
         lines = map(lambda url: f'{message_date} // {url}', urls)
         f.writelines(lines)
 
