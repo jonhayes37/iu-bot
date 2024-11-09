@@ -128,7 +128,7 @@ def store_new_release(message):
         message_year = message_datetime.year
 
         with open(f'iu/releases/{message_year}.txt', 'a+') as f:
-            lines = map(lambda url: f'{message_date} // {url}\n', urls)
+            lines = list(map(lambda url: f'{message_date} // {url}\n', urls))
             f.writelines(lines)
 
 def parse_message_for_youtube_url(msg):

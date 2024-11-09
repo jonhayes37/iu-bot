@@ -49,7 +49,7 @@ async def on_message(message):
     if client.user.mentioned_in(message):
         await respond_to_ping(message)
 
-    if message.channel_id == CHANNELS.get('new-releases'):
+    if message.channel.id == CHANNELS.get('new-releases'):
         store_new_release(message)
 
     await check_message_for_replies(message)
