@@ -110,15 +110,13 @@ def find_unique_triggers(text):
     unique_filenames = set()
     unique_triggers = []
     for ft in found_triggers:
-        print(f'ft: {ft}')
         cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(ft)]
-        print(f'filenames: {cur_filenames}')
         if all([fname not in unique_filenames for fname in cur_filenames]):
             unique_triggers.append(ft)
             for fname in cur_filenames:
                 unique_filenames.add(fname)
-    print(f'unique triggers returning: {unique_triggers}')
-    return found_triggers
+
+    return unique_triggers
 
 async def send_messages(incoming, triggers):
     for trigger in triggers:
