@@ -113,7 +113,7 @@ def find_unique_triggers(text):
         print(f'ft: {ft}')
         cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(ft)]
         print(f'filenames: {cur_filenames}')
-        if all([fname not in unique_triggers for fname in cur_filenames]):
+        if all([fname not in unique_filenames for fname in cur_filenames]):
             unique_triggers.append(ft)
             for fname in cur_filenames:
                 unique_filenames.add(fname)
