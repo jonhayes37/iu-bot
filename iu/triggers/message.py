@@ -4,62 +4,71 @@ import random
 import re
 
 import discord
-import os
 
 TRIGGER_LIST = {
-    '2am': { 'content': 'Me most nights at 2am', 'filename': 'drunk.gif' },
-    'best song': { 'content': "Did someone say best song? Because there's only one right answer.",
-                  'filename': 'dontBelieve.gif'},
-    'clown': { 'filename': 'key_clown.jpg' },
-    'coin': { 'content': 'Heads I win, tails you lose. Deal?',
-             'filename': 'coin.gif' },
-    'cream': { 'content': 'Sorry not sorry.',
-              'filename': 'cream.gif' },
-    'ditto': { 'filename': 'ditto.gif' },
-    'fantastic': { 'filename': 'fantasticBaby.gif' },
-    'flute': { 'filename': 'nctSticker.gif' },
-    'genie': { 'content': 'Tell me your wish!',
-              'filename': 'genie.gif'},
-    'in my area': { 'content': '<:blackpink:795873701177589761> in your area!',
-                   'filename': 'blackpink.gif'},
-    'in your area': { 'content': '<:blackpink:795873701177589761> in your area!',
-                     'filename': 'blackpink.gif'},
-    'just right': { 'content': 'Sorry not sorry.',
-                   'filename': 'cream.gif' },
-    'jyp': { 'filename': 'jyp.gif' },
-    'la di da': { 'filename': 'la di da.gif' },
-    'ladida': { 'filename': 'la di da.gif' },
-    'love dive': { 'filename': 'dive.gif' },
-    'maniac': { 'filename': 'maniac.gif' },
-    'merry christmas': { 'filename': 'christmasEvel.gif' },
-    'mommy': { 'content': 'Mommy?',
-              'filename': 'itzyRyujin.gif' },
-    'next level': { 'filename': 'nextLevel.gif'},
-    'noodles': { 'filename': 'jinsolRamen.gif' },
-    'pierce': { 'content': 'You wanna talk piercing? I can *hear* this GIF',
-               'filename': 'nctSticker.gif' },
-    'piercing': { 'content': 'You wanna talk piercing? I can *hear* this GIF',
-                 'filename': 'nctSticker.gif' },
-    'ramen': { 'filename': 'jinsolRamen.gif' },
-    'rough': { 'content': '*시간을 달려서~*',
-               'filename': 'rough.gif' },
-    'ryujin': { 'content': 'Mommy?',
-                'filename': 'itzyRyujin.gif' },
-    'rollercoaster': { 'filename': 'rollercoaster.gif' },
-    'roller coaster': { 'filename': 'rollercoaster.gif' },
-    'something': { 'filename': 'something.gif', 'chance': 0.25 },
-    'step it up': { 'filename': 'kara step.gif' },
-    'sticker': { 'content': "Great. Now I'm thinking about \"Sticker\" again.",
-                 'filename': 'nctSticker.gif' },
-    'tipsy': { 'content': 'Just a bit tipsy',
-               'filename': 'drunk.gif' },
-    'very nice': { 'content': '아주 nice!',
-                   'filename': 'veryNice.gif' },
-    '아주 nice': { 'content': '아주 nice!',
-                  'filename': 'veryNice.gif' },
-    'uhm jung hwa': { 'content': '엄정화 detected - paging <@330890965881585665>!' },
-    '엄정화': { 'content': '엄정화 detected - paging <@330890965881585665>!' },
-    'winter': { 'filename': 'winter.gif' },
+    '2am': [{ 'content': 'Me most nights at 2am', 'filename': 'drunk.gif' }],
+    'best song': [{ 'content': "Did someone say best song? Because there's only one right answer.",
+                  'filename': 'dontBelieve.gif'}],
+    'clown': [{ 'filename': 'key_clown.jpg' }],
+    'coin': [{ 'content': 'Heads I win, tails you lose. Deal?',
+             'filename': 'coin.gif' }],
+    'cream': [{ 'content': 'Sorry not sorry.',
+              'filename': 'cream.gif' }],
+    'ditto': [{ 'filename': 'ditto.gif' }],
+    'fantastic': [{ 'filename': 'fantasticBaby.gif' }],
+    'flute': [{ 'filename': 'nctSticker.gif' }],
+    'genie': [{ 'content': 'Tell me your wish!',
+              'filename': 'genie.gif'}],
+    'in my area': [{ 'content': '<:blackpink:795873701177589761> in your area!',
+                   'filename': 'blackpink.gif'}],
+    'in your area': [{ 'content': '<:blackpink:795873701177589761> in your area!',
+                     'filename': 'blackpink.gif'}],
+    'just right': [{ 'content': 'Sorry not sorry.',
+                   'filename': 'cream.gif' }],
+    'jyp': [{ 'filename': 'jyp.gif' }],
+    'la di da': [{ 'filename': 'la di da.gif' }],
+    'ladida': [{ 'filename': 'la di da.gif' }],
+    'love dive': [{ 'filename': 'dive.gif' }],
+    'maniac': [{ 'filename': 'maniac.gif' }],
+    'merry christmas': [{ 'filename': 'christmasEvel.gif' }],
+    'mommy': [{ 'content': 'Mommy?',
+              'filename': 'itzyRyujin.gif' }],
+    'next level': [{ 'filename': 'nextLevel.gif'}],
+    'noodles': [{ 'filename': 'jinsolRamen.gif' }],
+    'pierce': [{ 'content': 'You wanna talk piercing? I can *hear* this GIF',
+               'filename': 'nctSticker.gif' }],
+    'piercing': [{ 'content': 'You wanna talk piercing? I can *hear* this GIF',
+                 'filename': 'nctSticker.gif' }],
+    'ramen': [{ 'filename': 'jinsolRamen.gif' }],
+    'rough': [{ 'content': '*시간을 달려서~*',
+               'filename': 'rough.gif' }],
+    'ryujin': [{ 'content': 'Mommy?',
+                'filename': 'itzyRyujin.gif' }],
+    'rollercoaster': [{ 'filename': 'rollercoaster.gif' },
+                      { 'filename': 'nmixx_rollercoaster.gif' }],
+    'roller coaster': [{ 'filename': 'rollercoaster.gif' },
+                       { 'filename': 'nmixx_rollercoaster.gif' }],
+    'something': [{ 'content': '_나만 몰랐었던 something~_',
+                  'filename': 'something.gif', 'chance': 0.25 }],
+    'step it up': [{ 'filename': 'kara step.gif' }],
+    'sticker': [{ 'content': "Great. Now I'm thinking about \"Sticker\" again.",
+                 'filename': 'nctSticker.gif' }],
+    'tipsy': [{ 'content': 'Just a bit tipsy',
+               'filename': 'drunk.gif' }],
+    'very nice': [{ 'content': '아주 nice!',
+                   'filename': 'veryNice.gif' }],
+    '아주 nice': [{ 'content': '아주 nice!',
+                  'filename': 'veryNice.gif' }],
+    'uhm jung hwa': [{ 'content': '엄정화 detected - paging <@330890965881585665>!' }],
+    '엄정화': [{ 'content': '엄정화 detected - paging <@330890965881585665>!' }],
+    'winter': [{ 'filename': 'winter.gif' }],
+    'fighting': [{ 'filename': 'fighting.gif' }],
+    '화이팅': [{ 'filename': 'fighting.gif' }],
+    '파이팅': [{ 'filename': 'fighting.gif' }],
+    'purple': [{ 'content': '보라해 :purple_heart:', 'filename': 'bts_purple.gif' },
+               { 'content': "Let's make purple~", 'filename': 'wooah_purple.gif' }],
+    'nugu mines': [{ 'content': '_Off to the mines~_', 'filename': 'nugu_mine.gif' }],
+    'bubble': [{ 'content': 'Bubble bubble bubble!', 'filename': 'bubble.gif' }],
 }
 
 async def reply_with_gif(incoming, content, filename):
@@ -81,30 +90,40 @@ def is_subword(text, trigger):
 
     return True
 
+def pick_trigger(trigger_key):
+    triggers = TRIGGER_LIST.get(trigger_key)
+    chosen_index = random.randint(0, len(triggers) - 1)
+    return triggers[chosen_index]
+
+def check_chance(cur_tr):
+    chance = cur_tr.get('chance')
+    if chance:
+        result = random.random()
+        return result < chance
+    return True
+
 def find_unique_triggers(text):
     found_triggers = [trigger for trigger in TRIGGER_LIST \
                       if trigger in text and not is_subword(text, trigger)]
-    unique_triggers = set()
-    found_triggers = [tr for tr in found_triggers if \
-            TRIGGER_LIST.get(tr).get('filename') not in unique_triggers \
-            and not unique_triggers.add(TRIGGER_LIST.get(tr).get('filename'))]
+    unique_filenames = set()
+    unique_triggers = []
+    for ft in found_triggers:
+        cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(ft)]
+        if all([fname not in unique_triggers for fname in cur_filenames]):
+            unique_triggers.append(ft)
+            for fname in cur_filenames:
+                unique_filenames.add(fname)
 
-    def check_chance(trigger):
-        cur_tr = TRIGGER_LIST.get(trigger)
-        chance = cur_tr.get('chance')
-        if chance:
-            result = random.random()
-            return result < chance
-        return True
-
-    return list(filter(check_chance, found_triggers))
+    return found_triggers
 
 async def send_messages(incoming, triggers):
     for trigger in triggers:
-        trigger_info = TRIGGER_LIST.get(trigger)
-        trigger_content = trigger_info.get('content', '')
-        trigger_filename = trigger_info.get('filename')
-        await reply_with_gif(incoming, trigger_content, trigger_filename)
+        chosen_trigger = pick_trigger(trigger)
+
+        if check_chance(chosen_trigger):
+            trigger_content = chosen_trigger.get('content', '')
+            trigger_filename = chosen_trigger.get('filename')
+            await reply_with_gif(incoming, trigger_content, trigger_filename)
 
 async def check_message_for_replies(message):
     message_text = message.content.lower()
