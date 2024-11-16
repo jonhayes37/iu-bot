@@ -66,9 +66,11 @@ TRIGGER_LIST = {
     '화이팅': [{ 'filename': 'fighting.gif' }],
     '파이팅': [{ 'filename': 'fighting.gif' }],
     'purple': [{ 'content': '보라해 :purple_heart:', 'filename': 'bts_purple.gif' },
-               { 'content': "Let's make purple~", 'filename': 'wooah_purple.gif' }],
+               { 'content': "_Let's make purple~_", 'filename': 'wooah_purple.gif' }],
+    'nugu mine': [{ 'content': '_Off to the mines~_', 'filename': 'nugu_mine.gif' }],
     'nugu mines': [{ 'content': '_Off to the mines~_', 'filename': 'nugu_mine.gif' }],
-    'bubble': [{ 'content': 'Bubble bubble bubble!', 'filename': 'bubble.gif' }],
+    'bubble': [{ 'content': '_Bubble bubble bubble!_', 'filename': 'bubble.gif' }],
+    'bubbles': [{ 'content': '_Bubble bubble bubble!_', 'filename': 'bubble.gif' }],
 }
 
 async def reply_with_gif(incoming, content, filename):
@@ -108,12 +110,14 @@ def find_unique_triggers(text):
     unique_filenames = set()
     unique_triggers = []
     for ft in found_triggers:
+        print(f'ft: {ft}')
         cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(ft)]
+        print(f'filenames: {cur_filenames}')
         if all([fname not in unique_triggers for fname in cur_filenames]):
             unique_triggers.append(ft)
             for fname in cur_filenames:
                 unique_filenames.add(fname)
-
+    print(f'unique triggers returning: {unique_triggers}')
     return found_triggers
 
 async def send_messages(incoming, triggers):
