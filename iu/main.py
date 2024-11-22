@@ -20,13 +20,6 @@ from triggers.message import check_message_for_replies, respond_to_ping, store_n
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
-CHANNELS = {
-    'introductions': os.getenv('DISCORD_CHANNEL_INTRODUCTIONS'),
-    'new-releases': os.getenv('DISCORD_CHANNEL_NEW_RELEASES'),
-    'roles': os.getenv('DISCORD_CHANNEL_ROLES'),
-    'rules': os.getenv('DISCORD_CHANNEL_RULES'),
-    'welcome': os.getenv('DISCORD_CHANNEL_WELCOME')
-}
 COMMAND_ERRORS = [InvalidSongError, SamePlayerEliminationError]
 
 intents = discord.Intents.default()
