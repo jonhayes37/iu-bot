@@ -7,7 +7,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         max = int(sys.argv[1])
     
-    with open('../releases/2024_parsed.txt', 'r') as f:
+    with open('../releases/backfill_new.txt', 'r') as f:
         lines = f.readlines()
         for line in lines:
             if count > max:

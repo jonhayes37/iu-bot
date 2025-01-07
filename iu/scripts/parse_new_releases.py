@@ -20,9 +20,10 @@ def video_id_from_url(url):
     else:
         return ending.split('?')[0]
 
-def parse_releases(browser):
+def parse_releases():
     with open('../releases/2024.txt', 'r') as f:
         lines = f.readlines()
+        print(len(lines))
         for line in lines:
             parts = line.split(' // ')
             if parts[1] not in urls:
@@ -39,4 +40,4 @@ def parse_releases(browser):
     return sorted_releases
 
 if __name__ == '__main__':
-    parse_releases(len(sys.argv) > 1)
+    parse_releases()

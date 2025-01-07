@@ -33,7 +33,7 @@ def create_playlist(yt):
 
 def add_all_to_playlist(yt, playlist_id):
     count = 0
-    with open('../releases/2024_parsed.txt', 'r') as f:
+    with open('../releases/2024_parsed_ids.txt', 'r') as f:
         lines = f.readlines()
         for line in lines:
             video_id = line.strip()
@@ -72,5 +72,6 @@ credentials = flow.run_local_server()
 youtube = googleapiclient.discovery.build(
     api_service_name, api_version, credentials=credentials)
 
-playlist = create_playlist(youtube)
+# playlist = create_playlist(youtube)
+playlist = 'PLO7u1j70-i0ONJtI4INav6qLM49MDafg1'
 add_all_to_playlist(youtube, playlist)

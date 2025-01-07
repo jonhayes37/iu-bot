@@ -1,5 +1,6 @@
 """Parsing messages for triggers"""
 
+import os
 import random
 import re
 
@@ -148,6 +149,10 @@ def store_new_release(message, separate=False):
         message_datetime = message.created_at
         message_date = message_datetime.strftime('%Y-%m-%d')
         message_year = message_datetime.year
+
+        # Make sure the folder exists
+        if not os.path.exists('iu/releases'):
+            os.makedirs('iu/releases')
 
         filename = f'iu/releases/{message_year}_backfill.txt' if separate else f'iu/releases/{message_year}.txt'
         with open(filename, 'a+') as f:
