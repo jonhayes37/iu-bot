@@ -9,6 +9,7 @@ __pycache__/*
 *.egg-info
 
 # HMA reminders of users
+Dockerfile
 iu/hmas
 iu/releases
 iu/scripts/client_secret.json

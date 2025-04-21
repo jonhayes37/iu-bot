@@ -2,6 +2,7 @@
 
 import os
 import typing
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import discord
 from commands.bias_group import my_bias_group
@@ -53,6 +54,7 @@ async def on_member_join(member):
     await add_trainee_role(member)
     await welcome_member(member)
 
+# Commands
 @tree.command(name='backfill-new-releases', description="[INTERNAL ONLY] Backfills new releases")
 async def backfill(interaction):
     channel = discord.utils.get(interaction.guild.text_channels, name='new-releases')
@@ -105,5 +107,17 @@ async def delete_picks(interaction):
 @tree.command(name='my-hma-picks', description="See your saved HMA picks")
 async def see_picks(interaction):
     await my_hma_picks(interaction)
+
+# Scheduled tasks
+async def create_weekly_listening_thread():
+    kpop_discussions_channel = client.get_channel(795859191918886921)
+    if kpop_discussions_channel and isinstance(kpop_discussions_channel, discord.TextChannel):
+        await kpop_discussions_channel.create_thread(name=f"Weekly Listening Wednesday - Share Your Latest Obsessions!", type=discord.ChannelType.public_thread)
+        print(f"Created weekly song thread")
+    else:
+        print("Channel not found or not a text channel.")
+
+scheduler = AsyncIOScheduler()
+scheduler.add_job(create_weekly_listening_thread, 'cron', day_of_week='wed', hour=10, minute=0, timezone='EST')
 
 client.run(TOKEN)
