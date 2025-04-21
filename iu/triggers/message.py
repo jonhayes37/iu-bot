@@ -74,6 +74,8 @@ TRIGGER_LIST = {
     'bubbles': [{ 'content': '_Bubble bubble bubble!_', 'filename': 'bubble.gif' }],
     'sunny': [{ 'filename': 'sunny.gif' }],
     'heart': [{ 'filename': 'chuu_heart.gif' }],
+    'either way': [{'content': "_Either way I'm good~_", 'filename': 'ive_either_way.gif'}],
+    'rebel': [{'content': 'Rebels in our heart!', 'filename': 'ive_rebel_heart.gif'}],
 }
 
 async def reply_with_gif(incoming, content, filename):

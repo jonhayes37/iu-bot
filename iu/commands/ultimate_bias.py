@@ -86,6 +86,23 @@ BIAS_MAP = {
     "project she does and buy any bit of merch I can. It's hard to explain why I love her so " \
     "much, but she's been there from the beginning and I'm not leaving her side any time soon."
   },
+  USERNAMES['Volt D. Resin']: {
+    'birth_name': "Yoo Jeongyeon (유정연)",
+    'birthday': "November 1, 1996",
+    'embed_colour': 0xa3cc54,
+    'filename': "twice_jeongyeon.png",
+    'group': "Twice (트와이스)",
+    'hometown': "Suwon, South Korea",
+    'name': "Jeongyeon (정연)",
+    'position': "Lead Vocalist",
+    'reason': "Funny enough, she wasn't my first ult bias in Twice. It was actually Sana, but " \
+    "I never understood what ultimate bias truly meant until that one clip of Jeongyeon getting " \
+    "really emotional when Nayeon gave her a gift. To me, that was the realest moment that I've " \
+    "ever seen her at. She's normally joking around, but when she cried, I felt that I'm seeing " \
+    "who she truly is at that moment. And from that moment, she's been my ultimate bias. Yes, I " \
+    "may display Sieun as my profile pic, but at the end of the day, I'm still a Jeongyeon ult " \
+    "at heart."
+  },
 }
 
 async def my_ultimate_bias(interaction, member_name):
