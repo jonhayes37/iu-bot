@@ -19,7 +19,7 @@ def create_playlist(yt):
         part="snippet,status",
         body={
           "snippet": {
-            "title": "2024 Releases"
+            "title": "2025 Releases"
           },
           "status": {
             "privacyStatus": "unlisted"
@@ -33,7 +33,7 @@ def create_playlist(yt):
 
 def add_all_to_playlist(yt, playlist_id):
     count = 0
-    with open('../releases/2024_parsed_ids.txt', 'r') as f:
+    with open('../releases/2025_parsed_ids.txt', 'r') as f:
         lines = f.readlines()
         for line in lines:
             video_id = line.strip()
@@ -73,5 +73,5 @@ youtube = googleapiclient.discovery.build(
     api_service_name, api_version, credentials=credentials)
 
 # playlist = create_playlist(youtube)
-playlist = 'PLO7u1j70-i0ONJtI4INav6qLM49MDafg1'
+playlist = 'PLO7u1j70-i0Om0ggJ84rHi8z9Q9uK2YvQ'
 add_all_to_playlist(youtube, playlist)

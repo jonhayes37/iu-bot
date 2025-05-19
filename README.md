@@ -70,3 +70,10 @@ Usage `/my-ultimate-bias member`
 
 This command lets you see the ultimate bias embed of a member, if it's been unlocked. If
 `member` is not specified, it will show your embed.
+
+## Getting releases
+
+1. Open console for IU Bot docker image in UnraidOS
+2. cd `iu/releases`
+3. `cat file.txt`
+4. Copy here
