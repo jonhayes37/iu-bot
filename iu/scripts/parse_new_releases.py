@@ -21,7 +21,7 @@ def video_id_from_url(url):
         return ending.split('?')[0]
 
 def parse_releases():
-    with open('../releases/2024.txt', 'r') as f:
+    with open('../releases/2025.txt', 'r') as f:
         lines = f.readlines()
         print(len(lines))
         for line in lines:
@@ -31,8 +31,8 @@ def parse_releases():
                 urls.append(parts[1])
 
     sorted_releases = sorted(releases, key=lambda x: x[0])
-    with open('../releases/2024_parsed.txt', 'w+') as f:
-        with open('../releases/2024_parsed_ids.txt', 'w+') as f_id:
+    with open('../releases/2025_parsed.txt', 'w+') as f:
+        with open('../releases/2025_parsed_ids.txt', 'w+') as f_id:
             for release in sorted_releases:
                 f.write(release[1])
                 f_id.write(f'{video_id_from_url(release[1])}\n')
