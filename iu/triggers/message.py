@@ -77,8 +77,8 @@ TRIGGER_LIST = {
     'either way': [{'content': "_Either way I'm good~_", 'filename': 'ive_either_way.gif'}],
     'rebel': [{'content': 'Rebels in our heart!', 'filename': 'ive_rebel_heart.gif'}],
     'mother': [
-        {'content': 'Mother.', 'filename': 'jihyo.gif', 'weight': 50},
-        {'content': 'MOTHER.', 'filename': 'eunbi.gif', 'weight': 45},
+        {'content': 'Mother.', 'filename': 'jihyo.gif', 'weight': 60},
+        {'content': 'MOTHER.', 'filename': 'eunbi.gif', 'weight': 35},
         {'content': '_MOTHER._', 'filename': 'eunbi2.gif', 'weight': 5},
     ],
 }
@@ -105,13 +105,15 @@ def is_subword(text, trigger):
 def pick_trigger(trigger_key):
     triggers = TRIGGER_LIST.get(trigger_key)
     weights = [opt.get('weight') if opt.get('weight') else 100 for opt in triggers]
-    cumulative_weights = [sum(weights[0:i]) for i in range(1, len(weights))]
+    cumulative_weights = [sum(weights[0:i]) for i in range(1, len(weights)+1)]
     rand_num = random.randint(1, cumulative_weights[-1])
     chosen_index = 0
+
     for i in range(len(cumulative_weights)):
-        if rand_num <= cumulative_weights[1]:
+        if rand_num <= cumulative_weights[i]:
             chosen_index = i
             break
+    
     return triggers[chosen_index]
 
 def check_chance(cur_tr):
