@@ -2,7 +2,6 @@
 
 import os
 import typing
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import discord
 from commands.bias_group import my_bias_group
@@ -29,22 +28,11 @@ intents.members = True
 client = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(client)
 
-scheduler = AsyncIOScheduler()
-scheduler_started = False
-
 @client.event
 async def on_ready():
-    global scheduler_started
     print(f'{client.user} has connected to Discord!')
     await tree.sync()
     print('Command tree synced!')
-
-    if not scheduler_started:
-        scheduler.add_job(create_weekly_listening_thread, 'cron', day_of_week='wed', hour=10, minute=0, second=0, timezone='EST')
-        print('created job for scheduler')
-        scheduler.start()
-        print('scheduler')
-
 
 @client.event
 async def on_message(message):
@@ -70,7 +58,6 @@ async def on_member_join(member):
 async def backfill(interaction):
     channel = discord.utils.get(interaction.guild.text_channels, name='new-releases')
     await backfill_releases(channel)
-
 
 @tree.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
 @discord.app_commands.describe(member='The member whose bias you want to see. " \
@@ -118,18 +105,5 @@ async def delete_picks(interaction):
 @tree.command(name='my-hma-picks', description="See your saved HMA picks")
 async def see_picks(interaction):
     await my_hma_picks(interaction)
-
-# Scheduled tasks
-async def create_weekly_listening_thread():
-    print('create_weekly_thread')
-    kpop_discussions_channel = client.get_channel(795859191918886921)
-    if kpop_discussions_channel and isinstance(kpop_discussions_channel, discord.TextChannel):
-        try:
-            await kpop_discussions_channel.create_thread(name=f"Weekly Listening Wednesday - Share Your Latest Obsessions!", type=discord.ChannelType.public_thread)
-            print(f"Created weekly song thread")
-        except Exception as e:
-            print(f"Error creating thread: {e}")
-    else:
-        print("Channel not found or not a text channel.")
 
 client.run(TOKEN)
