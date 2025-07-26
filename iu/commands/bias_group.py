@@ -196,6 +196,26 @@ BIAS_MAP = {
       "my favorite kind of concept: The mature sexy concept. In that way, they were brilliant."
     ]),
     'title_track': "[Wild](https://youtu.be/fwN_Axs7pL4)",
+  },
+  USERNAMES["DoctorQuackerzzz"]: {
+    'album': "[Joy](https://youtu.be/mtc0-ujaqO0)",
+    'bias': "Wooyeon (우연)",
+    'b_track': "[Straight Up](https://youtu.be/70WY66piv20)",
+    'debut_date': "May 15, 2020",
+    'embed_colour': 0xc598ed,
+    'filename': "wooah.png",
+    'label': "H Music Entertainment",
+    'members': "Lucy, Minseo, Nana, Sora, Wooyeon",
+    'name': "woo!ah! (우아)",
+    'reason': '\n'.join([
+      "Time and time again, woo!ah! had piqued my curiosity till the eventual time of Queendom " \
+      "Puzzle, where both Nana and Wooyeon participated. With time, research, and my love " \
+      "for them growing, they rose to the top, claiming my ult group spot, and a dear near " \
+      "place to my heart, even if I was a newbie Wow. They were even one of the first ever " \
+      "groups I hosted for in doing Group Orders, in which I am glad to have chosen them as " \
+      "my first group to host for."
+    ]),
+    'title_track': "[Blush](https://youtu.be/yh5W41ANcjo)",
   }
 }
 

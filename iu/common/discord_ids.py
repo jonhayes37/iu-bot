@@ -6,6 +6,7 @@ USERNAMES = {
   "Cats & Kpop": "758818887672004609",
   "Chris Prime!": "227092770110570496",
   "Diana4Dragons": "797897851907866665",
+  "DoctorQuackerzzz": "600309699186917397",
   "HallyU": "904751089633615972",
   "InsomniAloha": "521827421968924672",
   "Stromsolar": "317621715247300609",
