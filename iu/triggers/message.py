@@ -3,6 +3,8 @@
 import os
 import random
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import discord
 
@@ -50,7 +52,7 @@ TRIGGER_LIST = {
     'roller coaster': [{ 'filename': 'rollercoaster.gif' },
                        { 'filename': 'nmixx_rollercoaster.gif' }],
     'something': [{ 'content': '_나만 몰랐었던 something~_',
-                  'filename': 'something.gif', 'chance': 0.25 }],
+                  'filename': 'something.gif', 'chance': 0.20 }],
     'step it up': [{ 'filename': 'kara step.gif' }],
     'sticker': [{ 'content': "Great. Now I'm thinking about \"Sticker\" again.",
                  'filename': 'nctSticker.gif' }],
@@ -81,6 +83,32 @@ TRIGGER_LIST = {
         {'content': 'MOTHER.', 'filename': 'eunbi.gif', 'weight': 35},
         {'content': '_MOTHER._', 'filename': 'eunbi2.gif', 'weight': 5},
     ],
+    'purple kiss': [{'content': '_A violet remembered_', 'filename': 'purple_kiss.gif'}],
+    'autopilot': [{'filename': 'purple_kiss_autopilot.gif'}],
+    'stayc': [{'content': "StayC girls, it's going down!", 'filename': 'stayc.gif', 'chance': 0.25}],
+    'going down': [{'content': "StayC girls, it's going down!", 'filename': 'stayc.gif'}],
+    'iu': [
+        {'content': "Hey, that's me!", 'filename': 'iu_point.gif', 'weight': 20},
+        {'filename': 'iu_peek.gif', 'weight': 20},
+        {'filename': 'iu_peek_2.gif', 'weight': 20},
+        {'filename': 'iu_peek_3.gif', 'weight': 20},
+        {'filename': 'iu_surprise.gif', 'weight': 20},
+    ],
+    'chest': [{'content': '_For you I will be undead_', 'filename': 'justb_chest.gif'}],
+    'golden': [
+        {'content': "_We're going up, up, up, it's our moment~_", 'filename': 'golden.gif', 'weight': 95},
+        {'content': "The Honmoon is sealed.", 'filename': 'honmoon.gif', 'weight': 5},
+    ],
+    'soda': [
+        {'content': '_My little soda pop~_', 'filename': 'saja_boys_soda_pop.gif', 'weight': 95},
+        {'content': 'ABS!! 🍿','filename': 'saja_boys_abs.gif', 'weight': 5},
+    ],
+    'rizz': [{'filename': 'xlov_rizz.gif'}],
+    'ballad': [{'content': 'I CLICKED BECAUSE I LIKE BALLADS!', 'filename': 'iu_ballad.gif'}],
+    'ballads': [{'content': 'I CLICKED BECAUSE I LIKE BALLADS!', 'filename': 'iu_ballad.gif'}],
+    'father': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
+    'preacher': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
+    'preacher_is_saturday_currently': [{'content': "It actually _IS_ Saturday! Thank you father <:iuPray:1456031268494905428>", 'filename': 'cha_eunwoo_preacher_saturday.gif'}],
 }
 
 async def reply_with_gif(incoming, content, filename):
@@ -134,6 +162,22 @@ def find_unique_triggers(text):
             unique_triggers.append(ft)
             for fname in cur_filenames:
                 unique_filenames.add(fname)
+
+    # Don't trigger both 'purple' and 'purple kiss' in the same message
+    if 'purple kiss' in unique_triggers and 'purple' in unique_triggers:
+        unique_triggers.remove('purple')
+
+    # If it's Saturday, don't trigger 'preacher' since there's a special Saturday version
+    if ('preacher' in unique_triggers or 'father' in unique_triggers) and datetime.now(ZoneInfo("America/New_York")).weekday() == 5:
+        unique_triggers.remove('preacher')
+        unique_triggers.remove('father')
+        unique_triggers.append('preacher_is_saturday_currently')
+
+    # Only trigger 'ballad' if there's also a link in the message
+    if 'ballad' in unique_triggers:
+        url_regex = r'(https?://[^\s]+)'
+        if not re.search(url_regex, text):
+            unique_triggers.remove('ballad')
 
     return unique_triggers
 

@@ -103,6 +103,22 @@ BIAS_MAP = {
     "may display Sieun as my profile pic, but at the end of the day, I'm still a Jeongyeon ult " \
     "at heart."
   },
+  USERNAMES['Alexrandia']: {
+    'birth_name': "Kang Yuchan (강유찬)",
+    'birthday': "December 31, 1997",
+    'embed_colour': 0xa32921,
+    'filename': "ace_yuchan.png",
+    'group': "A.C.E (에이스)",
+    'hometown': "Jeju, South Korea",
+    'name': "Kang Yuchan (강유찬)",
+    'position': "Main Vocalist",
+    'reason': "There are so many reasons I love Chan! He's handsome, a great dancer, and has a " \
+    "voice like honey. He excels at any concept; strong, sweet, emotional, or sexy. More than " \
+    "anything, though, it's his energy. Chan is sunshine incarnate and his members say he keeps " \
+    "them going when they feel down. His smile is guaranteed to brighten my day and his laugh is " \
+    "pure serotonin! Chanshine, Channie, Tangerine Boy, Cutie Maknae Chan...Kang Yuchan is my " \
+    "ultimate bias."
+  },
 }
 
 async def my_ultimate_bias(interaction, member_name):
