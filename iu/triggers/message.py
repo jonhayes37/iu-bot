@@ -99,6 +99,7 @@ TRIGGER_LIST = {
         {'content': "_We're going up, up, up, it's our moment~_", 'filename': 'golden.gif', 'weight': 95},
         {'content': "The Honmoon is sealed.", 'filename': 'honmoon.gif', 'weight': 5},
     ],
+    'yee haw': [{'content': '_Howdy, partner_', 'filename': 'yee_haw.gif'}],
     'soda': [
         {'content': '_My little soda pop~_', 'filename': 'saja_boys_soda_pop.gif', 'weight': 95},
         {'content': 'ABS!! 🍿','filename': 'saja_boys_abs.gif', 'weight': 5},
@@ -107,8 +108,10 @@ TRIGGER_LIST = {
     'ballad': [{'content': 'I CLICKED BECAUSE I LIKE BALLADS!', 'filename': 'iu_ballad.gif'}],
     'ballads': [{'content': 'I CLICKED BECAUSE I LIKE BALLADS!', 'filename': 'iu_ballad.gif'}],
     'father': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
+    'preach': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
     'preacher': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
     'preacher_is_saturday_currently': [{'content': "It actually _IS_ Saturday! Thank you father <:iuPray:1456031268494905428>", 'filename': 'cha_eunwoo_preacher_saturday.gif'}],
+    'generation': [{'content': '_La, la-la, la, la-la, la, la-la_', 'filename': 'triples_generation.gif'}], 
 }
 
 async def reply_with_gif(incoming, content, filename):
@@ -174,7 +177,7 @@ def find_unique_triggers(text):
         unique_triggers.append('preacher_is_saturday_currently')
 
     # Only trigger 'ballad' if there's also a link in the message
-    if 'ballad' in unique_triggers:
+    if 'ballad' in unique_triggers or 'ballads' in unique_triggers:
         url_regex = r'(https?://[^\s]+)'
         if not re.search(url_regex, text):
             unique_triggers.remove('ballad')
