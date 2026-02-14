@@ -8,7 +8,7 @@ import discord
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
-from commands.merch_admin import admin_modify_balance, admin_random_award, admin_add_merch
+from commands.merch_admin import admin_modify_balance, admin_random_award, admin_add_merch, admin_set_status, admin_draw_raffle
 from commands.merch_user import user_check_balance, user_view_merch, user_purchase_merch, user_purchase_history
 from commands.poll import generate_poll
 from commands.releases_backfill import backfill_releases
@@ -202,6 +202,15 @@ async def purchase(interaction: discord.Interaction, item_id: str):
 @tree.command(name='purchase-history', description="View all of the merch you've bought!")
 async def purchase_history(interaction: discord.Interaction):
     await user_purchase_history(interaction)
+
+@tree.command(name='set-status', description="[Admin] Change IU's status message for a specific user's perk.")
+@discord.app_commands.describe(
+    member="The user who purchased the status perk",
+    status_text="The text to display after 'Listening to'"
+)
+@discord.app_commands.default_permissions(administrator=True)
+async def set_status(interaction: discord.Interaction, member: discord.Member, status_text: str):
+    await admin_set_status(interaction, member, status_text)
 
 # Run database setup before starting the bot
 initialize_database()

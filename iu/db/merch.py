@@ -203,7 +203,7 @@ def process_purchase(user_id: int, item_id: str) -> tuple[bool, str]:
         conn.commit()
         return True, f"Successfully purchased **{name}** for {price} hearts!"
     
-    
+
 def get_user_inventory(user_id: int):
     """Fetches a user's purchased items by joining inventory with the catalog."""
     with sqlite3.connect(DB_PATH_MERCH) as conn:
@@ -216,3 +216,19 @@ def get_user_inventory(user_id: int):
             ORDER BY m.name ASC
         """, (user_id,))
         return cursor.fetchall()
+    
+def reset_item_inventory(item_id: str) -> int:
+    """
+    Deletes all inventory records for a specific item, effectively resetting everyone to 0.
+    Returns the number of users who had their inventory cleared.
+    """
+    clean_item_id = item_id.upper()
+    with sqlite3.connect(DB_PATH_MERCH) as conn:
+        cursor = conn.cursor()
+        
+        # Delete all records of this item from user_inventory
+        cursor.execute("DELETE FROM user_inventory WHERE item_id = ?", (clean_item_id,))
+        rows_affected = cursor.rowcount
+        
+        conn.commit()
+        return rows_affected

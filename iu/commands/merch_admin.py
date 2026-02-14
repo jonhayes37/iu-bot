@@ -3,7 +3,7 @@ from random import random
 import discord
 import re
 import typing
-from db.merch import modify_db_balance, upsert_merch_item
+from db.merch import modify_db_balance, upsert_merch_item, reset_item_inventory
 
 
 async def admin_modify_balance(interaction: discord.Interaction, member: discord.Member, amount: int, reason: str):
@@ -125,3 +125,23 @@ async def admin_add_merch(
     embed.add_field(name="Description", value=description, inline=False)
     
     await interaction.response.send_message(embed=embed)
+ 
+
+async def admin_set_status(interaction: discord.Interaction, member: discord.Member, status_text: str):
+    """Changes the bot's 'Playing' status and logs the user who requested it."""
+    
+    if interaction.channel.name != 'dispatch-news':
+        await interaction.response.send_message(
+            "This command can only be used in the #dispatch-news channel.", 
+            ephemeral=True
+        )
+        return
+
+    # Update the bot's presence
+    activity = discord.Game(name=status_text)
+    await interaction.client.change_presence(status=discord.Status.online, activity=activity)
+    
+    # Log the change with the member tagged!
+    await interaction.response.send_message(
+        f"<@1132749272488624189>'s status has been updated by {member.mention}: `Listening to {status_text}`"
+    )

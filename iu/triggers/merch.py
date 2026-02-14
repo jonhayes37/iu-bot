@@ -1,8 +1,10 @@
-import discord
-
-from db.merch import process_daily_heart, process_milestone_award
-from iu.main import DB_PATH_MERCH
 import sqlite3
+
+import discord
+from db.merch import process_daily_heart, process_milestone_award
+
+from iu.main import DB_PATH_MERCH
+
 
 # Handle emoji reactions
 async def handle_reaction_add(payload, client):
@@ -36,10 +38,8 @@ async def handle_reaction_add(payload, client):
     # ==========================================
     # FEATURE 2: 5-Reaction Milestone (IU-8)
     # ==========================================
-    
     total_reactions = sum(r.count for r in message.reactions)
     if total_reactions >= 5:
-        
         # Check if already paid
         with sqlite3.connect(DB_PATH_MERCH) as conn:
             cursor = conn.cursor()
