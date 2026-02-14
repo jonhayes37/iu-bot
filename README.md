@@ -77,3 +77,53 @@ This command lets you see the ultimate bias embed of a member, if it's been unlo
 2. cd `iu/releases`
 3. `cat file.txt`
 4. Copy here
+
+## 🗄️ Database Architecture
+
+The bot uses a persistent local SQLite database (`merch.db`) to manage the server economy, track daily interactions, and power the `#merch-booth` merch.
+
+### Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    USERS ||--o{ TRANSACTIONS : "participates in"
+    USERS ||--o{ USER_INVENTORY : "owns"
+    MERCH_ITEMS ||--o{ USER_INVENTORY : "purchased as"
+    
+    USERS {
+        INTEGER user_id PK "Discord User ID"
+        INTEGER balance "Current heart balance"
+        TIMESTAMP last_daily_given "Tracks 24hr cooldown"
+    }
+    TRANSACTIONS {
+        INTEGER id PK "Auto-incrementing ID"
+        DATETIME timestamp "Time of transaction"
+        TEXT sender_id "Discord ID or SYSTEM / MERCH"
+        INTEGER receiver_id "Discord User ID"
+        INTEGER amount "Hearts exchanged (+/-)"
+        TEXT reason "Description of the event"
+        TEXT message_url "Jump link to context (optional)"
+    }
+    MILESTONE_MESSAGES {
+        INTEGER message_id PK "Discord Message ID"
+        INTEGER author_id "Discord User ID"
+        BOOLEAN paid_out "True once 5-reaction bonus is paid"
+    }
+    MERCH_ITEMS {
+        TEXT item_id PK "SKU (e.g., CUSTEMOJI)"
+        TEXT name "Display name"
+        TEXT description "Perk details"
+        INTEGER price "Cost in hearts"
+        INTEGER max_per_user "Stock limit per user (NULL if infinite)"
+    }
+    USER_INVENTORY {
+        INTEGER user_id PK,FK "Discord User ID"
+        TEXT item_id PK,FK "Merch Item SKU"
+        INTEGER quantity_owned "Amount purchased"
+    }
+```
+
+### Database Inspection
+
+If the database needs to be inspected for debugging, you can do so by using
+SQLite's DB Viewer and looking at `/app/data/merch.db` on the host server.
