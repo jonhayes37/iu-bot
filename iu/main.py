@@ -2,11 +2,14 @@
 
 import os
 import typing
+import sqlite3
 
 import discord
 from commands.bias_group import my_bias_group
 from commands.calendar import send_calendar
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
+from commands.merch_admin import admin_modify_balance, admin_random_award, admin_add_merch
+from commands.merch_user import user_check_balance, user_view_merch, user_purchase_merch, user_purchase_history
 from commands.poll import generate_poll
 from commands.releases_backfill import backfill_releases
 from commands.rankdown_turn import (InvalidSongError,
@@ -14,17 +17,49 @@ from commands.rankdown_turn import (InvalidSongError,
 from commands.ultimate_bias import my_ultimate_bias
 from dotenv import load_dotenv
 from triggers.member import add_trainee_role, welcome_member
+from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping, store_new_release
 
-# Load env vars, connect to Discord
+# Load env vars
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 COMMAND_ERRORS = [InvalidSongError, SamePlayerEliminationError]
 
+# Database setup
+DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
+SCHEMA_PATH_MERCH = "./merch_schema.sql"
+
+def initialize_database():
+    """Reads the schema.sql file and executes it to ensure all tables exist."""
+    print("Initializing database...")
+    
+    # Ensure the directory exists (crucial for Docker bind mounts)
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_MERCH)), exist_ok=True)
+    
+    # Read the SQL blueprint
+    try:
+        with open(SCHEMA_PATH_MERCH, 'r') as file:
+            schema_script = file.read()
+    except FileNotFoundError:
+        print(f"CRITICAL ERROR: Could not find schema file at {SCHEMA_PATH_MERCH}")
+        return
+
+    # Connect to the DB and execute the script
+    with sqlite3.connect(DB_PATH_MERCH) as conn:
+        conn.executescript(schema_script)
+        conn.commit()
+        
+    print(f"Database initialized successfully at {DB_PATH_MERCH}")
+# ----------------------
+
+# Connect to Discord
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+# Added reactions intent so the bot can see when people add the merch-booth emoji!
+intents.reactions = True 
+
 client = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(client)
 
@@ -60,14 +95,14 @@ async def backfill(interaction):
     await backfill_releases(channel)
 
 @tree.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
-@discord.app_commands.describe(member='The member whose bias you want to see. " \
-                               "Leave empty for your own.')
+@discord.app_commands.describe(member='The member whose bias you want to see. ' \
+                               'Leave empty for your own.')
 async def ultimate_bias(interaction, member: typing.Optional[str]):
     await my_ultimate_bias(interaction, member)
 
 @tree.command(name='my-bias-group', description="See who everyone's bias group is!")
-@discord.app_commands.describe(member='The member whose bias group you want to see." \
-                               Leave empty for your own.')
+@discord.app_commands.describe(member='The member whose bias group you want to see.' \
+                               'Leave empty for your own.')
 async def bias_group(interaction, member: typing.Optional[str]):
     await my_bias_group(interaction, member)
 
@@ -106,4 +141,68 @@ async def delete_picks(interaction):
 async def see_picks(interaction):
     await my_hma_picks(interaction)
 
+# Merch triggers and commands
+@client.event
+async def on_raw_reaction_add(payload):
+    # Delegate the logic to your external file
+    await handle_reaction_add(payload, client)
+
+@tree.command(name='modify-balance', description="[Admin only] Modify a user's heart balance.")
+@discord.app_commands.describe(
+    member="The server member to modify", 
+    amount="The number of hearts to add (use negative to subtract)",
+    reason="Why this modification is being made (for the audit log)"
+)
+@discord.app_commands.default_permissions(administrator=True)
+async def modify_balance(interaction: discord.Interaction, member: discord.Member, amount: int, reason: str):
+    await admin_modify_balance(interaction, member, amount, reason)
+
+@tree.command(name='random-award', description="[Admin] Picks a random user from a list to win hearts!")
+@discord.app_commands.describe(
+    users="Mention the users to include (e.g., @Alice @Bob @Charlie)", 
+    amount="The number of hearts to award the winner",
+    reason="What this award is for (e.g., Watch Party Attendee)"
+)
+@discord.app_commands.default_permissions(administrator=True)
+async def random_award(interaction: discord.Interaction, users: str, amount: int, reason: str):
+    await admin_random_award(interaction, users, amount, reason)
+
+@tree.command(name='add-merch', description="[Admin] Add or update an item in the Merch Booth.")
+@discord.app_commands.describe(
+    item_id="A short, unique code (e.g., CUSTEMOJI)", 
+    name="The display name of the perk",
+    description="What the user actually gets",
+    price="Cost in hearts",
+    max_per_user="Optional: Maximum times a single user can buy this"
+)
+@discord.app_commands.default_permissions(administrator=True)
+async def add_merch(
+    interaction: discord.Interaction, 
+    item_id: str, 
+    name: str, 
+    description: str, 
+    price: int, 
+    max_per_user: typing.Optional[int]
+):
+    await admin_add_merch(interaction, item_id, name, description, price, max_per_user)
+
+@tree.command(name='check-balance', description="Check how many hearts you have available to spend.")
+async def check_balance(interaction: discord.Interaction):
+    await user_check_balance(interaction)
+
+@tree.command(name='view-merch', description="Browse the available perks in the merch stand!")
+async def view_merch(interaction: discord.Interaction):
+    await user_view_merch(interaction)
+
+@tree.command(name='purchase', description="Buy something from the merch booth!")
+@discord.app_commands.describe(item_id="The short code of the item you want to buy (e.g., CUSTEMOJI)")
+async def purchase(interaction: discord.Interaction, item_id: str):
+    await user_purchase_merch(interaction, item_id)
+
+@tree.command(name='purchase-history', description="View all of the merch you've bought!")
+async def purchase_history(interaction: discord.Interaction):
+    await user_purchase_history(interaction)
+
+# Run database setup before starting the bot
+initialize_database()
 client.run(TOKEN)
