@@ -1,4 +1,6 @@
-import time
+"""
+Docstring for iu.scripts.create_playlist
+"""
 import os
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
@@ -10,9 +12,9 @@ scopes = [
     "https://www.googleapis.com/auth/youtubepartner",
 ]
 
-api_service_name = "youtube"
-api_version = "v3"
-client_secrets_file = "client_secret.json"
+API_SERVICE_NAME = "youtube"
+API_VERSION = "v3"
+CLIENT_SECRETS_FILE = "client_secret.json"
 
 def create_playlist(yt):
     request = yt.playlists().insert(
@@ -33,7 +35,7 @@ def create_playlist(yt):
 
 def add_all_to_playlist(yt, playlist_id):
     count = 0
-    with open('../releases/2025_parsed_ids.txt', 'r') as f:
+    with open('../releases/2025_parsed_ids.txt', 'r', encoding='utf-8') as f:
         lines = f.readlines()
         for line in lines:
             video_id = line.strip()
@@ -51,12 +53,12 @@ def add_all_to_playlist(yt, playlist_id):
                     }
                 )
                 request.execute()
-            except googleapiclient.errors.HttpError as e:
-                if e.reason == 'failedPrecondition':
+            except googleapiclient.errors.HttpError as ex:
+                if ex.reason == 'failedPrecondition':
                     print(f'video {video_id} was unlisted')
                     continue
-            except Exception as e:
-                print(f'failed to add {video_id}: {e}')
+                else:
+                    print(f'failed to add {video_id}: {ex}')
 
             count += 1
             if count % 10 == 0:
@@ -66,12 +68,12 @@ def add_all_to_playlist(yt, playlist_id):
 # *DO NOT* leave this option enabled in production.
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 # Get credentials and create an API client
-flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-    client_secrets_file, scopes)
+flow = google_auth_oauthlib.flow.InstalledAppFlow.from_CLIENT_SECRETS_FILE(
+    CLIENT_SECRETS_FILE, scopes)
 credentials = flow.run_local_server()
 youtube = googleapiclient.discovery.build(
-    api_service_name, api_version, credentials=credentials)
+    API_SERVICE_NAME, API_VERSION, credentials=credentials)
 
 # playlist = create_playlist(youtube)
-playlist = 'PLO7u1j70-i0Om0ggJ84rHi8z9Q9uK2YvQ'
-add_all_to_playlist(youtube, playlist)
+PLAYLIST = 'PLO7u1j70-i0Om0ggJ84rHi8z9Q9uK2YvQ'
+add_all_to_playlist(youtube, PLAYLIST)

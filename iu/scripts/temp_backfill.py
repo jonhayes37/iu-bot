@@ -1,34 +1,33 @@
-import sys
-import webbrowser
+"""Script for backfilling YouTube video URLs."""
 
 urls = []
 releases = []
 
-def video_id_from_url(url):
-    url = url.strip()
-    ending = url.split('/')[-1]
-    if 'youtu.be' not in url:
+def video_id_from_url(video_url):
+    clean_url = video_url.strip()
+    ending = clean_url.split('/')[-1]
+    if 'youtu.be' not in clean_url:
         shortlink_parts = ending.split('?si=')
         if len(shortlink_parts) == 2:
             return shortlink_parts[0]
-        else:
-            if 'watch' in ending:
-                watch_parts = ending.split('?v=')
-                return watch_parts[1].split('&')[0]
-            else:
-                return ending
-    else:
-        return ending.split('?')[0]
+
+        if 'watch' in ending:
+            watch_parts = ending.split('?v=')
+            return watch_parts[1].split('&')[0]
+
+        return ending
+
+    return ending.split('?')[0]
 
 def parse_urls(filename):
-    urls = []
-    with open(f'../releases/{filename}.txt', 'r') as f:
-        lines = f.readlines()
+    cur_urls = []
+    with open(f'../releases/{filename}.txt', 'r', encoding='utf-8') as fi:
+        lines = fi.readlines()
         for line in lines:
-            url = line.strip()
-            urls.append(url)
-        
-    return urls
+            cur_url = line.strip()
+            cur_urls.append(cur_url)
+
+    return cur_urls
 
 if __name__ == '__main__':
     subset_urls = parse_urls('2024_parsed')
@@ -38,6 +37,6 @@ if __name__ == '__main__':
         if url not in subset_urls:
             new_urls.append(url)
 
-    with open(f'../releases/backfill_new.txt', 'w+') as f:
+    with open('../releases/backfill_new.txt', 'w+', encoding='utf-8') as f:
         for u in new_urls:
             f.write(f'{u}\n')

@@ -20,8 +20,8 @@ async def admin_modify_balance(interaction: discord.Interaction, member: discord
     # Run the command
     try:
         modify_db_balance(interaction.user.id, member.id, amount, reason)
-    except (ValueError, KeyError) as e:
-        await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
+    except (ValueError, KeyError) as ex:
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
     # Format the response
@@ -68,8 +68,8 @@ async def admin_random_award(interaction: discord.Interaction, users_input: str,
 
     try:
         modify_db_balance(interaction.user.id, winner_id, amount, f"Random Award: {reason}")
-    except (ValueError, KeyError) as e:
-        await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
+    except (ValueError, KeyError) as ex:
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
     embed = discord.Embed(
@@ -107,8 +107,8 @@ async def admin_add_merch(
 
     try:
         upsert_merch_item(item_id, name, description, price, max_per_user)
-    except (ValueError, KeyError) as e:
-        await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
+    except (ValueError, KeyError) as ex:
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
     # Format the confirmation

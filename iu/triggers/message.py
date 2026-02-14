@@ -75,7 +75,7 @@ TRIGGER_LIST = {
     'bubble': [{ 'content': '_Bubble bubble bubble!_', 'filename': 'bubble.gif' }],
     'bubbles': [{ 'content': '_Bubble bubble bubble!_', 'filename': 'bubble.gif' }],
     'sunny': [{ 'filename': 'sunny.gif' }],
-    'heart': [{ 'filename': 'chuu_heart.gif' }],
+    'heart': [{ 'filename': 'chuu_heart.gif', 'chance': 0.5 }],
     'either way': [{'content': "_Either way I'm good~_", 'filename': 'ive_either_way.gif'}],
     'rebel': [{'content': 'Rebels in our heart!', 'filename': 'ive_rebel_heart.gif'}],
     'mother': [
@@ -111,7 +111,9 @@ TRIGGER_LIST = {
     'father': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
     'preach': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
     'preacher': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
-    'preacher_is_saturday_currently': [{'content': "It actually _IS_ Saturday! Thank you father <:iuPray:1456031268494905428>", 'filename': 'cha_eunwoo_preacher_saturday.gif'}],
+    'preacher_is_saturday_currently': [{
+        'content': "It actually _IS_ Saturday! Thank you father <:iuPray:1456031268494905428>",
+    'filename': 'cha_eunwoo_preacher_saturday.gif'}],
     'generation': [{'content': '_La, la-la, la, la-la, la, la-la_', 'filename': 'triples_generation.gif'}], 
 }
 
@@ -141,11 +143,11 @@ def pick_trigger(trigger_key):
     rand_num = random.randint(1, cumulative_weights[-1])
     chosen_index = 0
 
-    for i in range(len(cumulative_weights)):
-        if rand_num <= cumulative_weights[i]:
+    for i, weight in enumerate(cumulative_weights):
+        if rand_num <= weight:
             chosen_index = i
             break
-    
+
     return triggers[chosen_index]
 
 def check_chance(cur_tr):
@@ -160,10 +162,10 @@ def find_unique_triggers(text):
                       if trigger in text and not is_subword(text, trigger)]
     unique_filenames = set()
     unique_triggers = set()
-    for ft in found_triggers:
-        cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(ft)]
+    for f_t in found_triggers:
+        cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(f_t)]
         if all([fname not in unique_filenames for fname in cur_filenames]):
-            unique_triggers.add(ft)
+            unique_triggers.add(f_t)
             for fname in cur_filenames:
                 unique_filenames.add(fname)
 
@@ -176,7 +178,8 @@ def find_unique_triggers(text):
         unique_triggers.discard('generation')
 
     # If it's Saturday, don't trigger 'preacher' since there's a special Saturday version
-    if ('preacher' in unique_triggers or 'preach' in unique_triggers or 'father' in unique_triggers) and datetime.now(ZoneInfo("America/New_York")).weekday() == 5:
+    if ('preacher' in unique_triggers or 'preach' in unique_triggers or 'father' in unique_triggers) and \
+        datetime.now(ZoneInfo("America/New_York")).weekday() == 5:
         unique_triggers.discard('preach')
         unique_triggers.discard('preacher')
         unique_triggers.discard('father')
@@ -224,11 +227,12 @@ def store_new_release(message, separate=False):
             os.makedirs('iu/releases')
 
         filename = f'iu/releases/{message_year}_backfill.txt' if separate else f'iu/releases/{message_year}.txt'
-        with open(filename, 'a+') as f:
+        with open(filename, 'a+', encoding='utf-8') as fi:
             lines = list(map(lambda url: f'{message_date} // {url}\n', urls))
-            f.writelines(lines)
+            fi.writelines(lines)
 
 def parse_message_for_youtube_url(msg):
-    youtube_regex = r'((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?'
+    youtube_regex = r'((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))' \
+    r'(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?'
     matches = re.findall(youtube_regex, msg.content)
-    return list(map(lambda match: ''.join(match), matches))
+    return [''.join(match) for match in matches]

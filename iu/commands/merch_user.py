@@ -16,8 +16,8 @@ async def user_check_balance(interaction: discord.Interaction):
     # Fetch the balance
     try:
         balance = get_user_balance(interaction.user.id)
-    except (ValueError, KeyError, RuntimeError) as e:
-        await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
+    except (ValueError, KeyError, RuntimeError) as ex:
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
     # Format the response
@@ -45,11 +45,10 @@ async def user_view_merch(interaction: discord.Interaction):
         return
 
     try:
-        user_id = interaction.user.id
-        balance = get_user_balance(user_id)
-        items = get_user_merch_catalog(user_id)
-    except (ValueError, KeyError, RuntimeError) as e:
-        await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
+        balance = get_user_balance(interaction.user.id)
+        items = get_user_merch_catalog(interaction.user.id)
+    except (ValueError, KeyError, RuntimeError) as ex:
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
     if not items:
@@ -83,20 +82,17 @@ async def user_view_merch(interaction: discord.Interaction):
     for item_id, name, description, price, max_per_user, quantity_owned in available_items:
         remaining = max_per_user - quantity_owned if max_per_user else None
         limit_text = f"**{remaining}** available" if remaining else "Unlimited stock"
-        title = f"[{price} hearts] **{name}** (`{item_id}`)"
 
         embed.add_field(
-            name=title,
+            name=f"[{price} hearts] **{name}** (`{item_id}`)",
             value=f"{description}\n*{limit_text}*",
             inline=False
         )
 
     # Add Sold Out Items Last (No cost shown)
     for item_id, name, description, price, max_per_user, quantity_owned in sold_out_items:
-        title = f"~~{name} (`{item_id}`)~~ - **SOLD OUT**"
-
         embed.add_field(
-            name=title,
+            name=f"~~{name} (`{item_id}`)~~ - **SOLD OUT**",
             value=description,
             inline=False
         )
@@ -118,8 +114,8 @@ async def user_purchase_merch(interaction: discord.Interaction, item_id: str):
     # Execute the database logic
     try:
         success, message = process_purchase(interaction.user.id, item_id)
-    except (ValueError, KeyError, RuntimeError) as e:
-        await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
+    except (ValueError, KeyError, RuntimeError) as ex:
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
     # Format the response based on success or failure
@@ -163,8 +159,8 @@ async def user_purchase_history(interaction: discord.Interaction):
     # Fetch the data
     try:
         inventory = get_user_inventory(interaction.user.id)
-    except (ValueError, KeyError, RuntimeError) as e:
-        await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
+    except (ValueError, KeyError, RuntimeError) as ex:
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
     # Handle the empty state
