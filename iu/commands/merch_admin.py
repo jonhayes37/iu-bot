@@ -128,7 +128,7 @@ async def admin_add_merch(
 
 
 async def admin_set_status(interaction: discord.Interaction, member: discord.Member, status_text: str):
-    """Changes the bot's 'Playing' status and logs the user who requested it."""
+    """Changes the bot's status and logs the user who requested it."""
 
     if interaction.channel.name != 'dispatch-news':
         await interaction.response.send_message(
@@ -138,10 +138,13 @@ async def admin_set_status(interaction: discord.Interaction, member: discord.Mem
         return
 
     # Update the bot's presence
-    activity = discord.Game(name=status_text)
-    await interaction.client.change_presence(status=discord.Status.online, activity=activity)
+    if status_text == "":
+        await interaction.client.change_presence(status=discord.Status.online, activity=None)
+    else:
+        activity = discord.Activity(type=discord.ActivityType.listening, name=status_text)
+        await interaction.client.change_presence(status=discord.Status.online, activity=activity)
 
     # Log the change with the member tagged!
     await interaction.response.send_message(
-        f"<@1132749272488624189>'s status has been updated by {member.mention}: `Listening to {status_text}`"
+        f"<@1132749272488624189>'s status has been updated by {member.mention} to `{status_text}`"
     )

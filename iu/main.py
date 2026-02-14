@@ -1,5 +1,6 @@
 """IU Bot for the HallyU Discord server"""
 
+import logging
 import os
 import typing
 import sqlite3
@@ -20,6 +21,9 @@ from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping, store_new_release
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('iu-bot')
+
 # Load env vars
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -28,11 +32,12 @@ COMMAND_ERRORS = [InvalidSongError, SamePlayerEliminationError]
 
 # Database setup
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
-SCHEMA_PATH_MERCH = "./merch_schema.sql"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "merch_schema.sql")
 
 def initialize_database():
     """Reads the schema.sql file and executes it to ensure all tables exist."""
-    print("Initializing database...")
+    logger.info("Initializing database...")
 
     # Ensure the directory exists (crucial for Docker bind mounts)
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_MERCH)), exist_ok=True)
@@ -42,7 +47,7 @@ def initialize_database():
         with open(SCHEMA_PATH_MERCH, 'r', encoding='utf-8') as file:
             schema_script = file.read()
     except FileNotFoundError:
-        print(f"CRITICAL ERROR: Could not find schema file at {SCHEMA_PATH_MERCH}")
+        logger.critical("Error: Could not find schema file at %s", SCHEMA_PATH_MERCH)
         return
 
     # Connect to the DB and execute the script
@@ -50,8 +55,7 @@ def initialize_database():
         conn.executescript(schema_script)
         conn.commit()
 
-    print(f"Database initialized successfully at {DB_PATH_MERCH}")
-# ----------------------
+    logger.info("Database initialized successfully at %s", DB_PATH_MERCH)
 
 # Connect to Discord
 intents = discord.Intents.default()
@@ -65,9 +69,15 @@ tree = discord.app_commands.CommandTree(client)
 
 @client.event
 async def on_ready():
-    print(f'{client.user} has connected to Discord!')
-    await tree.sync()
-    print('Command tree synced!')
+    logger.info('%s has connected to Discord!', client.user)
+    if GUILD:
+        guild = discord.Object(id=int(GUILD))
+        tree.copy_global_to(guild=guild)
+        await tree.sync(guild=guild)
+        logger.info("Command tree synced to Guild %s", GUILD)
+    else:
+        logger.info("⚠️ Global sync triggered (May take 24 hours).")
+        await tree.sync()
 
 @client.event
 async def on_message(message):
@@ -214,7 +224,7 @@ async def purchase_history(interaction: discord.Interaction):
     status_text="The text to display after 'Listening to'"
 )
 @discord.app_commands.default_permissions(administrator=True)
-async def set_status(interaction: discord.Interaction, member: discord.Member, status_text: str):
+async def set_status(interaction: discord.Interaction, member: discord.Member, status_text: typing.Optional[str]):
     await admin_set_status(interaction, member, status_text)
 
 # Run database setup before starting the bot

@@ -83,7 +83,7 @@ async def user_view_merch(interaction: discord.Interaction):
     for item_id, name, description, price, max_per_user, quantity_owned in available_items:
         remaining = max_per_user - quantity_owned if max_per_user else None
         limit_text = f"**{remaining}** available" if remaining else "Unlimited stock"
-        title = f"[{price} hearts] **{name}** (`{item_id}`)**"
+        title = f"[{price} hearts] **{name}** (`{item_id}`)"
 
         embed.add_field(
             name=title,
