@@ -1,14 +1,14 @@
-# commands/economy_admin.py
-from random import random
-import discord
+"""merch_admin.py - Admin commands for managing the merch booth and balances."""
+import random
 import re
 import typing
-from db.merch import modify_db_balance, upsert_merch_item, reset_item_inventory
+import discord
+from db.merch import modify_db_balance, upsert_merch_item
 
 
 async def admin_modify_balance(interaction: discord.Interaction, member: discord.Member, amount: int, reason: str):
     """The Discord command logic for modifying a balance."""
-    
+
     # Channel restriction check
     if interaction.channel.name != 'dispatch-news':
         await interaction.response.send_message(
@@ -20,14 +20,14 @@ async def admin_modify_balance(interaction: discord.Interaction, member: discord
     # Run the command
     try:
         modify_db_balance(interaction.user.id, member.id, amount, reason)
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
         return
 
     # Format the response
     action = "Awarded" if amount >= 0 else "Deducted"
     abs_amount = abs(amount)
-    
+
     # Send a public embed to the dispatch-news log
     embed = discord.Embed(
         title="Balance Modification",
@@ -43,7 +43,7 @@ async def admin_modify_balance(interaction: discord.Interaction, member: discord
 
 async def admin_random_award(interaction: discord.Interaction, users_input: str, amount: int, reason: str):
     """The Discord command logic for a random giveaway."""
-    
+
     # Channel restriction check
     if interaction.channel.name != 'dispatch-news':
         await interaction.response.send_message(
@@ -55,7 +55,7 @@ async def admin_random_award(interaction: discord.Interaction, users_input: str,
     # Extract Discord User IDs from the input string using Regex
     # This securely finds the numbers inside standard <@123> or <@!123> mentions
     raw_ids = re.findall(r'<@!?(\d+)>', users_input)
-    
+
     if not raw_ids:
         await interaction.response.send_message(
             "I couldn't find any valid user mentions. Please make sure to actually @mention the eligible members!", 
@@ -68,7 +68,7 @@ async def admin_random_award(interaction: discord.Interaction, users_input: str,
 
     try:
         modify_db_balance(interaction.user.id, winner_id, amount, f"Random Award: {reason}")
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
         return
 
@@ -84,15 +84,15 @@ async def admin_random_award(interaction: discord.Interaction, users_input: str,
     await interaction.response.send_message(embed=embed)
 
 async def admin_add_merch(
-    interaction: discord.Interaction, 
-    item_id: str, 
-    name: str, 
-    description: str, 
-    price: int, 
+    interaction: discord.Interaction,
+    item_id: str,
+    name: str,
+    description: str,
+    price: int,
     max_per_user: typing.Optional[int]
 ):
     """The Discord command logic for adding/updating merch items."""
-    
+
     if interaction.channel.name != 'dispatch-news':
         await interaction.response.send_message(
             "This command can only be used in the #dispatch-news channel.", 
@@ -107,13 +107,13 @@ async def admin_add_merch(
 
     try:
         upsert_merch_item(item_id, name, description, price, max_per_user)
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
         return
 
     # Format the confirmation
     limit_text = f"{max_per_user} per user" if max_per_user else "Unlimited"
-    
+
     embed = discord.Embed(
         title="🛒 Merch Booth Updated!",
         color=discord.Color.purple()
@@ -123,13 +123,13 @@ async def admin_add_merch(
     embed.add_field(name="Price", value=f"{price} hearts", inline=True)
     embed.add_field(name="Stock Limit", value=limit_text, inline=True)
     embed.add_field(name="Description", value=description, inline=False)
-    
+
     await interaction.response.send_message(embed=embed)
- 
+
 
 async def admin_set_status(interaction: discord.Interaction, member: discord.Member, status_text: str):
     """Changes the bot's 'Playing' status and logs the user who requested it."""
-    
+
     if interaction.channel.name != 'dispatch-news':
         await interaction.response.send_message(
             "This command can only be used in the #dispatch-news channel.", 
@@ -140,7 +140,7 @@ async def admin_set_status(interaction: discord.Interaction, member: discord.Mem
     # Update the bot's presence
     activity = discord.Game(name=status_text)
     await interaction.client.change_presence(status=discord.Status.online, activity=activity)
-    
+
     # Log the change with the member tagged!
     await interaction.response.send_message(
         f"<@1132749272488624189>'s status has been updated by {member.mention}: `Listening to {status_text}`"

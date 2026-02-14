@@ -1,10 +1,10 @@
-# commands/economy_user.py
+"""Docstring for iu.commands.merch_user"""
 import discord
 from db.merch import get_user_balance, get_user_merch_catalog, process_purchase, get_user_inventory
 
 async def user_check_balance(interaction: discord.Interaction):
     """The Discord command logic for checking a user's wallet."""
-    
+
     # Channel restriction check
     if interaction.channel.name != 'merch-booth':
         await interaction.response.send_message(
@@ -16,7 +16,7 @@ async def user_check_balance(interaction: discord.Interaction):
     # Fetch the balance
     try:
         balance = get_user_balance(interaction.user.id)
-    except Exception as e:
+    except (ValueError, KeyError, RuntimeError) as e:
         await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
         return
 
@@ -26,7 +26,7 @@ async def user_check_balance(interaction: discord.Interaction):
         description=f"You currently have **{balance} heart{'s' if balance != 1 else ''}** available to spend.",
         color=discord.Color(0xFF4980)
     )
-    
+
     # Add a helpful footer for user navigation
     embed.set_footer(text="Use /view-merch to see what you can buy!")
 
@@ -36,7 +36,7 @@ async def user_check_balance(interaction: discord.Interaction):
 
 async def user_view_merch(interaction: discord.Interaction):
     """The Discord command logic for displaying the personalized merch booth."""
-    
+
     if interaction.channel.name != 'merch-booth':
         await interaction.response.send_message(
             "This command can only be used in the #merch-booth channel.", 
@@ -48,7 +48,7 @@ async def user_view_merch(interaction: discord.Interaction):
         user_id = interaction.user.id
         balance = get_user_balance(user_id)
         items = get_user_merch_catalog(user_id)
-    except Exception as e:
+    except (ValueError, KeyError, RuntimeError) as e:
         await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
         return
 
@@ -62,7 +62,7 @@ async def user_view_merch(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🛍️ The Merch Booth",
         description=f"You currently have **{balance} hearts**.\nUse `/purchase <item_id>` to buy a perk!",
-        color=discord.Color(0xff66cc) 
+        color=discord.Color(0xff4980)
     )
 
     # 1. Separate the items into two lists
@@ -72,7 +72,7 @@ async def user_view_merch(interaction: discord.Interaction):
     for item in items:
         # Unpack the tuple
         item_id, name, description, price, max_per_user, quantity_owned = item
-        
+
         # Determine if it's sold out for this specific user
         if max_per_user is not None and quantity_owned >= max_per_user:
             sold_out_items.append(item)
@@ -84,7 +84,7 @@ async def user_view_merch(interaction: discord.Interaction):
         remaining = max_per_user - quantity_owned if max_per_user else None
         limit_text = f"**{remaining}** available" if remaining else "Unlimited stock"
         title = f"[{price} hearts] **{name}** (`{item_id}`)**"
-        
+
         embed.add_field(
             name=title,
             value=f"{description}\n*{limit_text}*",
@@ -94,7 +94,7 @@ async def user_view_merch(interaction: discord.Interaction):
     # Add Sold Out Items Last (No cost shown)
     for item_id, name, description, price, max_per_user, quantity_owned in sold_out_items:
         title = f"~~{name} (`{item_id}`)~~ - **SOLD OUT**"
-        
+
         embed.add_field(
             name=title,
             value=description,
@@ -106,7 +106,7 @@ async def user_view_merch(interaction: discord.Interaction):
 
 async def user_purchase_merch(interaction: discord.Interaction, item_id: str):
     """The Discord command logic for buying an item."""
-    
+
     # Enforce the merch-booth channel
     if interaction.channel.name != 'merch-booth':
         await interaction.response.send_message(
@@ -118,7 +118,7 @@ async def user_purchase_merch(interaction: discord.Interaction, item_id: str):
     # Execute the database logic
     try:
         success, message = process_purchase(interaction.user.id, item_id)
-    except Exception as e:
+    except (ValueError, KeyError, RuntimeError) as e:
         await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
         return
 
@@ -151,7 +151,7 @@ async def user_purchase_merch(interaction: discord.Interaction, item_id: str):
 
 async def user_purchase_history(interaction: discord.Interaction):
     """The Discord command logic for viewing owned perks."""
-    
+
     # Enforce the merch-booth channel
     if interaction.channel.name != 'merch-booth':
         await interaction.response.send_message(
@@ -163,7 +163,7 @@ async def user_purchase_history(interaction: discord.Interaction):
     # Fetch the data
     try:
         inventory = get_user_inventory(interaction.user.id)
-    except Exception as e:
+    except (ValueError, KeyError, RuntimeError) as e:
         await interaction.response.send_message(f"Database error: {e}", ephemeral=True)
         return
 
