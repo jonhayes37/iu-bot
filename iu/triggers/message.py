@@ -100,6 +100,7 @@ TRIGGER_LIST = {
         {'content': "The Honmoon is sealed.", 'filename': 'honmoon.gif', 'weight': 5},
     ],
     'yee haw': [{'content': '_Howdy, partner_', 'filename': 'yee_haw.gif'}],
+    'yeehaw': [{'content': '_Howdy, partner_', 'filename': 'yee_haw.gif'}],
     'soda': [
         {'content': '_My little soda pop~_', 'filename': 'saja_boys_soda_pop.gif', 'weight': 95},
         {'content': 'ABS!! 🍿','filename': 'saja_boys_abs.gif', 'weight': 5},
@@ -158,29 +159,34 @@ def find_unique_triggers(text):
     found_triggers = [trigger for trigger in TRIGGER_LIST \
                       if trigger in text and not is_subword(text, trigger)]
     unique_filenames = set()
-    unique_triggers = []
+    unique_triggers = set()
     for ft in found_triggers:
         cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(ft)]
         if all([fname not in unique_filenames for fname in cur_filenames]):
-            unique_triggers.append(ft)
+            unique_triggers.add(ft)
             for fname in cur_filenames:
                 unique_filenames.add(fname)
 
     # Don't trigger both 'purple' and 'purple kiss' in the same message
     if 'purple kiss' in unique_triggers and 'purple' in unique_triggers:
-        unique_triggers.remove('purple')
+        unique_triggers.discard('purple')
+
+    # Don't trigger both 'purple' and 'purple kiss' in the same message
+    if ('girls generation' in text or "girls' generation" in text) and 'generation' in unique_triggers:
+        unique_triggers.discard('generation')
 
     # If it's Saturday, don't trigger 'preacher' since there's a special Saturday version
-    if ('preacher' in unique_triggers or 'father' in unique_triggers) and datetime.now(ZoneInfo("America/New_York")).weekday() == 5:
-        unique_triggers.remove('preacher')
-        unique_triggers.remove('father')
-        unique_triggers.append('preacher_is_saturday_currently')
+    if ('preacher' in unique_triggers or 'preach' in unique_triggers or 'father' in unique_triggers) and datetime.now(ZoneInfo("America/New_York")).weekday() == 5:
+        unique_triggers.discard('preach')
+        unique_triggers.discard('preacher')
+        unique_triggers.discard('father')
+        unique_triggers.add('preacher_is_saturday_currently')
 
     # Only trigger 'ballad' if there's also a link in the message
     if 'ballad' in unique_triggers or 'ballads' in unique_triggers:
         url_regex = r'(https?://[^\s]+)'
         if not re.search(url_regex, text):
-            unique_triggers.remove('ballad')
+            unique_triggers.discard('ballad')
 
     return unique_triggers
 
