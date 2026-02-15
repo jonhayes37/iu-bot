@@ -8,13 +8,8 @@ from db.merch import modify_db_balance, upsert_merch_item
 
 async def admin_modify_balance(interaction: discord.Interaction, member: discord.Member, amount: int, reason: str):
     """The Discord command logic for modifying a balance."""
-
-    # Channel restriction check
-    if interaction.channel.name != 'dispatch-news':
-        await interaction.response.send_message(
-            "This command can only be used in the #dispatch-news channel.", 
-            ephemeral=True
-        )
+    restricted = validate_merch_channel(interaction)
+    if restricted:
         return
 
     # Run the command
@@ -40,6 +35,16 @@ async def admin_modify_balance(interaction: discord.Interaction, member: discord
 
     await interaction.response.send_message(embed=embed)
 
+
+async def validate_merch_channel(interaction: discord.Interaction) -> bool:
+    if interaction.channel.name != 'dispatch-news':
+        await interaction.response.send_message(
+            "This command can only be used in the #dispatch-news channel.", 
+            ephemeral=True
+        )
+        return True
+
+    return False
 
 async def admin_random_award(interaction: discord.Interaction, users_input: str, amount: int, reason: str):
     """The Discord command logic for a random giveaway."""

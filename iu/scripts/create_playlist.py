@@ -16,8 +16,8 @@ API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
 CLIENT_SECRETS_FILE = "client_secret.json"
 
-def create_playlist(yt):
-    request = yt.playlists().insert(
+def create_playlist(you_tube):
+    request = you_tube.playlists().insert(
         part="snippet,status",
         body={
           "snippet": {
@@ -33,14 +33,14 @@ def create_playlist(yt):
     print(response)
     return response.get('id')
 
-def add_all_to_playlist(yt, playlist_id):
+def add_all_to_playlist(you_tube, playlist_id):
     count = 0
-    with open('../releases/2025_parsed_ids.txt', 'r', encoding='utf-8') as f:
-        lines = f.readlines()
+    with open('../releases/2025_parsed_ids.txt', 'r', encoding='utf-8') as f_name:
+        lines = f_name.readlines()
         for line in lines:
             video_id = line.strip()
             try:
-                request = yt.playlistItems().insert(
+                request = you_tube.playlistItems().insert(
                     part="snippet,status",
                     body={
                     "snippet": {
@@ -57,8 +57,8 @@ def add_all_to_playlist(yt, playlist_id):
                 if ex.reason == 'failedPrecondition':
                     print(f'video {video_id} was unlisted')
                     continue
-                else:
-                    print(f'failed to add {video_id}: {ex}')
+
+                print(f'failed to add {video_id}: {ex}')
 
             count += 1
             if count % 10 == 0:
@@ -68,7 +68,7 @@ def add_all_to_playlist(yt, playlist_id):
 # *DO NOT* leave this option enabled in production.
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 # Get credentials and create an API client
-flow = google_auth_oauthlib.flow.InstalledAppFlow.from_CLIENT_SECRETS_FILE(
+flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
     CLIENT_SECRETS_FILE, scopes)
 credentials = flow.run_local_server()
 youtube = googleapiclient.discovery.build(

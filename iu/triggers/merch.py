@@ -29,7 +29,7 @@ async def handle_reaction_add(payload, client):
     # =================
     # Daily Heart Award
     # =================
-    if payload.emoji.name == "aGiveHeart":
+    if payload.emoji.name in ("aGiveHeart", "giveHeart"):
         sender_id = payload.user_id
         receiver_id = message.author.id
 

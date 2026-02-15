@@ -164,7 +164,7 @@ def find_unique_triggers(text):
     unique_triggers = set()
     for f_t in found_triggers:
         cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(f_t)]
-        if all([fname not in unique_filenames for fname in cur_filenames]):
+        if all(fname not in unique_filenames for fname in cur_filenames):
             unique_triggers.add(f_t)
             for fname in cur_filenames:
                 unique_filenames.add(fname)
@@ -227,9 +227,9 @@ def store_new_release(message, separate=False):
             os.makedirs('iu/releases')
 
         filename = f'iu/releases/{message_year}_backfill.txt' if separate else f'iu/releases/{message_year}.txt'
-        with open(filename, 'a+', encoding='utf-8') as fi:
+        with open(filename, 'a+', encoding='utf-8') as f_name:
             lines = list(map(lambda url: f'{message_date} // {url}\n', urls))
-            fi.writelines(lines)
+            f_name.writelines(lines)
 
 def parse_message_for_youtube_url(msg):
     youtube_regex = r'((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))' \

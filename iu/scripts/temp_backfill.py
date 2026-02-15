@@ -21,8 +21,8 @@ def video_id_from_url(video_url):
 
 def parse_urls(filename):
     cur_urls = []
-    with open(f'../releases/{filename}.txt', 'r', encoding='utf-8') as fi:
-        lines = fi.readlines()
+    with open(f'../releases/{filename}.txt', 'r', encoding='utf-8') as f_name:
+        lines = f_name.readlines()
         for line in lines:
             cur_url = line.strip()
             cur_urls.append(cur_url)
