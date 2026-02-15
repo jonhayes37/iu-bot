@@ -1,16 +1,12 @@
 """Docstring for iu.commands.merch_user"""
 import discord
 from db.merch import get_user_balance, get_user_merch_catalog, process_purchase, get_user_inventory
+from .merch_admin import validate_merch_channel
 
 async def user_check_balance(interaction: discord.Interaction):
     """The Discord command logic for checking a user's wallet."""
-
-    # Channel restriction check
-    if interaction.channel.name != 'merch-booth':
-        await interaction.response.send_message(
-            "This command can only be used in the #merch-booth channel.", 
-            ephemeral=True
-        )
+    restricted = validate_merch_channel(interaction)
+    if restricted:
         return
 
     # Fetch the balance
@@ -63,8 +59,13 @@ async def user_view_merch(interaction: discord.Interaction):
         description=f"You currently have **{balance} hearts**.\nUse `/purchase <item_id>` to buy a perk!",
         color=discord.Color(0xff4980)
     )
+    embed = add_items_to_embed(embed, items)
 
-    # 1. Separate the items into two lists
+    await interaction.response.send_message(embed=embed)
+
+
+def add_items_to_embed(embed, items):
+    # Separate the items into two lists
     available_items = []
     sold_out_items = []
 
@@ -97,8 +98,7 @@ async def user_view_merch(interaction: discord.Interaction):
             inline=False
         )
 
-    await interaction.response.send_message(embed=embed)
-
+    return embed
 
 async def user_purchase_merch(interaction: discord.Interaction, item_id: str):
     """The Discord command logic for buying an item."""
