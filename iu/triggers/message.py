@@ -190,6 +190,7 @@ def find_unique_triggers(text):
         url_regex = r'(https?://[^\s]+)'
         if not re.search(url_regex, text):
             unique_triggers.discard('ballad')
+            unique_triggers.discard('ballads')
 
     return unique_triggers
 
