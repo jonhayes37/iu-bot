@@ -32,6 +32,6 @@ async def backfill_releases(interaction: discord.Interaction, channel: discord.T
             f"✅ **Backfill complete!** Scanned {messages_scanned} messages since {start_date_str}."
         )
 
-    except Exception as e:
-        logger.error("Error during backfill: %s", e)
-        await interaction.followup.send(f"❌ An error occurred during backfill: {e}")
+    except Exception as ex:
+        logger.error("Error during backfill: %s", ex)
+        await interaction.followup.send(f"❌ An error occurred during backfill: {ex}")

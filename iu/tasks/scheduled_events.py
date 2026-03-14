@@ -67,5 +67,5 @@ async def check_upcoming_events(client: discord.Client):
 
             except discord.Forbidden:
                 logger.error("Bot lacks permissions to create threads or mention users.")
-            except Exception as e:
-                logger.error("Failed to process event warning for %s: %s", event.name, e)
+            except Exception as ex:
+                logger.error("Failed to process event warning for %s: %s", event.name, ex)
