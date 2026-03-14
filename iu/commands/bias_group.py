@@ -244,7 +244,7 @@ async def my_bias_group(interaction, member_name):
             f"**Members:** {bias_info.get('members')}",
             f"**Label:** {bias_info.get('label')}",
             f"**Debut Date:** {bias_info.get('debut_date')}",
-            f"\n**{username}'s Favourites**", 
+            f"\n**{username}'s Favourites**",
             f"**Bias:** {bias_info.get('bias')}",
             f"**Title Track:** {bias_info.get('title_track')}",
             f"**B Track:** {bias_info.get('b_track')}",
