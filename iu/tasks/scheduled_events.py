@@ -8,18 +8,19 @@ from discord.ext import tasks
 from discord.utils import utcnow
 
 logger = logging.getLogger('iu-bot')
-GUILD_ID = os.getenv('DISCORD_GUILD')
 
 notified_events = set()
 
 @tasks.loop(minutes=1)
-async def check_upcoming_events(client: discord.Client):
-    if not GUILD_ID:
+async def check_upcoming_events(client: discord.Client, guild_id: int):
+    logger.info("Running scheduled event check...")
+    if not guild_id:
+        logger.error("guild_id is not set.")
         return
 
-    guild = client.get_guild(int(GUILD_ID))
+    guild = client.get_guild(guild_id)
     if not guild:
-        logger.error("Could not find guild with ID: %s", GUILD_ID)
+        logger.error("Could not find guild with ID: %s", guild_id)
         return
 
     # Find your specific events channel
@@ -30,7 +31,9 @@ async def check_upcoming_events(client: discord.Client):
 
     now = utcnow()
 
+    logger.info("Checking for upcoming events in guild: %s", guild.name)
     for event in guild.scheduled_events:
+        logger.info("Handling event %s: status %s", event.name, event.status)
         if event.status != discord.EventStatus.scheduled:
             continue
 
@@ -38,10 +41,12 @@ async def check_upcoming_events(client: discord.Client):
             continue
 
         time_until_start = event.start_time - now
-        if timedelta(minutes=14) <= time_until_start <= timedelta(minutes=15):
+        if time_until_start <= timedelta(minutes=15):
             try:
                 attendees = [user async for user in event.users(limit=50)]
+                logger.info("Found %d attendees for event: %s", len(attendees), event.name)
                 mentions = " ".join([user.mention for user in attendees if not user.bot])
+                logger.info("Mentions: %s", mentions)
                 if not mentions:
                     continue
 

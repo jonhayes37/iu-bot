@@ -173,7 +173,12 @@ def find_unique_triggers(text):
         unique_triggers.discard('purple')
 
     # Don't trigger both 'purple' and 'purple kiss' in the same message
-    if ('girls generation' in text or "girls' generation" in text) and 'generation' in unique_triggers:
+    if (
+        'girls-generation' in text or \
+        "girls'-generation" in text or \
+        'girls generation' in text or \
+        "girls' generation" in text
+    ) and 'generation' in unique_triggers:
         unique_triggers.discard('generation')
 
     # If it's Saturday, don't trigger 'preacher' since there's a special Saturday version

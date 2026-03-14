@@ -20,13 +20,6 @@ attachments! IU also responds to direct pings (except the global `@everyone` pin
 IU has several helpful commands which can be triggered via Discord's new `/` command
 framework. The commands are described in detail below.
 
-### `/hallyu-calendar`
-
-Usage: `/hallyu-calendar`
-
-This command will prompt IU to respond with a message explaining how to add the server's
-Google Calendar to your account, so you can always see the server events going on.
-
 ### `/rankdown-turn`
 
 Usage:
