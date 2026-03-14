@@ -1,3 +1,9 @@
+"""
+Script to generate a token.json for YouTube API access.
+Run this once and place the resulting token.json in the
+directory specified by TOKEN_DIR in your .env file.
+"""
+
 import os
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request

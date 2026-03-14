@@ -31,9 +31,9 @@ def add_new_release(video_id: str, original_url: str, message_id: str, msg_time:
         # The UNIQUE constraint in your schema caught a duplicate video_id or message_id
         logger.debug("Duplicate video_id or message_id ignored: %s", video_id)
         return False
-    except Exception as e:
+    except Exception as ex:
         # This will now show up in your Unraid logs if something breaks!
-        logger.error("CRITICAL: Database error inserting release %s: %s", video_id, e)
+        logger.error("CRITICAL: Database error inserting release %s: %s", video_id, ex)
         return False
 
 def mark_release_processed(video_id: str):

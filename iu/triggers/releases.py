@@ -27,36 +27,38 @@ async def store_new_release(message: discord.Message):
     award_year = get_eligible_year(message.created_at)
     for url in raw_urls:
         match = YT_REGEX.search(url)
-        if match:
-            video_id = match.group(1)
+        if not match:
+            continue
 
-            try:
-                # 1. Save to database initially as unprocessed (processed=0)
-                added = add_new_release(video_id=video_id,
-                                        original_url=url,
-                                        message_id=str(message.id),
-                                        msg_time=message.created_at)
+        video_id = match.group(1)
 
-                if added:
-                    # 2. Check for existing playlist for this specific year
-                    playlist_id = get_playlist_id_for_year(award_year)
+        try:
+            # 1. Save to database initially as unprocessed (processed=0)
+            added = add_new_release(video_id=video_id,
+                                    original_url=url,
+                                    message_id=str(message.id),
+                                    msg_time=message.created_at)
 
-                    # 3. Create the playlist if it doesn't exist
-                    if not playlist_id:
-                        logger.info("Playlist for %s not found. Creating...", award_year)
-                        playlist_id = create_playlist(award_year)
-                        if playlist_id:
-                            save_new_playlist(award_year, playlist_id)
+            if added:
+                # 2. Check for existing playlist for this specific year
+                playlist_id = get_playlist_id_for_year(award_year)
 
-                    # 4. Add video and mark as processed
+                # 3. Create the playlist if it doesn't exist
+                if not playlist_id:
+                    logger.info("Playlist for %s not found. Creating...", award_year)
+                    playlist_id = create_playlist(award_year)
                     if playlist_id:
-                        success = add_video_to_playlist(playlist_id, video_id)
-                        if success:
-                            mark_release_processed(video_id)
-                            videos_processed += 1
+                        save_new_playlist(award_year, playlist_id)
 
-            except Exception as e:
-                logger.error("Failed to process release %s: %s", video_id, e)
+                # 4. Add video and mark as processed
+                if playlist_id:
+                    success = add_video_to_playlist(playlist_id, video_id)
+                    if success:
+                        mark_release_processed(video_id)
+                        videos_processed += 1
+
+        except Exception as ex:
+            logger.error("Failed to process release %s: %s", video_id, ex)
 
     if videos_processed > 0:
         await message.add_reaction('<:iu:802970899174129744>')
