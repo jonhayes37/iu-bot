@@ -1,5 +1,5 @@
 coverage==7.3.4
-discord.py==2.3.2
+discord.py==2.7.1
 dpytest==0.7.0
 google-api-python-client==2.169.0
 google-auth-oauthlib==1.2.2

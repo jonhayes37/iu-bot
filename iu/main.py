@@ -17,6 +17,7 @@ from commands.rankdown_turn import (InvalidSongError,
                                     SamePlayerEliminationError, rankdown_turn)
 from commands.ultimate_bias import my_ultimate_bias
 from dotenv import load_dotenv
+from tasks.scheduled_events import check_upcoming_events
 from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
@@ -81,6 +82,11 @@ tree = discord.app_commands.CommandTree(client)
 async def on_ready():
     logger.info('%s has connected to Discord!', client.user)
 
+    # Start the event background task
+    if not check_upcoming_events.is_running():
+        check_upcoming_events.start(client)
+        logger.info("Event notifier task started.")
+
     if GUILD:
         guild = discord.Object(id=int(GUILD))
         tree.copy_global_to(guild=guild)
@@ -110,6 +116,25 @@ async def on_message(message):
 async def on_member_join(member):
     await add_trainee_role(member)
     await welcome_member(member)
+
+@client.event
+async def on_scheduled_event_create(event: discord.ScheduledEvent):
+    """Fires automatically whenever someone creates a new native event."""
+    channel = discord.utils.get(event.guild.text_channels, name='sandbox')
+    if not channel:
+        logger.error("Could not find #community-events channel.")
+        return
+
+    # role = discord.utils.get(event.guild.roles, name='Watch Parties')
+    # if not role:
+    #     logger.error("Could not find Watch Parties role.")
+    #     return
+
+    creator = event.creator.mention
+    await channel.send(
+        f"**{event.name}** has been scheduled by {creator}! "
+        f"Click the link below to RSVP so you don't miss out!\n\n{event.url}"
+    )
 
 @tree.command(name='backfill-new-releases', description="[Admin] Backfills new releases from a specific date")
 @discord.app_commands.describe(start_date="The start date for the backfill in YYYY-MM-DD format (e.g., 2025-12-01)")
