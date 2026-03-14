@@ -1,6 +1,5 @@
 """Parsing messages for triggers"""
 
-import os
 import random
 import re
 from datetime import datetime
@@ -211,29 +210,3 @@ async def check_message_for_replies(message):
 async def respond_to_ping(message):
     if not message.mention_everyone:
         await reply_with_gif(message, 'IU at your service!', 'ping.gif')
-
-def store_new_release(message, separate=False):
-    """
-    1. for each msg in new-releases, parse for a youtube url
-    2. If the url matches, store it with the message date in a .txt file
-    """
-    urls = parse_message_for_youtube_url(message)
-    if len(urls) > 0:
-        message_datetime = message.created_at
-        message_date = message_datetime.strftime('%Y-%m-%d')
-        message_year = message_datetime.year
-
-        # Make sure the folder exists
-        if not os.path.exists('iu/releases'):
-            os.makedirs('iu/releases')
-
-        filename = f'iu/releases/{message_year}_backfill.txt' if separate else f'iu/releases/{message_year}.txt'
-        with open(filename, 'a+', encoding='utf-8') as f_name:
-            lines = list(map(lambda url: f'{message_date} // {url}\n', urls))
-            f_name.writelines(lines)
-
-def parse_message_for_youtube_url(msg):
-    youtube_regex = r'((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(?:-nocookie)?\.com|youtu.be))' \
-    r'(\/(?:[\w\-]+\?v=|embed\/|live\/|v\/)?)([\w\-]+)(\S+)?'
-    matches = re.findall(youtube_regex, msg.content)
-    return [''.join(match) for match in matches]

@@ -19,7 +19,8 @@ from commands.ultimate_bias import my_ultimate_bias
 from dotenv import load_dotenv
 from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
-from triggers.message import check_message_for_replies, respond_to_ping, store_new_release
+from triggers.message import check_message_for_replies, respond_to_ping
+from triggers.releases import store_new_release
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('iu-bot')
@@ -32,8 +33,10 @@ COMMAND_ERRORS = [InvalidSongError, SamePlayerEliminationError]
 
 # Database setup
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
+DB_PATH_RELEASES = os.getenv('DB_PATH_RELEASES')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "merch_schema.sql")
+SCHEMA_PATH_RELEASES = os.path.join(BASE_DIR, "releases_schema.sql")
 
 def initialize_database():
     """Reads the schema.sql file and executes it to ensure all tables exist."""
@@ -41,21 +44,28 @@ def initialize_database():
 
     # Ensure the directory exists (crucial for Docker bind mounts)
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_MERCH)), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_RELEASES)), exist_ok=True)
 
     # Read the SQL blueprint
     try:
         with open(SCHEMA_PATH_MERCH, 'r', encoding='utf-8') as file:
-            schema_script = file.read()
+            merch_schema_script = file.read()
+        with open(SCHEMA_PATH_RELEASES, 'r', encoding='utf-8') as file:
+            releases_schema_script = file.read()
     except FileNotFoundError:
         logger.critical("Error: Could not find schema file at %s", SCHEMA_PATH_MERCH)
         return
 
     # Connect to the DB and execute the script
     with sqlite3.connect(DB_PATH_MERCH) as conn:
-        conn.executescript(schema_script)
+        conn.executescript(merch_schema_script)
         conn.commit()
-
     logger.info("Database initialized successfully at %s", DB_PATH_MERCH)
+
+    with sqlite3.connect(DB_PATH_RELEASES) as conn:
+        conn.executescript(releases_schema_script)
+        conn.commit()
+    logger.info("Database initialized successfully at %s", DB_PATH_RELEASES)
 
 # Connect to Discord
 intents = discord.Intents.default()
@@ -70,11 +80,12 @@ tree = discord.app_commands.CommandTree(client)
 @client.event
 async def on_ready():
     logger.info('%s has connected to Discord!', client.user)
+
     if GUILD:
         guild = discord.Object(id=int(GUILD))
         tree.copy_global_to(guild=guild)
         await tree.sync(guild=guild)
-        logger.info("Command tree synced to Guild %s", GUILD)
+        logger.info("Command tree synced to guild %s", GUILD)
     else:
         logger.info("⚠️ Global sync triggered (May take 24 hours).")
         await tree.sync()
@@ -87,9 +98,11 @@ async def on_message(message):
     if client.user.mentioned_in(message):
         await respond_to_ping(message)
 
-    releases_channel = discord.utils.get(message.guild.text_channels, name='new-releases')
-    if message.channel == releases_channel:
-        store_new_release(message)
+    if message.guild:
+        sandbox_channel = discord.utils.get(message.guild.text_channels, name='sandbox')
+        releases_channel = discord.utils.get(message.guild.text_channels, name='new-releases')
+        if message.channel in [releases_channel, sandbox_channel]:
+            await store_new_release(message)
 
     await check_message_for_replies(message)
 
@@ -98,11 +111,15 @@ async def on_member_join(member):
     await add_trainee_role(member)
     await welcome_member(member)
 
-# Commands
-@tree.command(name='backfill-new-releases', description="[INTERNAL ONLY] Backfills new releases")
-async def backfill(interaction):
+@tree.command(name='backfill-new-releases', description="[Admin] Backfills new releases from a specific date")
+@discord.app_commands.describe(start_date="The start date for the backfill in YYYY-MM-DD format (e.g., 2025-12-01)")
+@discord.app_commands.default_permissions(administrator=True)
+async def backfill(interaction: discord.Interaction, start_date: str):
     channel = discord.utils.get(interaction.guild.text_channels, name='new-releases')
-    await backfill_releases(channel)
+    if not channel:
+        return await interaction.response.send_message("Could not find the #new-releases channel.", ephemeral=True)
+
+    await backfill_releases(interaction, channel, start_date)
 
 @tree.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
 @discord.app_commands.describe(member='The member whose bias you want to see. ' \
@@ -201,7 +218,7 @@ async def add_merch(
 @tree.command(name='check-balance',
               description="Check how many hearts you have available to spend.")
 async def check_balance(interaction: discord.Interaction):
-    await user_check_balance(interaction)
+    await user_check_balance(logger, interaction)
 
 @tree.command(name='view-merch', description="Browse the available perks in the merch stand!")
 async def view_merch(interaction: discord.Interaction):

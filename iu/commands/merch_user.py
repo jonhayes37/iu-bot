@@ -1,18 +1,20 @@
 """Docstring for iu.commands.merch_user"""
+import logging
 import discord
 from db.merch import get_user_balance, get_user_merch_catalog, process_purchase, get_user_inventory
-from .merch_admin import validate_merch_channel
+from .merch_admin import validate_channel
 
-async def user_check_balance(interaction: discord.Interaction):
+async def user_check_balance(logger: logging.Logger, interaction: discord.Interaction):
     """The Discord command logic for checking a user's wallet."""
-    restricted = validate_merch_channel(interaction)
+    restricted = await validate_channel(interaction, 'merch-booth')
     if restricted:
         return
 
     # Fetch the balance
     try:
         balance = get_user_balance(interaction.user.id)
-    except (ValueError, KeyError, RuntimeError) as ex:
+    except Exception as ex:
+        logger.error(f"Database error occurred: {ex}")
         await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
@@ -33,17 +35,14 @@ async def user_check_balance(interaction: discord.Interaction):
 async def user_view_merch(interaction: discord.Interaction):
     """The Discord command logic for displaying the personalized merch booth."""
 
-    if interaction.channel.name != 'merch-booth':
-        await interaction.response.send_message(
-            "This command can only be used in the #merch-booth channel.", 
-            ephemeral=True
-        )
+    restricted = await validate_channel(interaction, 'merch-booth')
+    if restricted:
         return
 
     try:
         balance = get_user_balance(interaction.user.id)
         items = get_user_merch_catalog(interaction.user.id)
-    except (ValueError, KeyError, RuntimeError) as ex:
+    except Exception as ex:
         await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
@@ -103,18 +102,14 @@ def add_items_to_embed(embed, items):
 async def user_purchase_merch(interaction: discord.Interaction, item_id: str):
     """The Discord command logic for buying an item."""
 
-    # Enforce the merch-booth channel
-    if interaction.channel.name != 'merch-booth':
-        await interaction.response.send_message(
-            "This command can only be used in the #merch-booth channel.", 
-            ephemeral=True
-        )
+    restricted = await validate_channel(interaction, 'merch-booth')
+    if restricted:
         return
 
     # Execute the database logic
     try:
         success, message = process_purchase(interaction.user.id, item_id)
-    except (ValueError, KeyError, RuntimeError) as ex:
+    except Exception as ex:
         await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
@@ -148,18 +143,14 @@ async def user_purchase_merch(interaction: discord.Interaction, item_id: str):
 async def user_purchase_history(interaction: discord.Interaction):
     """The Discord command logic for viewing owned perks."""
 
-    # Enforce the merch-booth channel
-    if interaction.channel.name != 'merch-booth':
-        await interaction.response.send_message(
-            "This command can only be used in the #merch-booth channel.", 
-            ephemeral=True
-        )
+    restricted = await validate_channel(interaction, 'merch-booth')
+    if restricted:
         return
 
     # Fetch the data
     try:
         inventory = get_user_inventory(interaction.user.id)
-    except (ValueError, KeyError, RuntimeError) as ex:
+    except Exception as ex:
         await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
         return
 
