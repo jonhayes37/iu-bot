@@ -1,15 +1,18 @@
 """merch_admin.py - Admin commands for managing the merch booth and balances."""
+import logging
 import random
 import re
 import typing
 import discord
 from db.merch import modify_db_balance, upsert_merch_item
 
+logger = logging.getLogger('iu-bot')
 
 async def admin_modify_balance(interaction: discord.Interaction, member: discord.Member, amount: int, reason: str):
     """The Discord command logic for modifying a balance."""
-    restricted = validate_channel(interaction, 'dispatch-news')
+    restricted = await validate_channel(interaction, 'dispatch-news')
     if restricted:
+        logger.error("Wrong channel for balance modification command, must be #dispatch-news.")
         return
 
     # Run the command
@@ -17,6 +20,7 @@ async def admin_modify_balance(interaction: discord.Interaction, member: discord
         modify_db_balance(interaction.user.id, member.id, amount, reason)
     except (ValueError, KeyError) as ex:
         await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
+        logger.error("Database error occurred while modifying balance: %s", ex)
         return
 
     # Format the response

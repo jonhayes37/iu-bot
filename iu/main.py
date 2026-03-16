@@ -1,14 +1,11 @@
 """IU Bot for the HallyU Discord server"""
 
-import csv
 import logging
-import io
 import os
 import typing
 import sqlite3
 
 import discord
-from db.roles import register_new_role
 from commands.bias_group import my_bias_group
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
 from commands.merch_admin import admin_modify_balance, admin_random_award, admin_add_merch, admin_set_status
@@ -23,7 +20,7 @@ from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.releases import store_new_release
-from triggers.roles import handle_role_assignment, sync_roles_display
+from triggers.roles import handle_role_assignment
 from ui.watch_parties_role import WatchPartyRoleView
 
 logging.basicConfig(level=logging.INFO)
@@ -298,76 +295,6 @@ async def register_role(
     aliases: str = ""  # Making it optional in the Discord UI
 ):
     await handle_register_role(interaction, role, category, aliases)
-
-# TEMP - REMOVE!
-
-@tree.command(name='export-roles', description="[Admin] Generates a CSV of all server roles.")
-@discord.app_commands.default_permissions(administrator=True)
-async def export_roles(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-
-    # Create an in-memory string buffer so we don't have to save a file to Unraid
-    csv_buffer = io.StringIO()
-    writer = csv.writer(csv_buffer)
-
-    # Write the header row
-    writer.writerow(['Role ID', 'Role Name'])
-
-    # Loop through the server's roles
-    # We reverse it so the highest tier roles appear at the top
-    for role in reversed(interaction.guild.roles):
-        # Skip the @everyone role AND skip roles managed by integrations (like other bots)
-        if not role.is_default() and not role.managed:
-            writer.writerow([role.id, role.name])
-
-    # Convert the string buffer to bytes so Discord can send it as a file
-    csv_buffer.seek(0)
-    file_bytes = io.BytesIO(csv_buffer.getvalue().encode('utf-8'))
-    discord_file = discord.File(fp=file_bytes, filename='server_roles.csv')
-
-    await interaction.followup.send("📁 Here is your roles export!", file=discord_file)
-
-@tree.command(name='import-roles-csv', description="[Admin] Bulk import roles from a CSV file.")
-@discord.app_commands.default_permissions(administrator=True)
-async def import_roles_csv(interaction: discord.Interaction, file: discord.Attachment):
-    await interaction.response.defer(ephemeral=True)
-
-    file_bytes = await file.read()
-    csv_string = file_bytes.decode('utf-8')
-    reader = csv.DictReader(io.StringIO(csv_string))
-
-    success_count = 0
-    error_count = 0
-
-    for row in reader:
-        try:
-            role_id = int(row['Role ID'])
-            role_name = row['Role Name']
-            category = row['Category']
-
-            # Split the comma-separated aliases into a list, ignore if blank
-            aliases_raw = row.get('Aliases', '')
-            alias_list = [a.strip() for a in aliases_raw.split(',')] if aliases_raw else []
-
-            # Call our existing DB function
-            if register_new_role(role_id, role_name, category, alias_list):
-                success_count += 1
-            else:
-                error_count += 1
-        except Exception as e:
-            error_count += 1
-            logger.error("Failed to parse CSV row %s: %s", row, e)
-
-    # 3. Trigger the massive UI Sync once at the end
-    roles_channel = discord.utils.get(interaction.guild.text_channels, name='roles')
-    if roles_channel:
-        await sync_roles_display(roles_channel)
-        await interaction.followup.send(
-            f"✅ Import complete! Successfully registered **{success_count}** roles. "
-            f"({error_count} errors). The `#roles` channel has been updated!"
-        )
-    else:
-        await interaction.followup.send("✅ Import complete, but couldn't find the `#roles` channel to sync.")
 
 # Run database setup before starting the bot
 initialize_database()
