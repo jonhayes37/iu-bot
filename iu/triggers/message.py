@@ -100,6 +100,7 @@ TRIGGER_LIST = {
     ],
     'yee haw': [{'content': '_Howdy, partner_', 'filename': 'yee_haw.gif'}],
     'yeehaw': [{'content': '_Howdy, partner_', 'filename': 'yee_haw.gif'}],
+    'yee-haw': [{'content': '_Howdy, partner_', 'filename': 'yee_haw.gif'}],
     'soda': [
         {'content': '_My little soda pop~_', 'filename': 'saja_boys_soda_pop.gif', 'weight': 95},
         {'content': 'ABS!! 🍿','filename': 'saja_boys_abs.gif', 'weight': 5},
@@ -114,6 +115,7 @@ TRIGGER_LIST = {
         'content': "It actually _IS_ Saturday! Thank you father <:iuPray:1456031268494905428>",
     'filename': 'cha_eunwoo_preacher_saturday.gif'}],
     'generation': [{'content': '_La, la-la, la, la-la, la, la-la_', 'filename': 'triples_generation.gif'}], 
+    'asap': [{'filename': 'stayc_asap.gif'}],
 }
 
 async def reply_with_gif(incoming, content, filename):
