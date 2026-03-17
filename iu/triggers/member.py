@@ -19,7 +19,7 @@ async def welcome_member(member):
     message = f'@everyone come say hi to {member.mention}! They just joined the ' \
         f'<:hallyu:795848873910206544> community. {member.mention}, to get started you can:\n' \
         f"- Check out our community's rules in {rules_channel.mention}\n" \
-        f"- Add roles to rep your biases and be notified about watch parties in {roles_channel.mention} " \
+        f"- Add roles to rep your biases and be notified about watch parties and events in {roles_channel.mention} " \
         "(instructions in https://discord.com/channels/795846406187384842/838498988566642708/1066953623667482665)\n" \
         f"- If you're comfortable, share a bit about yourself in {intro_channel.mention}\n" \
         f"- Learn about the heart economy (<a:aGiveHeart:1472262590477500569>) and earning rewards for being " \

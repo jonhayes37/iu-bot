@@ -3,6 +3,7 @@
 import os
 import logging
 from typing import Any
+from datetime import datetime
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -67,3 +68,31 @@ def add_video_to_playlist(playlist_id: str, video_id: str) -> bool:
         else:
             logger.error("Failed to add video %s: %s", video_id, ex)
         return False
+
+def get_video_publish_date(video_id: str) -> datetime | None:
+    """Fetches the publish date of a video and returns a datetime object."""
+    youtube = get_yt_service()
+    if not youtube:
+        return False
+
+    try:
+        # Cost: 1 Quota Unit
+        request = youtube.videos().list(  # pylint: disable=no-member
+            part="snippet",
+            id=video_id
+        )
+        response = request.execute()
+
+        items = response.get("items", [])
+        if not items:
+            return None # Video might be deleted or private
+
+        # YouTube returns ISO 8601 format: "2026-03-17T15:00:00Z"
+        raw_date_str = items[0]["snippet"]["publishedAt"]
+        clean_date_str = raw_date_str.replace("Z", "+00:00")
+        publish_date = datetime.fromisoformat(clean_date_str)
+        return publish_date
+
+    except Exception as ex:
+        logger.error("YouTube API error fetching date for %s: %s", video_id, ex)
+        return None

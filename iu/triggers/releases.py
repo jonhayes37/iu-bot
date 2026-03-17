@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 import discord
 from db.releases import add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
-from services.youtube import create_playlist, add_video_to_playlist
+from services.youtube import create_playlist, add_video_to_playlist, get_video_publish_date
 
 logger = logging.getLogger('iu-bot')
 
@@ -33,24 +33,37 @@ async def store_new_release(message: discord.Message):
         video_id = match.group(1)
 
         try:
-            # 1. Save to database initially as unprocessed (processed=0)
+            # Check the video publish date to ensure it's eligible for the current award year
+            publish_date = get_video_publish_date(video_id)
+            if not publish_date:
+                logger.warning("Could not fetch publish date for %s. Skipping.", video_id)
+                continue
+
+            # If the video isn't from the current year, ignore it
+            video_award_year = get_eligible_year(publish_date)
+            if video_award_year != award_year:
+                logger.info("Skipped %s: Video year (%s) does not match active year (%s).",
+                            video_id, video_award_year, award_year)
+                continue
+
+            # Save to database initially as unprocessed (processed=0)
             added = add_new_release(video_id=video_id,
                                     original_url=url,
                                     message_id=str(message.id),
                                     msg_time=message.created_at)
 
             if added:
-                # 2. Check for existing playlist for this specific year
+                # Check for existing playlist for this specific year
                 playlist_id = get_playlist_id_for_year(award_year)
 
-                # 3. Create the playlist if it doesn't exist
+                # Create the playlist if it doesn't exist
                 if not playlist_id:
                     logger.info("Playlist for %s not found. Creating...", award_year)
                     playlist_id = create_playlist(award_year)
                     if playlist_id:
                         save_new_playlist(award_year, playlist_id)
 
-                # 4. Add video and mark as processed
+                # Add video and mark as processed
                 if playlist_id:
                     success = add_video_to_playlist(playlist_id, video_id)
                     if success:

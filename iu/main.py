@@ -8,6 +8,7 @@ import sqlite3
 import discord
 from commands.bias_group import my_bias_group
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
+from commands.lists import handle_create_list_event, handle_close_list_event
 from commands.merch_admin import admin_modify_balance, admin_random_award, admin_add_merch, admin_set_status
 from commands.merch_user import user_check_balance, user_view_merch, user_purchase_merch, user_purchase_history
 from commands.poll import generate_poll
@@ -21,7 +22,7 @@ from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.releases import store_new_release
 from triggers.roles import handle_role_assignment
-from ui.watch_parties_role import WatchPartyRoleView
+from ui.lists import handle_list_button_click
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('iu-bot')
@@ -35,10 +36,12 @@ GUILD = os.getenv('DISCORD_GUILD')
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
 DB_PATH_RELEASES = os.getenv('DB_PATH_RELEASES')
 DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
+DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "db/schema/merch.sql")
 SCHEMA_PATH_RELEASES = os.path.join(BASE_DIR, "db/schema/releases.sql")
 SCHEMA_PATH_ROLES = os.path.join(BASE_DIR, "db/schema/roles.sql")
+SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
 
 def initialize_database():
     """Reads the schema.sql file and executes it to ensure all tables exist."""
@@ -48,6 +51,7 @@ def initialize_database():
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_MERCH)), exist_ok=True)
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_RELEASES)), exist_ok=True)
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_ROLES)), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_LISTS)), exist_ok=True)
 
     # Read the SQL blueprint
     try:
@@ -57,6 +61,8 @@ def initialize_database():
             releases_schema_script = file.read()
         with open(SCHEMA_PATH_ROLES, 'r', encoding='utf-8') as file:
             roles_schema_script = file.read()
+        with open(SCHEMA_PATH_LISTS, 'r', encoding='utf-8') as file:
+            lists_schema_script = file.read()
     except FileNotFoundError:
         logger.critical("Error: Could not find schema file at %s", SCHEMA_PATH_MERCH)
         return
@@ -77,6 +83,11 @@ def initialize_database():
         conn.commit()
     logger.info("Database initialized successfully at %s", DB_PATH_ROLES)
 
+    with sqlite3.connect(DB_PATH_LISTS) as conn:
+        conn.executescript(lists_schema_script)
+        conn.commit()
+    logger.info("Database initialized successfully at %s", DB_PATH_LISTS)
+
 # Connect to Discord
 intents = discord.Intents.default()
 intents.message_content = True
@@ -84,14 +95,7 @@ intents.members = True
 # Added reactions intent so the bot can see when people add the merch-booth emoji!
 intents.reactions = True
 
-class MyClient(discord.Client):
-    """A thin wrapper to support the UI view setup hook."""
-
-    async def setup_hook(self):
-        # This tells the bot to listen for button clicks immediately on boot
-        self.add_view(WatchPartyRoleView())
-
-client = MyClient(intents=intents)
+client = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(client)
 
 @client.event
@@ -158,6 +162,28 @@ async def on_scheduled_event_create(event: discord.ScheduledEvent):
         f"{role.mention} **{event.name}** has been scheduled by {creator}! "
         f"RSVP below so you don't miss out!\n\n{event.url}"
     )
+
+@client.event
+async def on_interaction(interaction: discord.Interaction):
+    # We only care about button clicks (Components)
+    if interaction.type == discord.InteractionType.component:
+        custom_id = interaction.data.get('custom_id', '')
+
+        # Catch our dynamic list submission buttons
+        if custom_id.startswith('submit_list:'):
+            # If the event is closed, the ID looks like submit_list:mid_2026_closed
+            if custom_id.endswith('_closed'):
+                await interaction.response.send_message("Submissions for this event are closed!", ephemeral=True)
+                return
+
+            # Extract the event_id (e.g., "mid_2026")
+            event_id = custom_id.split(':')[1]
+            await handle_list_button_click(interaction, event_id)
+            return
+
+    # Let discord.py continue processing normal slash commands
+    if hasattr(client, 'process_commands'):
+        await client.process_commands(interaction)
 
 @tree.command(name='backfill-new-releases', description="[Admin] Backfills new releases from a specific date")
 @discord.app_commands.describe(start_date="The start date for the backfill in YYYY-MM-DD format (e.g., 2025-12-01)")
@@ -276,16 +302,6 @@ async def purchase_history(interaction: discord.Interaction):
 async def set_status(interaction: discord.Interaction, member: discord.Member, status_text: typing.Optional[str]):
     await admin_set_status(interaction, member, status_text)
 
-@tree.command(name='spawn-watch-parties-role',
-              description="[Admin] Drop the Watch Parties role toggle button in the current channel.")
-@discord.app_commands.default_permissions(administrator=True)
-async def spawn_roles(interaction: discord.Interaction):
-    view = WatchPartyRoleView()
-    await interaction.channel.send(
-        "**Want to be pinged when a new event is made?**\nClick the button below to opt in or out!", 
-        view=view
-    )
-
 @tree.command(name='register-role', description="[Admin] Add a new assignable role to the #roles channel.")
 @discord.app_commands.default_permissions(administrator=True)
 async def register_role(
@@ -295,6 +311,26 @@ async def register_role(
     aliases: str = ""  # Making it optional in the Discord UI
 ):
     await handle_register_role(interaction, role, category, aliases)
+
+@tree.command(name='create-list-event', description="[Admin] Start a new list submission event.")
+@discord.app_commands.default_permissions(administrator=True)
+async def create_list_event(
+    interaction: discord.Interaction,
+    event_id: str,
+    event_name: str,
+    expected_count: int = 0,
+    placeholder: str = "1. Artist // Song"
+):
+    await handle_create_list_event(interaction, event_id, event_name, expected_count, placeholder)
+
+@tree.command(name='close-list-event', description="[Admin] Close an active list event and disable its button.")
+@discord.app_commands.default_permissions(administrator=True)
+async def close_list_event(
+    interaction: discord.Interaction,
+    event_id: str
+):
+    # Notice we removed message_id here, since the DB handles it now!
+    await handle_close_list_event(interaction, event_id)
 
 # Run database setup before starting the bot
 initialize_database()
