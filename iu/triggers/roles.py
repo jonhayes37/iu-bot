@@ -78,7 +78,9 @@ def build_display_chunks() -> list[str]:
     chunks = []
     current_chunk = ""
 
-    for category, roles in grouped_data.items():
+    # Sort categories case-insensitively
+    for category in sorted(grouped_data.keys(), key=str.casefold):
+        roles = grouped_data[category]
         cat_header = f"**{category}**\n"
 
         # Start a new chunk if the header pushes us over
@@ -88,7 +90,8 @@ def build_display_chunks() -> list[str]:
 
         current_chunk += cat_header
 
-        for role_name, aliases in roles.items():
+        # Sort role names case-insensitively
+        for role_name, aliases in sorted(roles.items(), key=lambda item: item[0].casefold()):
             line = f"- `{role_name}`"
             if aliases:
                 alias_str = ", ".join(f"`{a}`" for a in aliases)

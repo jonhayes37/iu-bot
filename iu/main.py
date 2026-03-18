@@ -21,7 +21,7 @@ from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.releases import store_new_release
-from triggers.roles import handle_role_assignment
+from triggers.roles import handle_role_assignment, sync_roles_display
 from ui.lists import handle_list_button_click
 
 logging.basicConfig(level=logging.INFO)
@@ -311,6 +311,17 @@ async def register_role(
     aliases: str = ""  # Making it optional in the Discord UI
 ):
     await handle_register_role(interaction, role, category, aliases)
+
+@tree.command(name='sync-roles', description="[Admin] Sync the roles display in the #roles channel.")
+@discord.app_commands.default_permissions(administrator=True)
+async def sync_roles(
+    interaction: discord.Interaction
+):
+    roles_channel = discord.utils.get(interaction.guild.text_channels, name='roles')
+    if not roles_channel:
+        return
+    await sync_roles_display(roles_channel)
+
 
 @tree.command(name='create-list-event', description="[Admin] Start a new list submission event.")
 @discord.app_commands.default_permissions(administrator=True)

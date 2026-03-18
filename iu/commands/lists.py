@@ -1,8 +1,8 @@
 """Business logic for list event admin commands."""
 
-import csv
 import io
 import logging
+import re
 import discord
 from db.lists import create_new_event, close_event, get_all_submissions, get_event_details, set_event_message_id
 
@@ -117,14 +117,12 @@ async def handle_export_lists(interaction: discord.Interaction, event_id: str):
 
 def _process_export_data(event_name: str, submissions: list[dict]) -> tuple[str, str]:
     """
-    Transforms raw submission data into CSV and TXT formatted strings.
-    Returns: (csv_string, txt_string)
+    Transforms raw submission data into two TXT strings.
+    Returns: (stats_string, editor_string)
     """
-    csv_buffer = io.StringIO()
-    writer = csv.writer(csv_buffer)
-    writer.writerow(["Submission Data"]) # Header
-
+    stats_buffer = io.StringIO()
     editor_buffer = io.StringIO()
+
     editor_buffer.write(f"URL REFERENCE SHEET: {event_name}\n")
     editor_buffer.write("="*50 + "\n\n")
 
@@ -133,24 +131,20 @@ def _process_export_data(event_name: str, submissions: list[dict]) -> tuple[str,
         clean_text = sub.get('cleaned_text', '')
         urls_raw = sub.get('extracted_urls', '')
 
-        # CSV generation for stats
-        combined_text = f"{username}\n{clean_text}"
-        writer.writerow([combined_text])
-
-        # TXT generation for editing support
+        stats_buffer.write(f"{username}\n{clean_text}\n")
         if urls_raw:
             urls = urls_raw.split(',')
             lines = clean_text.split('\n')
 
-            # Check if there is actually at least one valid URL
             if any(u.strip() for u in urls):
                 editor_buffer.write(f"--- {username} ---\n")
-
-                # Pair the extracted URL back with its specific track line
                 for i, url in enumerate(urls):
                     if url.strip():
-                        # Fallback to "Pick #X" if they somehow have more URLs than text lines
                         pick_text = lines[i] if i < len(lines) else f"Pick #{i+1}"
-                        editor_buffer.write(f"{pick_text}\n-> {url}\n\n")
 
-    return csv_buffer.getvalue(), editor_buffer.getvalue()
+                        # Extract the timestamp (matches ?t=58s, &t=1m2s, ?t=123, etc.)
+                        time_match = re.search(r'[?&]t=([0-9hms]+)', url)
+                        timestamp = f"(starts at {time_match.group(1)})" if time_match else ""
+                        editor_buffer.write(f"{pick_text}\n-> {url}{timestamp}\n\n")
+
+    return stats_buffer.getvalue(), editor_buffer.getvalue()
