@@ -61,26 +61,38 @@ def close_event(event_id: str) -> bool:
         logger.error("Failed to close event '%s': %s", event_id, ex)
         return False
 
-def save_submission(event_id: str, user_id: int, raw_text: str, cleaned_text: str, urls: str) -> bool:
+def save_submission(event_id: str, user_id: int, username: str, raw_text: str, cleaned_text: str, urls: str) -> bool:
     """Saves or updates a user's list submission."""
     if not DB_PATH_LISTS:
-        logger.error("DB_PATH_LISTS environment variable not set! Cannot create new event.")
+        logger.error("DB_PATH_LISTS environment variable not set! Cannot save submission.")
         return False
-
     try:
         with sqlite3.connect(DB_PATH_LISTS) as conn:
             cursor = conn.cursor()
-            # Because we set UNIQUE(event_id, user_id) in the schema,
-            # this will flawlessly overwrite their old list if they submit again!
             cursor.execute("""
                 INSERT OR REPLACE INTO list_submissions 
-                (event_id, user_id, raw_text, cleaned_text, extracted_urls)
-                VALUES (?, ?, ?, ?, ?)
-            """, (event_id, user_id, raw_text, cleaned_text, urls))
+                (event_id, user_id, username, raw_text, cleaned_text, extracted_urls)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (event_id, user_id, username, raw_text, cleaned_text, urls))
             return True
     except Exception as ex:
-        logger.error("Failed to save submission for user %s on event '%s': %s", user_id, event_id, ex)
+        logger.error("Failed to save submission for user %s: %s", user_id, ex)
         return False
+
+def get_all_submissions(event_id: str) -> list[dict]:
+    """Fetches all submissions for an event to be exported."""
+    if not DB_PATH_LISTS:
+        logger.error("DB_PATH_LISTS environment variable not set! Cannot fetch submissions for event '%s'.", event_id)
+        return []
+    try:
+        with sqlite3.connect(DB_PATH_LISTS) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM list_submissions WHERE event_id = ?", (event_id,))
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception as ex:
+        logger.error("Failed to fetch submissions for event '%s': %s", event_id, ex)
+        return []
 
 def set_event_message_id(event_id: str, message_id: str) -> bool:
     """Links the Discord message ID to the event for easy closing later."""

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS list_submissions (
     submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id TEXT NOT NULL,
     user_id INTEGER NOT NULL,
+    username TEXT NOT NULL,
     raw_text TEXT NOT NULL,
     cleaned_text TEXT NOT NULL,
     extracted_urls TEXT,

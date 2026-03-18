@@ -1,8 +1,10 @@
 """Business logic for list event admin commands."""
 
+import csv
+import io
 import logging
 import discord
-from db.lists import create_new_event, close_event, get_event_details, set_event_message_id
+from db.lists import create_new_event, close_event, get_all_submissions, get_event_details, set_event_message_id
 
 logger = logging.getLogger('iu-bot')
 
@@ -81,3 +83,74 @@ async def handle_close_list_event(interaction: discord.Interaction, event_id: st
     except Exception as ex:
         logger.error("Error updating message for closed event %s: %s", event_id, ex)
         await interaction.followup.send("Event closed, but failed to edit the message.", ephemeral=True)
+
+async def handle_export_lists(interaction: discord.Interaction, event_id: str):
+    """Fetches data, formats it via the helper, and uploads the files to Discord."""
+    await interaction.response.defer(ephemeral=True)
+
+    event_details = get_event_details(event_id)
+    if not event_details:
+        await interaction.followup.send(f"Could not find event `{event_id}`.")
+        return
+
+    submissions = get_all_submissions(event_id)
+    if not submissions:
+        await interaction.followup.send(f"No submissions found for `{event_id}` yet!")
+        return
+
+    event_name = event_details.get('event_name', event_id)
+    csv_string, txt_string = _process_export_data(event_name, submissions)
+
+    csv_file = discord.File(
+        fp=io.BytesIO(csv_string.encode('utf-8')),
+        filename=f"{event_id}_stats.csv"
+    )
+    txt_file = discord.File(
+        fp=io.BytesIO(txt_string.encode('utf-8')),
+        filename=f"{event_id}_urls.txt"
+    )
+
+    await interaction.followup.send(
+        content=f"Exported **{len(submissions)}** submissions for `{event_id}`!",
+        files=[csv_file, txt_file]
+    )
+
+def _process_export_data(event_name: str, submissions: list[dict]) -> tuple[str, str]:
+    """
+    Transforms raw submission data into CSV and TXT formatted strings.
+    Returns: (csv_string, txt_string)
+    """
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["Submission Data"]) # Header
+
+    editor_buffer = io.StringIO()
+    editor_buffer.write(f"URL REFERENCE SHEET: {event_name}\n")
+    editor_buffer.write("="*50 + "\n\n")
+
+    for sub in submissions:
+        username = sub.get('username', 'Unknown User')
+        clean_text = sub.get('cleaned_text', '')
+        urls_raw = sub.get('extracted_urls', '')
+
+        # CSV generation for stats
+        combined_text = f"{username}\n{clean_text}"
+        writer.writerow([combined_text])
+
+        # TXT generation for editing support
+        if urls_raw:
+            urls = urls_raw.split(',')
+            lines = clean_text.split('\n')
+
+            # Check if there is actually at least one valid URL
+            if any(u.strip() for u in urls):
+                editor_buffer.write(f"--- {username} ---\n")
+
+                # Pair the extracted URL back with its specific track line
+                for i, url in enumerate(urls):
+                    if url.strip():
+                        # Fallback to "Pick #X" if they somehow have more URLs than text lines
+                        pick_text = lines[i] if i < len(lines) else f"Pick #{i+1}"
+                        editor_buffer.write(f"{pick_text}\n-> {url}\n\n")
+
+    return csv_buffer.getvalue(), editor_buffer.getvalue()

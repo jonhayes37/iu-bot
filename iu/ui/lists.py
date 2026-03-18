@@ -48,7 +48,8 @@ class DynamicListModal(discord.ui.Modal):
             return
 
         user_id = interaction.user.id
-        success = save_submission(self.event_id, user_id, raw_list, clean_text, urls)
+        username = interaction.user.display_name
+        success = save_submission(self.event_id, user_id, username, raw_list, clean_text, urls)
 
         if success:
             await interaction.response.send_message(

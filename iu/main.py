@@ -8,7 +8,7 @@ import sqlite3
 import discord
 from commands.bias_group import my_bias_group
 from commands.hmas import add_hma_pick, delete_hma_picks, my_hma_picks
-from commands.lists import handle_create_list_event, handle_close_list_event
+from commands.lists import handle_create_list_event, handle_close_list_event, handle_export_lists
 from commands.merch_admin import admin_modify_balance, admin_random_award, admin_add_merch, admin_set_status
 from commands.merch_user import user_check_balance, user_view_merch, user_purchase_merch, user_purchase_history
 from commands.poll import generate_poll
@@ -319,7 +319,7 @@ async def create_list_event(
     event_id: str,
     event_name: str,
     expected_count: int = 0,
-    placeholder: str = "1. Artist // Song"
+    placeholder: str = "1. Berry Good // Don't Believe\n2. IVE // All Night (https://youtu.be/xU8mQMLx0tk?t=27)\n..."
 ):
     await handle_create_list_event(interaction, event_id, event_name, expected_count, placeholder)
 
@@ -331,6 +331,12 @@ async def close_list_event(
 ):
     # Notice we removed message_id here, since the DB handles it now!
     await handle_close_list_event(interaction, event_id)
+
+@tree.command(name='export-lists',
+              description="[Admin] Export all list submissions for a specific event to .csv and .txt files.")
+@discord.app_commands.default_permissions(administrator=True)
+async def export_lists(interaction: discord.Interaction, event_id: str):
+    await handle_export_lists(interaction, event_id)
 
 # Run database setup before starting the bot
 initialize_database()
