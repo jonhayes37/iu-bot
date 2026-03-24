@@ -73,7 +73,7 @@ async def tournament_resolution_loop(client: discord.Client, guild_id: int):
         t_id = expired_matches[0]['tournament_id']
 
         # Let Discord's backend catch up and post all "Poll Closed" messages
-        await asyncio.sleep(5)
+        await asyncio.sleep(max(10,2*len(expired_matches)))
     else:
         t_id = get_active_tournament_id()
         if not t_id:
@@ -152,7 +152,7 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
         image_buffer = await generate_bracket_image(tournament_id)
         winner_name = get_tournament_winner_name(tournament_id)
         finale_msg = (
-            f"The {t_name} has concluded, and the Grand Champion is **{winner_name}**!"
+            f"The *{t_name}** tournament has concluded, and the Grand Champion is **{winner_name}**!"
         )
 
         # Run the participation raffle
@@ -164,7 +164,9 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
 
             # Award the winner with 5 hearts
             modify_db_balance("IU bot", winner_id, 5, f"Won the raffle for {t_name}!")
-            news_channel = discord.utils.get(guild.text_channels, name="sandbox")
+
+            guild = channel.guild
+            news_channel = discord.utils.get(guild.text_channels, name="dispatch-news")
             if news_channel:
                 # Safely fetch the member to ping them
                 member = await guild.fetch_member(winner_id)
@@ -174,7 +176,6 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
                 )
                 await news_channel.send(msg)
 
-            guild = channel.guild
             member = await guild.fetch_member(winner_id)
             finale_msg += (
                 f"\n\n**Participation Raffle**\n"

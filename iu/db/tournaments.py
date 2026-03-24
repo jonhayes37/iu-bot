@@ -274,7 +274,7 @@ def advance_winner(match_id: int, tournament_id: str, current_round: int, curren
 def check_round_status(tournament_id: str) -> dict:
     """
     Analyzes the tournament to see which round is 'active' and if it's finished.
-    Returns: { 'current_round': int, 'is_finished': bool, 'is_tournament_over': bool }
+    Returns: { 'tournament_name': str, 'current_round': int, 'is_finished': bool, 'is_tournament_over': bool }
     """
     try:
         with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
@@ -282,17 +282,30 @@ def check_round_status(tournament_id: str) -> dict:
             cursor = conn.cursor()
 
             # Find the lowest round number that isn't fully resolved
+            # Joined with tournaments to grab the name in the same trip
             cursor.execute("""
-                SELECT round_num, 
-                       COUNT(*) as total_matches, 
-                       COUNT(winner_id) as resolved_matches
-                FROM tournament_matches
-                WHERE tournament_id = ?
-                GROUP BY round_num
-                ORDER BY round_num ASC
+                SELECT m.round_num, 
+                       COUNT(m.match_id) as total_matches, 
+                       COUNT(m.winner_id) as resolved_matches,
+                       t.name
+                FROM tournament_matches m
+                JOIN tournaments t ON m.tournament_id = t.tournament_id
+                WHERE m.tournament_id = ?
+                GROUP BY m.round_num, t.name
+                ORDER BY m.round_num ASC
             """, (tournament_id,))
 
             rounds = cursor.fetchall()
+
+            # Safety check: if the tournament has no matches or doesn't exist
+            if not rounds:
+                return {
+                    "tournament_name": "Unknown", 
+                    "current_round": 0, 
+                    "is_finished": False, 
+                    "is_tournament_over": False
+                }
+
             for r in rounds:
                 if r['resolved_matches'] < r['total_matches']:
                     # This round is still in progress
@@ -304,18 +317,17 @@ def check_round_status(tournament_id: str) -> dict:
                     }
 
             # If we get here, all existing rounds are resolved.
-            # Check if the last round resolved was the Finals.
             last_round = rounds[-1]
             return {
                 "tournament_name": last_round['name'],
                 "current_round": last_round['round_num'],
                 "is_finished": True,
-                "is_tournament_over": True # Logic could be expanded for multi-stage
+                "is_tournament_over": True
             }
 
     except Exception as ex:
         logger.error("Error checking round status: %s", ex)
-        return {"current_round": 0, "is_finished": False, "is_tournament_over": False}
+        return {"tournament_name": "Unknown", "current_round": 0, "is_finished": False, "is_tournament_over": False}
 
 def get_tournament_days(tournament_id: str) -> int:
     """

@@ -206,21 +206,21 @@ async def on_raw_poll_vote_add(payload: discord.RawPollVoteActionEvent):
         modify_db_balance("IU bot",
                           payload.user_id,
                           1,
-                          f"Voted in every matchup for round {r_num} of {t_name}")
+                          f"Voted in every matchup for round {r_num} of **{t_name}**")
 
         # Post to #dispatch-news
         guild = client.get_guild(payload.guild_id)
         if not guild:
             return
 
-        news_channel = discord.utils.get(guild.text_channels, name="sandbox")
+        news_channel = discord.utils.get(guild.text_channels, name="dispatch-news")
         if news_channel:
             # Safely fetch the member to ping them
             member = await guild.fetch_member(payload.user_id)
 
             msg = (
                 f"{member.mention} earned 1 heart for voting in every single "
-                f"matchup for round {r_num} of {t_name}!"
+                f"matchup for round {r_num} of **{t_name}**!"
             )
             await news_channel.send(msg)
 
