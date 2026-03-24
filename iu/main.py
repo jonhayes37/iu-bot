@@ -14,9 +14,13 @@ from commands.merch_user import user_check_balance, user_view_merch, user_purcha
 from commands.poll import generate_poll
 from commands.releases_backfill import backfill_releases
 from commands.roles import handle_register_role
+from commands.tournaments import force_close_round, new_tournament
 from commands.ultimate_bias import my_ultimate_bias
+from db.tournaments import process_user_vote
 from dotenv import load_dotenv
+from db.merch import modify_db_balance
 from tasks.scheduled_events import check_upcoming_events
+from tasks.tournaments import tournament_resolution_loop
 from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
@@ -37,11 +41,13 @@ DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
 DB_PATH_RELEASES = os.getenv('DB_PATH_RELEASES')
 DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
 DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
+DB_PATH_TOURNAMENTS = os.getenv('DB_PATH_TOURNAMENTS')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "db/schema/merch.sql")
 SCHEMA_PATH_RELEASES = os.path.join(BASE_DIR, "db/schema/releases.sql")
 SCHEMA_PATH_ROLES = os.path.join(BASE_DIR, "db/schema/roles.sql")
 SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
+SCHEMA_PATH_TOURNAMENTS = os.path.join(BASE_DIR, "db/schema/tournaments.sql")
 
 def initialize_database():
     """Reads the schema.sql file and executes it to ensure all tables exist."""
@@ -52,6 +58,7 @@ def initialize_database():
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_RELEASES)), exist_ok=True)
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_ROLES)), exist_ok=True)
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_LISTS)), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH_TOURNAMENTS)), exist_ok=True)
 
     # Read the SQL blueprint
     try:
@@ -63,6 +70,8 @@ def initialize_database():
             roles_schema_script = file.read()
         with open(SCHEMA_PATH_LISTS, 'r', encoding='utf-8') as file:
             lists_schema_script = file.read()
+        with open(SCHEMA_PATH_TOURNAMENTS, 'r', encoding='utf-8') as file:
+            tournaments_schema_script = file.read()
     except FileNotFoundError:
         logger.critical("Error: Could not find schema file at %s", SCHEMA_PATH_MERCH)
         return
@@ -88,6 +97,11 @@ def initialize_database():
         conn.commit()
     logger.info("Database initialized successfully at %s", DB_PATH_LISTS)
 
+    with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        conn.executescript(tournaments_schema_script)
+        conn.commit()
+    logger.info("Database initialized successfully at %s", DB_PATH_TOURNAMENTS)
+
 # Connect to Discord
 intents = discord.Intents.default()
 intents.message_content = True
@@ -97,17 +111,24 @@ intents.reactions = True
 
 client = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(client)
+tree.add_command(new_tournament)
+tree.add_command(force_close_round)
 
 @client.event
 async def on_ready():
     logger.info('%s has connected to Discord!', client.user)
 
     if GUILD:
-        # Start the event background task
+        # Start the background tasks
         if not check_upcoming_events.is_running():
             check_upcoming_events.start(client, int(GUILD))
             logger.info("Event notifier task started.")
 
+        if not tournament_resolution_loop.is_running():
+            tournament_resolution_loop.start(client, int(GUILD))
+            logger.info("Tournament resolution task started.")
+
+        # Sync commands
         guild = discord.Object(id=int(GUILD))
         tree.copy_global_to(guild=guild)
         await tree.sync(guild=guild)
@@ -162,6 +183,50 @@ async def on_scheduled_event_create(event: discord.ScheduledEvent):
         f"{role.mention} **{event.name}** has been scheduled by {creator}! "
         f"RSVP below so you don't miss out!\n\n{event.url}"
     )
+
+@client.event
+async def on_raw_poll_vote_add(payload: discord.RawPollVoteActionEvent):
+    # Ignore the bot's own interactions to prevent infinite loops
+    if payload.user_id == client.user.id:
+        return
+
+    # Save the vote and check the ledger
+    reward_data = process_user_vote(
+        message_id=payload.message_id,
+        user_id=payload.user_id,
+        answer_id=payload.answer_id
+    )
+
+    # If reward_data exists, they successfully completed the round
+    if reward_data:
+        t_name = reward_data['tournament_name']
+        r_num = reward_data['round_num']
+
+        # Award the heart
+        modify_db_balance("IU bot",
+                          payload.user_id,
+                          1,
+                          f"Voted in every matchup for round {r_num} of {t_name}")
+
+        # Post to #dispatch-news
+        guild = client.get_guild(payload.guild_id)
+        if not guild:
+            return
+
+        news_channel = discord.utils.get(guild.text_channels, name="sandbox")
+        if news_channel:
+            # Safely fetch the member to ping them
+            member = await guild.fetch_member(payload.user_id)
+
+            msg = (
+                f"{member.mention} earned 1 heart for voting in every single "
+                f"matchup for round {r_num} of {t_name}!"
+            )
+            await news_channel.send(msg)
+
+@client.event
+async def on_raw_reaction_add(payload):
+    await handle_reaction_add(payload, client)
 
 @client.event
 async def on_interaction(interaction: discord.Interaction):
@@ -225,12 +290,6 @@ async def delete_picks(interaction):
 @tree.command(name='my-hma-picks', description="See your saved HMA picks")
 async def see_picks(interaction):
     await my_hma_picks(interaction)
-
-# Merch triggers and commands
-@client.event
-async def on_raw_reaction_add(payload):
-    # Delegate the logic to your external file
-    await handle_reaction_add(payload, client)
 
 @tree.command(name='modify-balance', description="[Admin only] Modify a user's heart balance.")
 @discord.app_commands.describe(

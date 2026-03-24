@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hallyu Bracket Challenge</title>
+    <style>
+        /* --- GLOBAL & COLOR VARIABLES --- */
+        :root {
+            --pink: #ff4980;
+            --black: #111111;
+            --white: #ffffff;
+            --shadow-color: #ff4980;
+            --font-family: Avenir, "Avenir Next", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --line-color: #ff4980;
+            --line-thick: 3px;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: var(--font-family);
+            box-sizing: border-box;
+            background-color: #ffb8c6;
+            background-image:
+                radial-gradient(at 10% 20%, #fad0c4 0px, transparent 50%),
+                radial-gradient(at 90% 10%, #ffd1ff 0px, transparent 50%),
+                radial-gradient(at 30% 80%, #ff9a9e 0px, transparent 50%),
+                radial-gradient(at 80% 90%, #ffbd59 0px, transparent 60%);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- TOURNAMENT TITLE --- */
+        .tournament-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding-top: 40px;
+            padding-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        .tournament-title {
+            background-color: var(--black);
+            color: var(--white);
+            padding: 15px 40px;
+            font-weight: 800;
+            font-size: 32px;
+            text-transform: uppercase;
+            box-shadow: 6px 6px 0 var(--shadow-color);
+            letter-spacing: 2px;
+        }
+
+        /* --- BRACKET FLEXBOX LAYOUT --- */
+        .bracket-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            gap: 50px;
+            padding: 0 40px;
+            margin: auto; /* Centers the bracket vertically if the viewport is taller than needed */
+            
+            /* DYNAMIC SCALING MATH */
+            /* Height: 187.5px per matchup block guarantees perfect space-around gap ratios for any N */
+            height: {{ 187.5 * (2 ** (total_rounds - 2)) }}px;
+            /* Width: (Columns * 220) + Center + Gaps + Padding */
+            width: {{ ((total_rounds - 1) * 2 * 220) + 280 + ((total_rounds - 1) * 2 * 50) + 80 }}px;
+        }
+
+        .round-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            width: 220px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .center-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 280px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        /* --- MATCHUP & ENTRANT STYLING --- */
+        .matchup {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--white);
+            border: 3px solid var(--black);
+            box-shadow: 4px 4px 0 var(--shadow-color);
+            padding: 4px;
+            gap: 4px;
+            height: 90px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        /* FINALS FLOURISH */
+        .center-col > .matchup {
+            transform: scale(1.15);
+            border: 4px solid var(--black);
+            box-shadow: 0 0 15px rgba(255, 73, 128, 0.4), 2px 2px 0 var(--shadow-color);
+            z-index: 10;
+        }
+
+        .entrant-box {
+            display: flex;
+            height: 36px;
+            width: 100%;
+            border: 2px solid #aaa;
+            box-sizing: border-box;
+        }
+
+        .seed-square {
+            width: 36px;
+            background-color: var(--black);
+            color: var(--white);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .name-rect {
+            flex-grow: 1;
+            background-color: var(--white);
+            color: var(--pink);
+            display: flex;
+            align-items: center;
+            padding: 2px 8px;
+            font-weight: 800;
+            font-size: 14px;
+            text-transform: uppercase;
+            line-height: 1.1;
+            overflow: hidden;
+        }
+
+        /* --- WINNER BOX --- */
+        .winner-box {
+            background-color: var(--pink);
+            color: var(--white);
+            padding: 15px 30px;
+            font-weight: 900;
+            font-size: 26px;
+            text-transform: uppercase;
+            border: 3px solid var(--black);
+            box-shadow: 6px 6px 0 var(--black);
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+            position: absolute;
+            top: calc(50% + 90px);
+        }
+
+        /* ============================================================== */
+        /* DYNAMIC CONNECTOR LINES GENERATION (JINJA MATH MAGIC)          */
+        /* ============================================================== */
+        {% for r in range(1, total_rounds) %}
+            /* Exponentially double the vertical line height per round */
+            {% set h = 93.75 * (2 ** (r - 1)) %}
+
+            /* ---------- LEFT SIDE ---------- */
+            {% if r > 1 %}
+            /* Inward line from previous round */
+            .round-{{ r }}.left .matchup::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            {% endif %}
+
+            {% if r < total_rounds - 1 %}
+            /* Outward branching lines */
+            .round-{{ r }}.left .matchup:nth-child(odd)::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -28px; width: 28px; height: {{ h }}px;
+                border-top: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-top-right-radius: 4px; box-sizing: border-box;
+            }
+            .round-{{ r }}.left .matchup:nth-child(even)::after {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); right: -28px; width: 28px; height: {{ h }}px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-bottom-right-radius: 4px; box-sizing: border-box;
+            }
+            {% else %}
+            /* Final approach to Center */
+            .round-{{ r }}.left .matchup::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -28px; width: 28px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            {% endif %}
+
+            /* ---------- RIGHT SIDE (Mirrored) ---------- */
+            {% if r > 1 %}
+            .round-{{ r }}.right .matchup::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            {% endif %}
+
+            {% if r < total_rounds - 1 %}
+            .round-{{ r }}.right .matchup:nth-child(odd)::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -28px; width: 28px; height: {{ h }}px;
+                border-top: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-top-left-radius: 4px; box-sizing: border-box;
+            }
+            .round-{{ r }}.right .matchup:nth-child(even)::before {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); left: -28px; width: 28px; height: {{ h }}px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-bottom-left-radius: 4px; box-sizing: border-box;
+            }
+            {% else %}
+            .round-{{ r }}.right .matchup::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -28px; width: 28px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            {% endif %}
+        {% endfor %}
+
+        /* CENTER (FINALS) CONNECTORS */
+        .center-col .matchup::before {
+            content: ""; position: absolute; top: calc(50% - 1.5px); 
+            left: calc(-31px / 1.15); width: calc(31px / 1.15); height: 0;
+            border-top: calc(var(--line-thick) / 1.15) solid var(--line-color); box-sizing: border-box;
+        }
+        .center-col .matchup::after {
+            content: ""; position: absolute; top: calc(50% - 1.5px); 
+            right: calc(-31px / 1.15); width: calc(31px / 1.15); height: 0;
+            border-top: calc(var(--line-thick) / 1.15) solid var(--line-color); box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="tournament-header">
+        <div class="tournament-title">{{ tournament_title }}</div>
+    </div>
+
+    <div class="bracket-wrapper">
+        
+        {% for r_idx in range(total_rounds - 1) %}
+        {% set r = r_idx + 1 %}
+        <div class="round-col round-{{ r }} left">
+            {% for match in left_rounds[r_idx] %}
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">{{ match.a_seed }}</div><div class="name-rect">{{ match.a_name }}</div></div>
+                <div class="entrant-box"><div class="seed-square">{{ match.b_seed }}</div><div class="name-rect">{{ match.b_name }}</div></div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        <div class="center-col">
+            <div class="matchup" style="width: 100%;">
+                {% if finals %}
+                <div class="entrant-box"><div class="seed-square">{{ finals.a_seed }}</div><div class="name-rect">{{ finals.a_name }}</div></div>
+                <div class="entrant-box"><div class="seed-square">{{ finals.b_seed }}</div><div class="name-rect">{{ finals.b_name }}</div></div>
+                {% else %}
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                {% endif %}
+            </div>
+            <div class="winner-box">{{ winner }}</div>
+        </div>
+
+        {% for r_idx in range(total_rounds - 2, -1, -1) %}
+        {% set r = r_idx + 1 %}
+        <div class="round-col round-{{ r }} right">
+            {% for match in right_rounds[r_idx] %}
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">{{ match.a_seed }}</div><div class="name-rect">{{ match.a_name }}</div></div>
+                <div class="entrant-box"><div class="seed-square">{{ match.b_seed }}</div><div class="name-rect">{{ match.b_name }}</div></div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+    </div>
+
+    <script>
+        (function() {
+            const nameRects = document.querySelectorAll('.name-rect');
+            nameRects.forEach(rect => {
+                let fontSize = 14;
+                while (rect.scrollHeight > rect.clientHeight && fontSize > 8) {
+                    fontSize -= 0.5;
+                    rect.style.fontSize = fontSize + 'px';
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

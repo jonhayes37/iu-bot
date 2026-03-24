@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hallyu Bracket Challenge</title>
+    <style>
+        /* --- GLOBAL & COLOR VARIABLES --- */
+        :root {
+            --pink: #ff4980;
+            --black: #111111;
+            --white: #ffffff;
+            --shadow-color: #ff4980;
+            --font-family: Avenir, "Avenir Next", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --line-color: #ff4980;
+            --line-thick: 3px;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: var(--font-family);
+            box-sizing: border-box;
+            background-color: #ffb8c6;
+            background-image:
+                radial-gradient(at 10% 20%, #fad0c4 0px, transparent 50%),
+                radial-gradient(at 90% 10%, #ffd1ff 0px, transparent 50%),
+                radial-gradient(at 30% 80%, #ff9a9e 0px, transparent 50%),
+                radial-gradient(at 80% 90%, #ffbd59 0px, transparent 60%);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- TOURNAMENT TITLE --- */
+        .tournament-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding-top: 40px;
+            padding-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        .tournament-title {
+            background-color: var(--black);
+            color: var(--white);
+            padding: 15px 40px;
+            font-weight: 800;
+            font-size: 32px;
+            text-transform: uppercase;
+            box-shadow: 6px 6px 0 var(--shadow-color);
+            letter-spacing: 2px;
+        }
+
+        /* --- BRACKET FLEXBOX LAYOUT --- */
+        .bracket-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            gap: 50px;
+            padding: 0 40px;
+            margin: auto; /* Centers the bracket vertically if the viewport is taller than needed */
+            
+            /* DYNAMIC SCALING MATH */
+            /* Height: 187.5px per matchup block guarantees perfect space-around gap ratios for any N */
+            height: 3000.0px;
+            /* Width: (Columns * 220) + Center + Gaps + Padding */
+            width: 3060px;
+        }
+
+        .round-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            width: 220px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .center-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 280px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        /* --- MATCHUP & ENTRANT STYLING --- */
+        .matchup {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--white);
+            border: 3px solid var(--black);
+            box-shadow: 4px 4px 0 var(--shadow-color);
+            padding: 4px;
+            gap: 4px;
+            height: 90px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        /* FINALS FLOURISH */
+        .center-col > .matchup {
+            transform: scale(1.15);
+            border: 4px solid var(--black);
+            box-shadow: 0 0 15px rgba(255, 73, 128, 0.4), 2px 2px 0 var(--shadow-color);
+            z-index: 10;
+        }
+
+        .entrant-box {
+            display: flex;
+            height: 36px;
+            width: 100%;
+            border: 2px solid #aaa;
+            box-sizing: border-box;
+        }
+
+        .seed-square {
+            width: 36px;
+            background-color: var(--black);
+            color: var(--white);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .name-rect {
+            flex-grow: 1;
+            background-color: var(--white);
+            color: var(--pink);
+            display: flex;
+            align-items: center;
+            padding: 2px 8px;
+            font-weight: 800;
+            font-size: 14px;
+            text-transform: uppercase;
+            line-height: 1.1;
+            overflow: hidden;
+        }
+
+        /* --- WINNER BOX --- */
+        .winner-box {
+            background-color: var(--pink);
+            color: var(--white);
+            padding: 15px 30px;
+            font-weight: 900;
+            font-size: 26px;
+            text-transform: uppercase;
+            border: 3px solid var(--black);
+            box-shadow: 6px 6px 0 var(--black);
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+            position: absolute;
+            top: calc(50% + 90px);
+        }
+
+        /* ============================================================== */
+        /* DYNAMIC CONNECTOR LINES GENERATION (JINJA MATH MAGIC)          */
+        /* ============================================================== */
+        
+            /* Exponentially double the vertical line height per round */
+            
+
+            /* ---------- LEFT SIDE ---------- */
+            
+
+            
+            /* Outward branching lines */
+            .round-1.left .matchup:nth-child(odd)::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -28px; width: 28px; height: 93.75px;
+                border-top: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-top-right-radius: 4px; box-sizing: border-box;
+            }
+            .round-1.left .matchup:nth-child(even)::after {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); right: -28px; width: 28px; height: 93.75px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-bottom-right-radius: 4px; box-sizing: border-box;
+            }
+            
+
+            /* ---------- RIGHT SIDE (Mirrored) ---------- */
+            
+
+            
+            .round-1.right .matchup:nth-child(odd)::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -28px; width: 28px; height: 93.75px;
+                border-top: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-top-left-radius: 4px; box-sizing: border-box;
+            }
+            .round-1.right .matchup:nth-child(even)::before {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); left: -28px; width: 28px; height: 93.75px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-bottom-left-radius: 4px; box-sizing: border-box;
+            }
+            
+        
+            /* Exponentially double the vertical line height per round */
+            
+
+            /* ---------- LEFT SIDE ---------- */
+            
+            /* Inward line from previous round */
+            .round-2.left .matchup::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            /* Outward branching lines */
+            .round-2.left .matchup:nth-child(odd)::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -28px; width: 28px; height: 187.5px;
+                border-top: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-top-right-radius: 4px; box-sizing: border-box;
+            }
+            .round-2.left .matchup:nth-child(even)::after {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); right: -28px; width: 28px; height: 187.5px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-bottom-right-radius: 4px; box-sizing: border-box;
+            }
+            
+
+            /* ---------- RIGHT SIDE (Mirrored) ---------- */
+            
+            .round-2.right .matchup::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            .round-2.right .matchup:nth-child(odd)::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -28px; width: 28px; height: 187.5px;
+                border-top: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-top-left-radius: 4px; box-sizing: border-box;
+            }
+            .round-2.right .matchup:nth-child(even)::before {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); left: -28px; width: 28px; height: 187.5px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-bottom-left-radius: 4px; box-sizing: border-box;
+            }
+            
+        
+            /* Exponentially double the vertical line height per round */
+            
+
+            /* ---------- LEFT SIDE ---------- */
+            
+            /* Inward line from previous round */
+            .round-3.left .matchup::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            /* Outward branching lines */
+            .round-3.left .matchup:nth-child(odd)::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -28px; width: 28px; height: 375.0px;
+                border-top: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-top-right-radius: 4px; box-sizing: border-box;
+            }
+            .round-3.left .matchup:nth-child(even)::after {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); right: -28px; width: 28px; height: 375.0px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-bottom-right-radius: 4px; box-sizing: border-box;
+            }
+            
+
+            /* ---------- RIGHT SIDE (Mirrored) ---------- */
+            
+            .round-3.right .matchup::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            .round-3.right .matchup:nth-child(odd)::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -28px; width: 28px; height: 375.0px;
+                border-top: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-top-left-radius: 4px; box-sizing: border-box;
+            }
+            .round-3.right .matchup:nth-child(even)::before {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); left: -28px; width: 28px; height: 375.0px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-bottom-left-radius: 4px; box-sizing: border-box;
+            }
+            
+        
+            /* Exponentially double the vertical line height per round */
+            
+
+            /* ---------- LEFT SIDE ---------- */
+            
+            /* Inward line from previous round */
+            .round-4.left .matchup::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            /* Outward branching lines */
+            .round-4.left .matchup:nth-child(odd)::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -28px; width: 28px; height: 750.0px;
+                border-top: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-top-right-radius: 4px; box-sizing: border-box;
+            }
+            .round-4.left .matchup:nth-child(even)::after {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); right: -28px; width: 28px; height: 750.0px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-right: var(--line-thick) solid var(--line-color);
+                border-bottom-right-radius: 4px; box-sizing: border-box;
+            }
+            
+
+            /* ---------- RIGHT SIDE (Mirrored) ---------- */
+            
+            .round-4.right .matchup::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            .round-4.right .matchup:nth-child(odd)::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -28px; width: 28px; height: 750.0px;
+                border-top: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-top-left-radius: 4px; box-sizing: border-box;
+            }
+            .round-4.right .matchup:nth-child(even)::before {
+                content: ""; position: absolute; bottom: calc(50% - 1.5px); left: -28px; width: 28px; height: 750.0px;
+                border-bottom: var(--line-thick) solid var(--line-color); border-left: var(--line-thick) solid var(--line-color);
+                border-bottom-left-radius: 4px; box-sizing: border-box;
+            }
+            
+        
+            /* Exponentially double the vertical line height per round */
+            
+
+            /* ---------- LEFT SIDE ---------- */
+            
+            /* Inward line from previous round */
+            .round-5.left .matchup::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            /* Final approach to Center */
+            .round-5.left .matchup::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -28px; width: 28px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            /* ---------- RIGHT SIDE (Mirrored) ---------- */
+            
+            .round-5.right .matchup::after {
+                content: ""; position: absolute; top: calc(50% - 1.5px); right: -31px; width: 31px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+
+            
+            .round-5.right .matchup::before {
+                content: ""; position: absolute; top: calc(50% - 1.5px); left: -28px; width: 28px; height: 0;
+                border-top: var(--line-thick) solid var(--line-color); box-sizing: border-box;
+            }
+            
+        
+
+        /* CENTER (FINALS) CONNECTORS */
+        .center-col .matchup::before {
+            content: ""; position: absolute; top: calc(50% - 1.5px); 
+            left: calc(-31px / 1.15); width: calc(31px / 1.15); height: 0;
+            border-top: calc(var(--line-thick) / 1.15) solid var(--line-color); box-sizing: border-box;
+        }
+        .center-col .matchup::after {
+            content: ""; position: absolute; top: calc(50% - 1.5px); 
+            right: calc(-31px / 1.15); width: calc(31px / 1.15); height: 0;
+            border-top: calc(var(--line-thick) / 1.15) solid var(--line-color); box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="tournament-header">
+        <div class="tournament-title">MEGA HALLYU MADNESS: 64-TRACK SHOWDOWN</div>
+    </div>
+
+    <div class="bracket-wrapper">
+        
+        
+        
+        <div class="round-col round-1 left">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">1</div><div class="name-rect">Into The New World</div></div>
+                <div class="entrant-box"><div class="seed-square">64</div><div class="name-rect">Sticker</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">32</div><div class="name-rect">Love Scenario</div></div>
+                <div class="entrant-box"><div class="seed-square">33</div><div class="name-rect">Shine</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">16</div><div class="name-rect">Bad Boy</div></div>
+                <div class="entrant-box"><div class="seed-square">49</div><div class="name-rect">Lilac</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">17</div><div class="name-rect">Blood Sweat & Tears</div></div>
+                <div class="entrant-box"><div class="seed-square">48</div><div class="name-rect">God's Menu</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">8</div><div class="name-rect">Gee</div></div>
+                <div class="entrant-box"><div class="seed-square">57</div><div class="name-rect">Pop!</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">25</div><div class="name-rect">DDU-DU DDU-DU</div></div>
+                <div class="entrant-box"><div class="seed-square">40</div><div class="name-rect">Tomboy</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">9</div><div class="name-rect">Sorry, Sorry</div></div>
+                <div class="entrant-box"><div class="seed-square">56</div><div class="name-rect">Energetic</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">24</div><div class="name-rect">Next Level</div></div>
+                <div class="entrant-box"><div class="seed-square">41</div><div class="name-rect">Eleven</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">4</div><div class="name-rect">Haru Haru</div></div>
+                <div class="entrant-box"><div class="seed-square">61</div><div class="name-rect">Maniac</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">29</div><div class="name-rect">Growl</div></div>
+                <div class="entrant-box"><div class="seed-square">36</div><div class="name-rect">Love Dive</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">13</div><div class="name-rect">I Am The Best</div></div>
+                <div class="entrant-box"><div class="seed-square">52</div><div class="name-rect">Wannabe</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">20</div><div class="name-rect">Spring Day</div></div>
+                <div class="entrant-box"><div class="seed-square">45</div><div class="name-rect">Antifragile</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">5</div><div class="name-rect">Mirotic</div></div>
+                <div class="entrant-box"><div class="seed-square">60</div><div class="name-rect">Super Shy</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">28</div><div class="name-rect">Fancy</div></div>
+                <div class="entrant-box"><div class="seed-square">37</div><div class="name-rect">Hype Boy</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">12</div><div class="name-rect">Fantastic Baby</div></div>
+                <div class="entrant-box"><div class="seed-square">53</div><div class="name-rect">Fearless</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">21</div><div class="name-rect">Dynamite</div></div>
+                <div class="entrant-box"><div class="seed-square">44</div><div class="name-rect">Ditto</div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-2 left">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-3 left">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-4 left">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-5 left">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+
+        <div class="center-col">
+            <div class="matchup" style="width: 100%;">
+                
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                
+            </div>
+            <div class="winner-box"></div>
+        </div>
+
+        
+        
+        <div class="round-col round-5 right">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-4 right">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-3 right">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-2 right">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+                <div class="entrant-box"><div class="seed-square"></div><div class="name-rect"></div></div>
+            </div>
+            
+        </div>
+        
+        
+        <div class="round-col round-1 right">
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">2</div><div class="name-rect">Ring Ding Dong</div></div>
+                <div class="entrant-box"><div class="seed-square">63</div><div class="name-rect">Zimzalabim</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">31</div><div class="name-rect">Cheer Up</div></div>
+                <div class="entrant-box"><div class="seed-square">34</div><div class="name-rect">Bboom Bboom</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">15</div><div class="name-rect">Psycho</div></div>
+                <div class="entrant-box"><div class="seed-square">50</div><div class="name-rect">Eight</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">18</div><div class="name-rect">Boy With Luv</div></div>
+                <div class="entrant-box"><div class="seed-square">47</div><div class="name-rect">Thunderous</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">7</div><div class="name-rect">Nobody</div></div>
+                <div class="entrant-box"><div class="seed-square">58</div><div class="name-rect">Gotta Go</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">26</div><div class="name-rect">Kill This Love</div></div>
+                <div class="entrant-box"><div class="seed-square">39</div><div class="name-rect">Queencard</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">10</div><div class="name-rect">Lucifer</div></div>
+                <div class="entrant-box"><div class="seed-square">55</div><div class="name-rect">Crown</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">23</div><div class="name-rect">Savage</div></div>
+                <div class="entrant-box"><div class="seed-square">42</div><div class="name-rect">After Like</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">3</div><div class="name-rect">Lies</div></div>
+                <div class="entrant-box"><div class="seed-square">62</div><div class="name-rect">S-Class</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">30</div><div class="name-rect">Call Me Baby</div></div>
+                <div class="entrant-box"><div class="seed-square">35</div><div class="name-rect">I AM</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">14</div><div class="name-rect">Fire</div></div>
+                <div class="entrant-box"><div class="seed-square">51</div><div class="name-rect">Dalla Dalla</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">19</div><div class="name-rect">Fake Love</div></div>
+                <div class="entrant-box"><div class="seed-square">46</div><div class="name-rect">Unforgiven</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">6</div><div class="name-rect">Fiction</div></div>
+                <div class="entrant-box"><div class="seed-square">59</div><div class="name-rect">ETA</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">27</div><div class="name-rect">Feel Special</div></div>
+                <div class="entrant-box"><div class="seed-square">38</div><div class="name-rect">OMG</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">11</div><div class="name-rect">Bang Bang Bang</div></div>
+                <div class="entrant-box"><div class="seed-square">54</div><div class="name-rect">Blue Hour</div></div>
+            </div>
+            
+            <div class="matchup">
+                <div class="entrant-box"><div class="seed-square">22</div><div class="name-rect">Butter</div></div>
+                <div class="entrant-box"><div class="seed-square">43</div><div class="name-rect">Supernova</div></div>
+            </div>
+            
+        </div>
+        
+
+    </div>
+
+    <script>
+        (function() {
+            const nameRects = document.querySelectorAll('.name-rect');
+            nameRects.forEach(rect => {
+                let fontSize = 14;
+                while (rect.scrollHeight > rect.clientHeight && fontSize > 8) {
+                    fontSize -= 0.5;
+                    rect.style.fontSize = fontSize + 'px';
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
