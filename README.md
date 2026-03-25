@@ -28,13 +28,6 @@ Usage:
 This command will allow you to take your Rankdown turn by automatically creating &
 formatting the message based on your chosen nomination and elimination.
 
-### `/poll`
-
-Usage: `/poll question answers`
-
-This command lets you ask a question with a predefined set of possible answers to poll the
-server. The `answers` input uses `|` to separate the possible answers, e.g. `yes|no`.
-
 ### `/add-hma-pick`
 
 Usage: `/add-hma-pick pick`

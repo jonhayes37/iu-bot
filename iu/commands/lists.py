@@ -8,12 +8,14 @@ from db.lists import create_new_event, close_event, get_all_submissions, get_eve
 
 logger = logging.getLogger('iu-bot')
 
-async def handle_create_list_event(
+@discord.app_commands.command(name='create-list-event', description="[Admin] Start a new list submission event.")
+@discord.app_commands.default_permissions(administrator=True)
+async def create_list_event(
     interaction: discord.Interaction,
     event_id: str,
     event_name: str,
-    expected_count: int,
-    placeholder: str
+    expected_count: int = 0,
+    placeholder: str = "1. Berry Good // Don't Believe\n2. IVE // All Night (https://youtu.be/xU8mQMLx0tk?t=27)\n..."
 ):
     """Creates the event in the DB and posts a clean button."""
     await interaction.response.defer(ephemeral=True)
@@ -40,7 +42,13 @@ async def handle_create_list_event(
 
     await interaction.delete_original_response()
 
-async def handle_close_list_event(interaction: discord.Interaction, event_id: str):
+@discord.app_commands.command(name='close-list-event',
+                              description="[Admin] Close an active list event and disable its button.")
+@discord.app_commands.default_permissions(administrator=True)
+async def close_list_event(
+    interaction: discord.Interaction,
+    event_id: str
+):
     await interaction.response.defer(ephemeral=True)
 
     # Look up the event to get the saved message_id
@@ -84,7 +92,10 @@ async def handle_close_list_event(interaction: discord.Interaction, event_id: st
         logger.error("Error updating message for closed event %s: %s", event_id, ex)
         await interaction.followup.send("Event closed, but failed to edit the message.", ephemeral=True)
 
-async def handle_export_lists(interaction: discord.Interaction, event_id: str):
+@discord.app_commands.command(name='export-lists',
+              description="[Admin] Export all list submissions for a specific event to .csv and .txt files.")
+@discord.app_commands.default_permissions(administrator=True)
+async def export_lists(interaction: discord.Interaction, event_id: str):
     """Fetches data, formats it via the helper, and uploads the files to Discord."""
     await interaction.response.defer(ephemeral=True)
 
