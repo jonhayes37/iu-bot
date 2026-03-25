@@ -5,7 +5,6 @@ import os
 import sqlite3
 
 import discord
-from dotenv import load_dotenv
 from commands.bias_cards import bias_group, ultimate_bias
 from commands.lists import create_list_event, close_list_event, export_lists
 from commands.hearts import check_balance, modify_balance, random_award
@@ -29,11 +28,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('iu-bot')
 
 # Load env vars
-load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
-
-# Database setup
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
 DB_PATH_RELEASES = os.getenv('DB_PATH_RELEASES')
 DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
@@ -116,20 +112,17 @@ async def on_message(message):
         await respond_to_ping(message)
 
     if message.guild:
-        sandbox_channel = discord.utils.get(message.guild.text_channels, name='sandbox')
-        releases_channel = discord.utils.get(message.guild.text_channels, name='new-releases')
-        roles_channel = discord.utils.get(message.guild.text_channels, name='roles')
-        dispatch_channel = discord.utils.get(message.guild.text_channels, name='dispatch-news')
+        channel_name = message.channel.name
 
-        if message.channel in [releases_channel, sandbox_channel]:
+        if channel_name == 'new-releases':
             await store_new_release(message)
 
-        if message.channel == roles_channel:
+        if channel_name == 'roles':
             await handle_role_assignment(message)
             # Roles shouldn't trigger IU replies
             return
 
-        if message.channel == dispatch_channel:
+        if channel_name == 'dispatch-news':
             # dispatch-news is for bot announcements, so we don't want IU to reply to messages here
             return
 

@@ -2,8 +2,21 @@
 import typing
 
 import discord
-from common.discord_ids import USERNAMES
-from common.user import user_info_from_interaction
+
+USERNAMES = {
+  "Alexrandia": "453573453623328778",
+  "Cai": "330890965881585665",
+  "Cats & Kpop": "758818887672004609",
+  "Chris Prime!": "227092770110570496",
+  "Diana4Dragons": "797897851907866665",
+  "DoctorQuackerzzz": "600309699186917397",
+  "HallyU": "904751089633615972",
+  "InsomniAloha": "521827421968924672",
+  "Stromsolar": "317621715247300609",
+  "Kpopbrandy": "202927629018333184",
+  "Xion Rin": "271060400886251530",
+  "Volt D. Resin": "520406649970884632",
+}
 
 ARTIST_BIAS_MAP = {
   USERNAMES["HallyU"]: {
@@ -340,17 +353,19 @@ ULTIMATE_BIAS_MAP = {
 @discord.app_commands.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
 @discord.app_commands.describe(member='The member whose bias you want to see. ' \
                                'Leave empty for your own.')
-async def ultimate_bias(interaction, member: typing.Optional[str]):
-    user_id, username, invalid_member = user_info_from_interaction(interaction, member)
+async def ultimate_bias(interaction: discord.Interaction, member: typing.Optional[str]):
+    user_id, username, invalid_member = _user_info_from_interaction(interaction, member)
     if invalid_member:
         await interaction.response.send_message(
-            f"Sorry <@!{user_id}>, {member} hasn't unlocked an ultimate bias yet!")
+            f"Sorry {interaction.user.mention}, {member} hasn't unlocked an ultimate bias yet!",
+            ephemeral=True)
         return
 
     bias_info = ULTIMATE_BIAS_MAP.get(str(user_id))
     if bias_info is None:
         await interaction.response.send_message(
-            f"Sorry <@!{user_id}>, you haven't unlocked an ultimate bias yet!")
+            f"Sorry {interaction.user.mention}, you haven't unlocked an ultimate bias yet!",
+            ephemeral=True)
     else:
         bias_image = discord.File(f"iu/media/images/{bias_info.get('filename')}",
                                   filename=bias_info.get('filename'))
@@ -378,17 +393,19 @@ async def ultimate_bias(interaction, member: typing.Optional[str]):
 @discord.app_commands.command(name='my-bias-group', description="See who everyone's bias group is!")
 @discord.app_commands.describe(member='The member whose bias group you want to see.' \
                                'Leave empty for your own.')
-async def bias_group(interaction, member: typing.Optional[str]):
-    user_id, username, invalid_member = user_info_from_interaction(interaction, member)
+async def bias_group(interaction: discord.Interaction, member: typing.Optional[str]):
+    user_id, username, invalid_member = _user_info_from_interaction(interaction, member)
     if invalid_member:
         await interaction.response.send_message(
-            f"Sorry <@!{user_id}>, {member} hasn't unlocked a bias group yet!")
+            f"Sorry {interaction.user.mention}, {member} hasn't unlocked a bias group yet!",
+            ephemeral=True)
         return
 
     bias_info = ARTIST_BIAS_MAP.get(str(user_id))
     if bias_info is None:
         await interaction.response.send_message(
-            f"Sorry <@!{user_id}>, you haven't unlocked a bias group yet!")
+            f"Sorry {interaction.user.mention}, you haven't unlocked a bias group yet!",
+            ephemeral=True)
     else:
         bias_image = discord.File(f"iu/media/images/{bias_info.get('filename')}",
                                   filename=bias_info.get('filename'))
@@ -416,3 +433,18 @@ async def bias_group(interaction, member: typing.Optional[str]):
             embed=embed,
             file=bias_image
         )
+
+def _user_info_from_interaction(interaction, member_name):
+    invalid_member_name = False
+    user_id = interaction.user.id
+    username = interaction.user.nick if interaction.user.nick else \
+        interaction.user.display_name if interaction.user.display_name else \
+        interaction.user.global_name
+
+    if member_name:
+        for display, username_id in USERNAMES.items():
+            if display.lower() == member_name.lower():
+                return username_id, display, False
+        invalid_member_name = True
+
+    return user_id, username, invalid_member_name
