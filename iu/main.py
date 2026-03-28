@@ -25,6 +25,7 @@ from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.releases import store_new_release
 from triggers.roles import handle_role_assignment
+from triggers.scheduled_events import process_event
 from ui.lists import handle_list_button_click
 
 logging.basicConfig(level=logging.INFO)
@@ -145,21 +146,12 @@ async def on_member_join(member):
 @client.event
 async def on_scheduled_event_create(event: discord.ScheduledEvent):
     """Fires automatically whenever someone creates a new native event."""
-    channel = discord.utils.get(event.guild.text_channels, name='community-events')
-    if not channel:
-        logger.error("Could not find #community-events channel.")
-        return
+    await process_event(event, is_update=False)
 
-    role = discord.utils.get(event.guild.roles, name='Watch Parties')
-    if not role:
-        logger.error("Could not find Watch Parties role.")
-        return
-
-    creator = event.creator.mention
-    await channel.send(
-        f"{role.mention} **{event.name}** has been scheduled by {creator}! "
-        f"RSVP below so you don't miss out!\n\n{event.url}"
-    )
+@client.event
+async def on_scheduled_event_update(_: discord.ScheduledEvent, after: discord.ScheduledEvent):
+    # Pass the 'after' object so we operate on the newest data
+    await process_event(after, is_update=True)
 
 @client.event
 async def on_raw_poll_vote_add(payload: discord.RawPollVoteActionEvent):
