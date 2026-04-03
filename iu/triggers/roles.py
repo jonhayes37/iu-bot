@@ -1,9 +1,12 @@
 """Trigger logic for users typing in the roles channel"""
 
 import logging
+import os
 
 import discord
 from db.roles import get_role_id
+
+HALLYU_ID = os.getenv("HALLYU_ID")
 
 logger = logging.getLogger('iu-bot')
 
@@ -31,7 +34,7 @@ async def handle_role_assignment(message: discord.Message):
 
     role = message.guild.get_role(role_id)
     if not role:
-        await message.channel.send("Role exists in database but not in Discord! Ping <@904751089633615972>.",
+        await message.channel.send(f"Role exists in database but not in Discord! Ping <@{HALLYU_ID}>.",
                                    delete_after=5.0)
         return
 

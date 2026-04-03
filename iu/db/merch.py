@@ -239,3 +239,15 @@ def reset_item_inventory(item_id: str) -> int:
 
         conn.commit()
         return rows_affected
+
+def get_all_item_owners(item_id: str) -> list[tuple[int, int]]:
+    """Fetches all users who own a specific item and their quantities."""
+    clean_item_id = item_id.upper()
+    with sqlite3.connect(DB_PATH_MERCH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id, quantity_owned 
+            FROM user_inventory 
+            WHERE item_id = ? AND quantity_owned > 0
+        """, (clean_item_id,))
+        return cursor.fetchall()

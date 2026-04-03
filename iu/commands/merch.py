@@ -1,5 +1,7 @@
 """Docstring for iu.commands.merch_user"""
 import logging
+import os
+import random
 import typing
 
 import discord
@@ -7,8 +9,10 @@ import discord
 from commands.hearts import validate_channel
 from db.merch import (
     get_user_balance, get_user_inventory, get_user_merch_catalog,
-    process_purchase, upsert_merch_item
+    process_purchase, upsert_merch_item, get_all_item_owners, reset_item_inventory
 )
+
+HALLYU_ID = os.getenv("HALLYU_ID")
 
 logger = logging.getLogger('iu-bot')
 
@@ -127,7 +131,7 @@ async def purchase(interaction: discord.Interaction, item_id: str):
         if dispatch_channel:
             # Fetch the item name from the DB message to keep the log detailed
             await dispatch_channel.send(
-                f"<@{interaction.user.id}> {message} <@904751089633615972> will help with redemption."
+                f"<@{interaction.user.id}> {message} <@{HALLYU_ID}> will help with redemption."
             )
     else:
         embed = discord.Embed(
@@ -214,3 +218,65 @@ def _add_items_to_embed(embed, items):
         )
 
     return embed
+
+@discord.app_commands.command(
+        name='draw-raffle',
+        description="[Admin] Draw a random winner from all RAFFLE ticket holders and reset the pool.")
+@discord.app_commands.default_permissions(administrator=True)
+async def draw_raffle(interaction: discord.Interaction):
+    """The Discord command logic for drawing a raffle winner."""
+
+    # Restrict to dispatch-news like the other admin commands
+    if interaction.channel.name != 'dispatch-news':
+        await interaction.response.send_message(
+            "This command can only be used in the #dispatch-news channel.", 
+            ephemeral=True
+        )
+        return
+
+    try:
+        # Fetch all tickets
+        ticket_data = get_all_item_owners('RAFFLE')
+        if not ticket_data:
+            await interaction.response.send_message("Nobody has bought any raffle tickets yet!", ephemeral=True)
+            return
+
+        # Build the weighted pool
+        # This repeats the user's ID in the list for every ticket they own
+        ticket_pool = []
+        total_tickets = 0
+        for user_id, quantity in ticket_data:
+            ticket_pool.extend([user_id] * quantity)
+            total_tickets += quantity
+
+        # Pick a winner
+        winner_id = random.choice(ticket_pool)
+        logger.info("Raffle winner: %s", winner_id)
+
+        # Wipe the inventories for RAFFLE so everyone is back to 0
+        reset_item_inventory('RAFFLE')
+
+    except Exception as ex:
+        logger.error("Database error in draw_raffle: %s", ex)
+        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
+        return
+
+    # Announce the winner
+    embed = discord.Embed(
+        title="🎟️ Raffle Winner!",
+        description=(
+            f"Congratulations <@{winner_id}>! You've won the raffle!\n\n"
+            f"**You get an album of your choice from the end of year top 100** "
+            "<a:aWooyeonShock:865829919136677888> "
+            f"Please DM <@{HALLYU_ID}> with your choice!"
+        ),
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text=f"Winner drawn from a pool of {total_tickets} tickets.")
+
+    # We put the mention in the message content so Discord actually pings them,
+    # as mentions inside embeds do not trigger push notifications.
+    await interaction.response.send_message(
+        content=f"<@{winner_id}>",
+        embed=embed
+    )

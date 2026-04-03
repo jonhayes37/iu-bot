@@ -9,6 +9,14 @@ from commands.biases import (
     bias_group, create_bias_group, create_ultimate_bias, ultimate_bias,
     update_bias_group, update_ultimate_bias
 )
+from commands.listen_game import (
+    listen_game_create, listen_game_start, listen_game_set_theme, submit_song,
+    listen_game_submit_ranking
+)
+from commands.listen_game_gm import (
+    listen_game_gm_sync_playlist, listen_game_gm_reject_song, listen_game_gm_skip_turn,
+    listen_game_gm_remove_player, listen_game_gm_force_start_round, listen_game_gm_force_submit
+)
 from commands.lists import create_list_event, close_list_event, export_lists
 from commands.hearts import check_balance, modify_balance, random_award
 from commands.bot import set_iu_status
@@ -18,6 +26,7 @@ from commands.roles import register_role, sync_roles
 from commands.tournaments import force_close_round, new_tournament
 from db.tournaments import process_user_vote
 from db.merch import modify_db_balance
+from tasks.listen_game import check_listen_game_reminders
 from tasks.scheduled_events import check_upcoming_events
 from tasks.tournaments import tournament_resolution_loop
 from triggers.member import add_trainee_role, welcome_member
@@ -35,17 +44,19 @@ logger = logging.getLogger('iu-bot')
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 DB_PATH_BIASES = os.getenv('DB_PATH_BIASES')
+DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
+DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
 DB_PATH_RELEASES = os.getenv('DB_PATH_RELEASES')
 DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
-DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
 DB_PATH_TOURNAMENTS = os.getenv('DB_PATH_TOURNAMENTS')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_BIASES = os.path.join(BASE_DIR, "db/schema/biases.sql")
+SCHEMA_PATH_LISTEN_GAME = os.path.join(BASE_DIR, "db/schema/listen_game.sql")
+SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
 SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "db/schema/merch.sql")
 SCHEMA_PATH_RELEASES = os.path.join(BASE_DIR, "db/schema/releases.sql")
 SCHEMA_PATH_ROLES = os.path.join(BASE_DIR, "db/schema/roles.sql")
-SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
 SCHEMA_PATH_TOURNAMENTS = os.path.join(BASE_DIR, "db/schema/tournaments.sql")
 
 # Connect to Discord
@@ -72,6 +83,19 @@ tree.add_command(set_iu_status)
 tree.add_command(check_balance)
 tree.add_command(modify_balance)
 tree.add_command(random_award)
+# Listen Game
+tree.add_command(listen_game_create)
+tree.add_command(listen_game_start)
+tree.add_command(listen_game_set_theme)
+tree.add_command(submit_song)
+tree.add_command(listen_game_submit_ranking)
+# Listen Game (GM)
+tree.add_command(listen_game_gm_sync_playlist)
+tree.add_command(listen_game_gm_reject_song)
+tree.add_command(listen_game_gm_skip_turn)
+tree.add_command(listen_game_gm_remove_player)
+tree.add_command(listen_game_gm_force_start_round)
+tree.add_command(listen_game_gm_force_submit)
 # Lists
 tree.add_command(create_list_event)
 tree.add_command(close_list_event)
@@ -103,6 +127,10 @@ async def on_ready():
         if not tournament_resolution_loop.is_running():
             tournament_resolution_loop.start(client, int(GUILD))
             logger.info("Tournament resolution task started.")
+
+        if not check_listen_game_reminders.is_running():
+            check_listen_game_reminders.start(client, int(GUILD))
+            logger.info("Listen game reminder task started.")
 
         # Sync commands
         guild = discord.Object(id=int(GUILD))
@@ -215,15 +243,12 @@ async def on_interaction(interaction: discord.Interaction):
             await handle_list_button_click(interaction, event_id)
             return
 
-    # Let discord.py continue processing normal slash commands
-    if hasattr(client, 'process_commands'):
-        await client.process_commands(interaction)
-
 def initialize_databases():
     """Dynamically reads and initializes all configured databases."""
     logger.info("Initializing databases...")
     db_configs = [
         (DB_PATH_BIASES, SCHEMA_PATH_BIASES),
+        (DB_PATH_LISTEN_GAME, SCHEMA_PATH_LISTEN_GAME),
         (DB_PATH_LISTS, SCHEMA_PATH_LISTS),
         (DB_PATH_MERCH, SCHEMA_PATH_MERCH),
         (DB_PATH_RELEASES, SCHEMA_PATH_RELEASES),

@@ -7,15 +7,10 @@ import logging
 from datetime import datetime
 import discord
 from db.releases import add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
-from services.youtube import create_playlist, add_video_to_playlist, get_video_publish_date
+from services.youtube import create_playlist, add_video_to_playlist, get_video_publish_date, extract_video_id
 
 logger = logging.getLogger('iu-bot')
 
-# Robust RegEx that catches standard, mobile, embedded, and shortened YouTube URLs
-YT_REGEX = re.compile(
-    r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|'
-    r'(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})'
-)
 
 async def store_new_release(message: discord.Message):
     """Parses a message, stores the release, and automatically syncs it to YouTube."""
@@ -26,11 +21,9 @@ async def store_new_release(message: discord.Message):
     videos_processed = 0
     award_year = get_eligible_year(message.created_at)
     for url in raw_urls:
-        match = YT_REGEX.search(url)
-        if not match:
+        video_id = extract_video_id(url)
+        if not video_id:
             continue
-
-        video_id = match.group(1)
 
         try:
             # Check the video publish date to ensure it's eligible for the current award year
