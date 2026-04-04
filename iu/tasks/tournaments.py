@@ -152,7 +152,7 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
         image_buffer = await generate_bracket_image(tournament_id)
         winner_name = get_tournament_winner_name(tournament_id)
         finale_msg = (
-            f"The *{t_name}** tournament has concluded, and the Grand Champion is **{winner_name}**!"
+            f"The **{t_name}** tournament has concluded, and the Grand Champion is **{winner_name}**!"
         )
 
         # Run the participation raffle

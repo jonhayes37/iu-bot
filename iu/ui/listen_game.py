@@ -16,6 +16,21 @@ class JoinGameView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
+    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red, custom_id="leave_listen_game")
+    async def leave_button(self, interaction: discord.Interaction, _: discord.ui.Button):
+        game = get_game_by_status_db('registration')
+        if not game:
+            return
+
+        success = unregister_player_db(game['game_id'], interaction.user.id)
+        if not success:
+            await interaction.response.send_message("You aren't registered for this game.", ephemeral=True)
+            return
+
+        players = get_registered_players_db(game['game_id'])
+        await interaction.response.send_message(
+            f"You've left the game. There are now {len(players)} players registered.", ephemeral=True)
+
     @discord.ui.button(label="Join Listen Game!", style=discord.ButtonStyle.green, custom_id="join_listen_game")
     async def join_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         game = get_game_by_status_db('registration')
@@ -33,30 +48,13 @@ class JoinGameView(discord.ui.View):
         await interaction.response.send_message(
             f"✅ You've joined! There are now {len(players)} players registered.", ephemeral=True)
 
-    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red, custom_id="leave_listen_game")
-    async def leave_button(self, interaction: discord.Interaction, _: discord.ui.Button):
-        game = get_game_by_status_db('registration')
-        if not game:
-
-            return
-
-        success = unregister_player_db(game['game_id'], interaction.user.id)
-        if not success:
-            await interaction.response.send_message("You aren't registered for this game.", ephemeral=True)
-            return
-
-        players = get_registered_players_db(game['game_id'])
-        await interaction.response.send_message(
-            f"You've left the game. There are now {len(players)} players registered.", ephemeral=True)
-
-
 class SetThemeModal(discord.ui.Modal, title='Set Listen Game Theme'):
     """Modal for submitting a theme for a listen game round"""
 
     theme_text = discord.ui.TextInput(
         label='Round Theme & Rules',
         style=discord.TextStyle.paragraph,
-        placeholder='Describe the restrictions, theme, and provide YouTube examples here...',
+        placeholder='Share the rules and theme of your round!',
         required=True,
         max_length=3500 # Plenty of space for paragraphs of rules
     )
@@ -111,14 +109,14 @@ class CommentaryModal(Modal):
     """UI modal for letting the play add commentary for a ranking"""
 
     def __init__(self, view_instance: View, selected_song: dict, current_rank: int):
-        super().__init__(title=f"Rank {current_rank} Commentary")
+        super().__init__(title=f"{get_ordinal(current_rank)} Place Commentary")
         self.view_instance = view_instance
         self.selected_song = selected_song
 
         self.commentary = TextInput(
-            label=f"Thoughts on '{selected_song['clean_title'][:30]}...'?",
+            label=f"For {selected_song['raw_title'][:37]}",
             style=discord.TextStyle.paragraph,
-            placeholder="Type your review and commentary here...",
+            placeholder="Share your thoughts here!",
             required=True,
             max_length=1000
         )
@@ -150,7 +148,7 @@ class RankingSelect(Select):
         options = []
         for sub in unranked_submissions:
             options.append(discord.SelectOption(
-                label=sub['clean_title'][:100],
+                label=sub['raw_title'][:100],
                 value=sub['video_id']
             ))
 
@@ -188,11 +186,11 @@ class ConfirmRankingButton(Button):
         for item in self.view.ranked_submissions:
             results_to_save.append({
                 "user_id": item['submission']['user_id'],
-                "video_id": item['submission']['video_id'],
-                "clean_title": item['submission']['clean_title'],
                 "rank": item['rank'],
                 "points": total_submissions - item['rank'] + 1,
-                "commentary": item['commentary']
+                "commentary": item['commentary'],
+                "raw_title": item['submission']['raw_title'],
+                "video_id": item['submission']['video_id']
             })
 
         success = save_round_results_db(self.game_id, self.round_id, results_to_save)
@@ -211,10 +209,9 @@ class ConfirmRankingButton(Button):
         await asyncio.sleep(2)
 
         reversed_reveals = sorted(results_to_save, key=lambda x: x['rank'], reverse=True)
-
         for result in reversed_reveals:
             rank_str = get_ordinal(result['rank'])
-            title = result['clean_title']
+            title = result['raw_title']
             url = f"https://youtu.be/{result['video_id']}"
             commentary = result['commentary']
 
@@ -224,19 +221,43 @@ class ConfirmRankingButton(Button):
 
         next_host_id = advance_game_turn_db(self.game_id, self.round_id)
 
-        if next_host_id:
-            await channel.send(
-                f"🎉 **Round complete!**\n\nThe next host is <@{next_host_id}>! "
-                "Use `/listen-game-post-theme` when you are ready to begin.")
+        # Build Last Round's Results
+        sorted_round = sorted(results_to_save, key=lambda x: x['rank'])
+        summary_lines = ["**Last Round's Results**"]
+        for result in sorted_round:
+            rank_str = get_ordinal(result['rank'])
+            user_mention = f"<@{result['user_id']}>"
+            title = result['raw_title']
+            pts = result['points']
+            summary_lines.append(f"{rank_str}: {user_mention} - **{title}** ({pts} pts)")
+
+        # Build Current Ranking
+        leaderboard = get_game_leaderboard_db(self.game_id)
+        ranking_lines = ["**Current Ranking**"]
+
+        if leaderboard:
+            for idx, entry in enumerate(leaderboard):
+                rank_str = get_ordinal(idx + 1)
+                u_id = entry.get('user_id', entry.get('id'))
+                score = entry.get('total_points', entry.get('score', entry.get('points', 0)))
+
+                ranking_lines.append(f"{rank_str} - <@{u_id}> ({score} pts)")
         else:
-            await channel.send("🏆 **The game has concluded! Calculating final scores...**")
-            await asyncio.sleep(3)
+            ranking_lines.append("*Error fetching leaderboard.*")
 
-            leaderboard = get_game_leaderboard_db(self.game_id)
-            if not leaderboard:
-                await channel.send("❌ Error fetching the final leaderboard from the database.")
-                return
+        # Combine and Send
+        summary_text = "\n".join(summary_lines)
+        ranking_text = "\n".join(ranking_lines)
+        message_str = f"🎉 **Round complete!**\n\n{summary_text}\n\n{ranking_text}\n\n"
+        if next_host_id:
+            message_str += f"The next host is <@{next_host_id}>! Use `/listen-game-post-theme` " \
+                "when you are ready to begin."
 
+        # Send last round's results
+        await channel.send(message_str)
+
+        # The game is over
+        if not next_host_id:
             await channel.send(generate_leaderboard_text(leaderboard))
 
 
@@ -258,10 +279,15 @@ class ListenGameRankingView(View):
 
     def setup_select_menu(self):
         self.clear_items()
-        if self.unranked_submissions:
+
+        # If there are multiple items, use the standard Select menu
+        if len(self.unranked_submissions) > 1:
             self.add_item(RankingSelect(self.unranked_submissions, self.current_rank))
+        # If there is one item left, use a button to prevent being stuck on dismissed modal
+        elif len(self.unranked_submissions) == 1:
+            self.add_item(RankSingleSongButton(self.unranked_submissions[0], self.current_rank))
+        # If the list is empty, show the Confirm button
         else:
-            # Pass the stored IDs into the Confirm button
             self.add_item(ConfirmRankingButton(self.game_id, self.round_id, self.listen_channel_id))
 
     async def update_ui(self, interaction: discord.Interaction):
@@ -274,7 +300,7 @@ class ListenGameRankingView(View):
         )
 
         for item in self.ranked_submissions:
-            song_title = item['submission']['clean_title']
+            song_title = item['submission']['raw_title']
             embed.add_field(
                 name=f"#{item['rank']} - {song_title}",
                 value=f"*{item['commentary']}*",
@@ -286,3 +312,18 @@ class ListenGameRankingView(View):
             embed.color = 0x2ecc71
 
         await interaction.response.edit_message(embed=embed, view=self)
+
+class RankSingleSongButton(Button):
+    """Button fallback for when there is only one song left to rank."""
+
+    def __init__(self, submission: dict, current_rank: int):
+        # Truncate the title to avoid hitting Discord's 80-character limit for button labels
+        label_text = f"Rank #{current_rank}: {submission['raw_title'][:60]}"
+        super().__init__(label=label_text, style=discord.ButtonStyle.primary)
+        self.submission = submission
+        self.current_rank = current_rank
+
+    async def callback(self, interaction: discord.Interaction):
+        # Launch the modal just like the Select menu does
+        modal = CommentaryModal(self.view, self.submission, self.current_rank)
+        await interaction.response.send_modal(modal)

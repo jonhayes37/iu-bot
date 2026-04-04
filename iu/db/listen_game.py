@@ -40,7 +40,7 @@ def start_game_db(game_id: int) -> list[int] | None:
             cursor.execute("SELECT user_id FROM listen_players WHERE game_id = ?", (game_id,))
             players = [row[0] for row in cursor.fetchall()]
 
-            if len(players) < 3:
+            if len(players) < 2:
                 return None
 
             random.shuffle(players)

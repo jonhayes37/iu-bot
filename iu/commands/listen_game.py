@@ -16,6 +16,7 @@ from services.youtube import (
 )
 from ui.listen_game import JoinGameView, SetThemeModal, ListenGameRankingView
 from utils.fuzzy_match import evaluate_submission, sanitize_title
+from utils.validation import validate_channel
 
 logger = logging.getLogger('iu-bot')
 
@@ -24,6 +25,10 @@ logger = logging.getLogger('iu-bot')
 @app_commands.describe(max_round_days="Optional: Auto-close rounds after X days if players haven't submitted.")
 @app_commands.default_permissions(administrator=True)
 async def listen_game_create(interaction: discord.Interaction, max_round_days: typing.Optional[int] = None):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     game_id = create_game_db(interaction.user.id, max_round_days)
     if not game_id:
         await interaction.response.send_message(
@@ -31,6 +36,7 @@ async def listen_game_create(interaction: discord.Interaction, max_round_days: t
             ephemeral=True)
         return
 
+    player_role = discord.utils.get(interaction.guild.roles, name='Listen Game Player')
     deadline_text = f"**Max Round Duration:** {max_round_days} Days" if max_round_days \
         else "**Max Round Duration:** None (GM Managed)"
 
@@ -41,12 +47,16 @@ async def listen_game_create(interaction: discord.Interaction, max_round_days: t
         color=0x9b59b6
     )
 
-    await interaction.response.send_message(embed=embed, view=JoinGameView())
+    await interaction.response.send_message(content=player_role.mention, embed=embed, view=JoinGameView())
 
 
 @app_commands.command(name="listen-game-start", description="[GM] Close registration and officially start the game.")
 @app_commands.default_permissions(administrator=True)
 async def listen_game_start(interaction: discord.Interaction):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     game = get_game_by_status_db('registration')
     if not game:
         await interaction.response.send_message("❌ Cannot find a game in the registration phase.", ephemeral=True)
@@ -54,7 +64,7 @@ async def listen_game_start(interaction: discord.Interaction):
     game_id = game.get('game_id')
 
     players = get_registered_players_db(game_id)
-    if len(players) < 3:
+    if len(players) < 2:
         await interaction.response.send_message(
             f"❌ You need at least 3 players to start! Currently have {len(players)}.", ephemeral=True)
         return
@@ -70,11 +80,7 @@ async def listen_game_start(interaction: discord.Interaction):
     for i, uid in enumerate(ordered_players, start=1):
         member = interaction.guild.get_member(uid)
         name = member.mention if member else "Unknown Player"
-
-        if i == 1:
-            turn_order_lines.append(f"**{i}. {name}** 🎧 *(Current Host)*")
-        else:
-            turn_order_lines.append(f"{i}. {name}")
+        turn_order_lines.append(f"{i}. {name}")
 
     turn_order_text = "\n".join(turn_order_lines)
 
@@ -83,7 +89,7 @@ async def listen_game_start(interaction: discord.Interaction):
         description=(
             f"Registration is closed and the turn order has been randomized!\n\n"
             f"**Turn Order:**\n{turn_order_text}\n\n"
-            f"Our first host is {ordered_players[0]}!"
+            f"Our first host is <@{ordered_players[0]}>! "
             "Please use `/listen-game-post-theme` when you are ready to post your rules for Round 1."
         ),
         color=0x2ecc71
@@ -94,6 +100,10 @@ async def listen_game_start(interaction: discord.Interaction):
 
 @app_commands.command(name="listen-game-post-theme", description="[Host] Set the theme and rules for your round.")
 async def listen_game_set_theme(interaction: discord.Interaction):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     # Check if a game is actually playing
     game = get_game_by_status_db('playing')
     if not game:
@@ -127,6 +137,10 @@ async def listen_game_set_theme(interaction: discord.Interaction):
                       description="Submit or update your YouTube track for the current round.")
 @app_commands.describe(url="The YouTube link to your song.")
 async def submit_song(interaction: discord.Interaction, url: str):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     game = get_game_by_status_db('playing')
@@ -252,7 +266,7 @@ async def submit_song(interaction: discord.Interaction, url: str):
             if is_complete:
                 host_member = interaction.guild.get_member(active_round['host_id'])
                 host_mention = host_member.mention if host_member else "the host"
-                tracker_text += f"\n✅ **All submissions received! Playlist sent to {host_mention}!**"
+                tracker_text += f"\n\n✅ **All submissions received! Playlist sent to {host_mention}!**"
 
             await tracker_msg.edit(content=tracker_text)
         except Exception as e:
@@ -266,14 +280,19 @@ async def submit_song(interaction: discord.Interaction, url: str):
         if host_user:
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             await host_user.send(
-                "🎉 **All submissions are in!**\n\nHere is your generated playlist to review: "
-                f"{playlist_url}\n\nWhen you've decided your rankings, post your results in "
-                "the channel and tag the GM!")
+                "🎉 **All submissions are in for your Listen Game theme!**\n\nHere's "
+                f"your generated playlist to review: {playlist_url}\n\nWhen you've "
+                "decided your rankings, use `/listen-game-submit-ranking` in the "
+                "#listen-game channel!")
 
 
 @app_commands.command(name="listen-game-submit-ranking",
                       description="[Host] Rank the submissions and provide commentary.")
 async def listen_game_submit_ranking(interaction: discord.Interaction):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     game = get_game_by_status_db('playing')
     if not game:
         await interaction.response.send_message("⚠️ There is no active game right now.", ephemeral=True)

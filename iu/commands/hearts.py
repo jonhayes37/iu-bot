@@ -4,6 +4,7 @@ import random
 import re
 import discord
 from db.merch import get_user_balance, modify_db_balance
+from utils.validation import validate_channel
 
 logger = logging.getLogger('iu-bot')
 
@@ -124,13 +125,3 @@ async def random_award(interaction: discord.Interaction, users: str, amount: int
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
 
     await interaction.response.send_message(embed=embed)
-
-async def validate_channel(interaction: discord.Interaction, channel: str) -> bool:
-    if interaction.channel.name != channel:
-        await interaction.response.send_message(
-            f"This command can only be used in the #{channel} channel.",
-            ephemeral=True
-        )
-        return True
-
-    return False

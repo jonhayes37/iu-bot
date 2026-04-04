@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS listen_players (
     score INTEGER DEFAULT 0,
     last_reminded_at DATETIME DEFAULT NULL,
     PRIMARY KEY (game_id, user_id),
-    FOREIGN KEY (game_id) REFERENCES listen_games(game_id)
+    FOREIGN KEY (game_id) REFERENCES listen_games(game_id) ON DELETE CASCADE
 );
 
 -- Tracks the rounds within a specific game
@@ -26,9 +26,9 @@ CREATE TABLE IF NOT EXISTS listen_rounds (
     theme TEXT,
     playlist_id TEXT, 
     status TEXT, 
-    started_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    status_message_id INTEGER DEFAULT NULL;
-    FOREIGN KEY (game_id) REFERENCES listen_games(game_id)
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status_message_id INTEGER DEFAULT NULL,
+    FOREIGN KEY (game_id) REFERENCES listen_games(game_id) ON DELETE CASCADE
 );
 
 -- Tracks the songs submitted to a specific round
@@ -39,9 +39,9 @@ CREATE TABLE IF NOT EXISTS listen_submissions (
     raw_title TEXT NOT NULL,
     clean_title TEXT NOT NULL,
     submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    rank INTEGER DEFAULT NULL;
-    points_awarded INTEGER DEFAULT 0;
-    commentary TEXT DEFAULT NULL;
+    rank INTEGER DEFAULT NULL,
+    points_awarded INTEGER DEFAULT 0,
+    commentary TEXT DEFAULT NULL,
     PRIMARY KEY (round_id, user_id),
-    FOREIGN KEY (round_id) REFERENCES listen_rounds(round_id)
+    FOREIGN KEY (round_id) REFERENCES listen_rounds(round_id) ON DELETE CASCADE
 );

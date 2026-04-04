@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 import discord
 from db.releases import add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
-from services.youtube import create_playlist, add_video_to_playlist, get_video_publish_date, extract_video_id
+from services.youtube import create_releases_playlist, add_video_to_playlist, get_video_publish_date, extract_video_id
 
 logger = logging.getLogger('iu-bot')
 
@@ -52,7 +52,7 @@ async def store_new_release(message: discord.Message):
                 # Create the playlist if it doesn't exist
                 if not playlist_id:
                     logger.info("Playlist for %s not found. Creating...", award_year)
-                    playlist_id = create_playlist(award_year)
+                    playlist_id = create_releases_playlist(award_year)
                     if playlist_id:
                         save_new_playlist(award_year, playlist_id)
 

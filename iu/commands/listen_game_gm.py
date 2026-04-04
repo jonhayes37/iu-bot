@@ -18,6 +18,7 @@ from services.youtube import (
 )
 from utils.fuzzy_match import sanitize_title
 from utils.strings import generate_leaderboard_text
+from utils.validation import validate_channel
 
 
 logger = logging.getLogger('iu-bot')
@@ -26,6 +27,10 @@ logger = logging.getLogger('iu-bot')
                       description="[GM] Syncs DB submissions with the YouTube playlist.")
 @app_commands.checks.has_role("Listen Game GM")
 async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     game = get_game_by_status_db('playing')
@@ -111,6 +116,10 @@ async def sync_playlist_error(interaction: discord.Interaction, error: app_comma
 )
 @app_commands.checks.has_role("Listen Game GM")
 async def listen_game_gm_reject_song(interaction: discord.Interaction, player: discord.Member, reason: str):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     game = get_game_by_status_db('playing')
@@ -179,6 +188,10 @@ async def reject_song_error(interaction: discord.Interaction, error: app_command
 )
 @app_commands.checks.has_role("Listen Game GM")
 async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: discord.Member, reason: str):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     game = get_game_by_status_db('playing')
@@ -252,6 +265,10 @@ async def skip_turn_error(interaction: discord.Interaction, error: app_commands.
 )
 @app_commands.checks.has_role("Listen Game GM")
 async def listen_game_gm_remove_player(interaction: discord.Interaction, player: discord.Member, reason: str):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     # Check for a playing or registering game
@@ -328,7 +345,7 @@ async def listen_game_gm_remove_player(interaction: discord.Interaction, player:
 
                 try:
                     await host_user.send(
-                        "🎉 **All submissions are in!**\n\n"
+                        "🎉 **All submissions are in for your Listen Game round!**\n\n"
                         "A player was removed, which means everyone remaining has already submitted. "
                         "The round has been automatically closed.\n\n"
                         f"Here is your generated playlist to review: {playlist_url}\n\n"
@@ -360,6 +377,10 @@ async def listen_game_gm_force_start_round(interaction: discord.Interaction, ski
     This command requires the GM to explicitly mention all players who have not yet
     submitted. If the mentions do not match the database state, the command fails.
     """
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     game = get_game_by_status_db('playing')
@@ -457,6 +478,10 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
     Forcefully adds a submission for a player, bypassing fuzzy match blocks.
     Updates the live tracker and handles round completion just like a normal submission.
     """
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     game = get_game_by_status_db('playing')
@@ -536,7 +561,7 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
             if is_complete:
                 host_member = interaction.guild.get_member(active_round['host_id'])
                 host_mention = host_member.mention if host_member else "the host"
-                tracker_text += f"\n✅ **All submissions received! Playlist sent to {host_mention}!**"
+                tracker_text += f"\n\n✅ **All submissions received! Playlist sent to {host_mention}!**"
 
             await tracker_msg.edit(content=tracker_text)
         except (discord.NotFound, discord.Forbidden):
@@ -551,7 +576,7 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             try:
                 await host_user.send(
-                    "🎉 **All submissions are in!**\n\n"
+                    "🎉 **All submissions are in for your Listen Game round!**\n\n"
                     "The round has been automatically closed. Here is your generated playlist to review: "
                     f"{playlist_url}\n\nWhen you've decided your rankings, run `/listen-game-submit-ranking` "
                     "in the channel to start the reveal!"

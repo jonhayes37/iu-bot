@@ -44,7 +44,7 @@ async def new_tournament(interaction: discord.Interaction, title: str, entrants_
     bracket_file = discord.File(fp=image_buffer, filename=f"bracket_{t_id}.png")
     msg = (
         f"🏆 **{title} has begun!** 🏆\n\n"
-        f"The tracks have been seeded. Round 1 voting polls will appear below shortly!"
+        f"The bracket has been seeded. Round 1 voting polls will appear below shortly!"
     )
 
     await tournaments_channel.send(content=msg, file=bracket_file)

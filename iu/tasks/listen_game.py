@@ -24,10 +24,9 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
         logger.error("Could not find guild with ID: %s", guild_id)
         return
 
-    # Find your specific events channel
-    channel = discord.utils.get(guild.text_channels, name='listen-game')
+    channel = discord.utils.get(guild.text_channels, name='sandbox')
     if not channel:
-        logger.error("Could not find #community-events channel.")
+        logger.error("Could not find #listen-game channel.")
         return
 
     # ---------------------------------------------------------
