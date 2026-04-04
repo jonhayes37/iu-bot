@@ -9,6 +9,7 @@ from commands.biases import (
     bias_group, create_bias_group, create_ultimate_bias, ultimate_bias,
     update_bias_group, update_ultimate_bias
 )
+from commands.bot import set_iu_status
 from commands.listen_game import (
     listen_game_create, listen_game_start, listen_game_set_theme, submit_song,
     listen_game_submit_ranking
@@ -19,7 +20,7 @@ from commands.listen_game_gm import (
 )
 from commands.lists import create_list_event, close_list_event, export_lists
 from commands.hearts import check_balance, modify_balance, random_award
-from commands.bot import set_iu_status
+from commands.hma_nominations import hma_nomination
 from commands.merch import add_merch, view_merch, purchase, purchase_history
 from commands.releases import backfill_releases
 from commands.roles import register_role, sync_roles
@@ -44,6 +45,7 @@ logger = logging.getLogger('iu-bot')
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 DB_PATH_BIASES = os.getenv('DB_PATH_BIASES')
+DB_PATH_HMA_NOMINATIONS = os.getenv('DB_PATH_HMA_NOMINATIONS')
 DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
 DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
@@ -52,6 +54,7 @@ DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
 DB_PATH_TOURNAMENTS = os.getenv('DB_PATH_TOURNAMENTS')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_BIASES = os.path.join(BASE_DIR, "db/schema/biases.sql")
+SCHEMA_PATH_HMA_NOMINATIONS = os.path.join(BASE_DIR, "db/schema/hma_nominations.sql")
 SCHEMA_PATH_LISTEN_GAME = os.path.join(BASE_DIR, "db/schema/listen_game.sql")
 SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
 SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "db/schema/merch.sql")
@@ -83,6 +86,8 @@ tree.add_command(set_iu_status)
 tree.add_command(check_balance)
 tree.add_command(modify_balance)
 tree.add_command(random_award)
+# HMA nominations
+tree.add_command(hma_nomination)
 # Listen Game
 tree.add_command(listen_game_create)
 tree.add_command(listen_game_start)
@@ -248,6 +253,7 @@ def initialize_databases():
     logger.info("Initializing databases...")
     db_configs = [
         (DB_PATH_BIASES, SCHEMA_PATH_BIASES),
+        (DB_PATH_HMA_NOMINATIONS, SCHEMA_PATH_HMA_NOMINATIONS),
         (DB_PATH_LISTEN_GAME, SCHEMA_PATH_LISTEN_GAME),
         (DB_PATH_LISTS, SCHEMA_PATH_LISTS),
         (DB_PATH_MERCH, SCHEMA_PATH_MERCH),

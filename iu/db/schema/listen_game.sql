@@ -37,7 +37,6 @@ CREATE TABLE IF NOT EXISTS listen_submissions (
     user_id INTEGER,
     video_id TEXT NOT NULL, 
     raw_title TEXT NOT NULL,
-    clean_title TEXT NOT NULL,
     submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     rank INTEGER DEFAULT NULL,
     points_awarded INTEGER DEFAULT 0,

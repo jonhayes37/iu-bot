@@ -8,14 +8,13 @@ from db.listen_game import (
     create_game_db, get_current_round_db, get_game_by_status_db,
     get_registered_players_db, get_round_submissions_db, start_game_db,
     update_round_playlist_db, is_round_complete_db, upsert_submission_db,
-    get_user_submission_db, close_round_db
+    get_user_submission_db
 )
 from services.youtube import (
     get_video_title, create_listen_game_playlist, add_video_to_playlist,
     remove_video_from_playlist, extract_video_id, QuotaExceededError
 )
 from ui.listen_game import JoinGameView, SetThemeModal, ListenGameRankingView
-from utils.fuzzy_match import evaluate_submission, sanitize_title
 from utils.validation import validate_channel
 
 logger = logging.getLogger('iu-bot')
@@ -169,31 +168,10 @@ async def submit_song(interaction: discord.Interaction, url: str):
         return
 
     # Handle Previous Submissions & Duplicate Checking
-    existing_submissions = get_round_submissions_db(active_round['round_id'])
     user_previous_sub = get_user_submission_db(active_round['round_id'], interaction.user.id)
     if user_previous_sub and user_previous_sub['video_id'] == video_id:
         await interaction.followup.send("⚠️ You have already submitted this exact video!")
         return
-
-    # Run the Fuzzy Matcher (EXCLUDING the user's old submission if they are swapping)
-    other_submissions = [sub for sub in existing_submissions if sub['user_id'] != interaction.user.id]
-    existing_submissions_map = {sub['clean_title']: sub['raw_title'] for sub in other_submissions}
-    eval_result = evaluate_submission(video_title, existing_submissions_map)
-
-    if eval_result['action'] == 'BLOCK':
-        await interaction.followup.send(
-            f"❌ **Rejected:** This is highly similar ({eval_result['score']}%) to a song someone else "
-            f"already submitted: `{eval_result['match']}`. Please pick a different track. "
-            "If you think this is incorrect, reach out to the GM.")
-        return
-
-    if eval_result['action'] == 'WARN':
-        gm_user = interaction.client.get_user(game['gm_id'])
-        if gm_user:
-            await gm_user.send(
-                f"⚠️ **Listen Game Warning:** {interaction.user.display_name} submitted `{video_title}`. "
-                f"It is a {eval_result['score']}% match to `{eval_result['match']}`. Use "
-                "`/listen-game-gm-reject-song` if you need to reject it.")
 
     # Handle the YouTube Playlist Swap
     playlist_id = active_round['playlist_id']
@@ -221,8 +199,7 @@ async def submit_song(interaction: discord.Interaction, url: str):
 
     except QuotaExceededError:
         # Save to DB anyway, but notify the GM
-        clean_title_to_save = sanitize_title(video_title)
-        upsert_submission_db(active_round['round_id'], interaction.user.id, video_id, video_title, clean_title_to_save)
+        upsert_submission_db(active_round['round_id'], interaction.user.id, video_id, video_title)
 
         await interaction.followup.send(
             f"✅ **Success!** Your song `{video_title}` has been accepted into the database.\n\n"
@@ -245,8 +222,7 @@ async def submit_song(interaction: discord.Interaction, url: str):
         return
 
     # Save and Announce (Happy Path)
-    clean_title_to_save = sanitize_title(video_title)
-    upsert_submission_db(active_round['round_id'], interaction.user.id, video_id, video_title, clean_title_to_save)
+    upsert_submission_db(active_round['round_id'], interaction.user.id, video_id, video_title)
     if user_previous_sub:
         await interaction.followup.send(f"🔄 **Updated!** Your submission has been swapped to `{video_title}`.")
     else:
@@ -264,26 +240,27 @@ async def submit_song(interaction: discord.Interaction, url: str):
             tracker_text = f"🎧 **Round Status:** We are at `{current_count}/{total_needed}` submissions for the round."
 
             if is_complete:
-                host_member = interaction.guild.get_member(active_round['host_id'])
-                host_mention = host_member.mention if host_member else "the host"
-                tracker_text += f"\n\n✅ **All submissions received! Playlist sent to {host_mention}!**"
+                tracker_text += "\n\n✅ **All submissions received! Awaiting GM approval.**"
 
             await tracker_msg.edit(content=tracker_text)
         except Exception as e:
             logger.warning("Failed to update status message: %s", e)
 
-    # Completion Check (Only ping host if this is a NEW submission completing the round)
-    if not user_previous_sub and is_round_complete_db(game['game_id'], active_round['round_id']):
-        close_round_db(active_round['round_id'])
-
-        host_user = interaction.client.get_user(active_round['host_id'])
-        if host_user:
+    # Completion Check - Route to GM instead of closing the round
+    if not user_previous_sub and is_complete:
+        gm_user = interaction.client.get_user(game['gm_id']) or await interaction.client.fetch_user(game['gm_id'])
+        if gm_user:
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-            await host_user.send(
-                "🎉 **All submissions are in for your Listen Game theme!**\n\nHere's "
-                f"your generated playlist to review: {playlist_url}\n\nWhen you've "
-                "decided your rankings, use `/listen-game-submit-ranking` in the "
-                "#listen-game channel!")
+            try:
+                await gm_user.send(
+                    "**Listen Game: All Submissions Are In!**\n\n"
+                    f"Here is the playlist: {playlist_url}\n\n"
+                    "Please review the submissions for duplicates. If everything looks good, "
+                    "run `/listen-game-gm-approve-playlist` "
+                    "in #listen-game to publish it to the channel and notify the host!"
+                )
+            except discord.Forbidden:
+                logger.warning("Could not DM GM about round completion.")
 
 
 @app_commands.command(name="listen-game-submit-ranking",

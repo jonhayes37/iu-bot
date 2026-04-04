@@ -16,7 +16,6 @@ from services.youtube import (
     get_playlist_video_ids, add_video_to_playlist, remove_video_from_playlist,
     extract_video_id, get_video_title, QuotaExceededError
 )
-from utils.fuzzy_match import sanitize_title
 from utils.strings import generate_leaderboard_text
 from utils.validation import validate_channel
 
@@ -159,7 +158,7 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
     try:
         msg = (
             f"🚨 **Listen Game Update** 🚨\n\n"
-            f"The Game Master has rejected your submission for the current round (`{submission['clean_title']}`).\n"
+            f"The Game Master has rejected your submission for the current round (`{submission['raw_title']}`).\n"
             f"**Reason:** {reason}\n\n"
             f"Please find a new track and use `/submit-song` to try again!"
         )
@@ -169,7 +168,7 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
         dm_status = "Player has DMs disabled. You will need to ping them in the channel manually."
 
     # Acknowledge GM
-    await interaction.followup.send(f"✅ **Success!** Removed `{submission['clean_title']}`. {dm_status}")
+    await interaction.followup.send(f"✅ **Success!** Removed `{submission['raw_title']}`. {dm_status}")
 
 @listen_game_gm_reject_song.error
 async def reject_song_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -527,8 +526,7 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
 
     except QuotaExceededError:
         # Handle YouTube Quota limits gracefully
-        clean_title_to_save = sanitize_title(video_title)
-        upsert_submission_db(active_round['round_id'], player.id, video_id, video_title, clean_title_to_save)
+        upsert_submission_db(active_round['round_id'], player.id, video_id, video_title)
 
         await interaction.followup.send(
             f"✅ **Success!** `{video_title}` accepted into the database for {player.display_name}.\n\n"
@@ -543,8 +541,7 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
         return
 
     # Save to Database
-    clean_title_to_save = sanitize_title(video_title)
-    upsert_submission_db(active_round['round_id'], player.id, video_id, video_title, clean_title_to_save)
+    upsert_submission_db(active_round['round_id'], player.id, video_id, video_title)
 
     # Update the Live Tracker Message
     all_players = get_registered_players_db(game['game_id'])
@@ -608,3 +605,83 @@ async def force_submit_error(interaction: discord.Interaction, error: app_comman
         logger.error("Error in gm-force-submit: %s", error)
         if not interaction.response.is_done():
             await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
+
+@app_commands.command(name="listen-game-gm-approve-playlist",
+                      description="[GM] Approve the round's playlist and notify the host.")
+@app_commands.checks.has_role("Listen Game GM")
+async def listen_game_gm_approve_playlist(interaction: discord.Interaction):
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
+
+    # Use ephemeral so the GM's command usage doesn't clutter the chat
+    await interaction.response.defer(ephemeral=True)
+
+    game = get_game_by_status_db('playing')
+    if not game:
+        await interaction.followup.send("⚠️ There is no active game right now.")
+        return
+
+    active_round = get_current_round_db(game['game_id'])
+    if not active_round:
+        await interaction.followup.send("⚠️ Could not find an active round.")
+        return
+
+    # Check if we are actually waiting for approval
+    if active_round['status'] != 'submitting':
+        await interaction.followup.send("⚠️ The round is not in the submission phase.")
+        return
+
+    if not is_round_complete_db(game['game_id'], active_round['round_id']):
+        await interaction.followup.send("⚠️ Cannot approve yet! Not all players have submitted a song.")
+        return
+
+    # Close the round in the database (transitions state to 'ranking')
+    success = close_round_db(active_round['round_id'])
+    if not success:
+        await interaction.followup.send("❌ Database error: Could not close the round.")
+        return
+
+    host_member = interaction.guild.get_member(active_round['host_id'])
+    host_mention = host_member.mention if host_member else "the host"
+
+    # Update the Live Tracker Message in the channel
+    if active_round.get('status_message_id'):
+        try:
+            tracker_msg = await interaction.channel.fetch_message(active_round['status_message_id'])
+            all_players = get_registered_players_db(game['game_id'])
+            total_needed = len(all_players) - 1
+            current_submissions = get_round_submissions_db(active_round['round_id'])
+
+            tracker_text = f"🎧 **Round Status:** We are at `{len(current_submissions)}/{total_needed}` " \
+                "submissions for the round."
+            tracker_text += f"\n\n✅ **All submissions received! Playlist sent to {host_mention}!**"
+
+            await tracker_msg.edit(content=tracker_text)
+        except (discord.NotFound, discord.Forbidden) as e:
+            logger.warning("Failed to update status message during GM approval: %s", e)
+
+    # DM the Host that they can begin ranking
+    host_user = interaction.client.get_user(active_round['host_id']) or \
+        await interaction.client.fetch_user(active_round['host_id'])
+    if host_user:
+        playlist_id = active_round.get('playlist_id')
+        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}" if playlist_id \
+            else "No playlist generated."
+
+        try:
+            await host_user.send(
+                "🎉 **All submissions are in for your Listen Game theme!**\n\n"
+                f"Here is your playlist to review: {playlist_url}\n\n"
+                "When you've decided your rankings, use `/listen-game-submit-ranking` in #listen-game!"
+            )
+            dm_status = "Host notified via DM."
+        except discord.Forbidden:
+            logger.warning("Could not DM host %s about round approval.", active_round['host_id'])
+            dm_status = "Host has DMs disabled."
+    else:
+        dm_status = "Could not find host user."
+
+    # Acknowledge the GM silently
+    await interaction.followup.send(
+        f"✅ **Success!** The round has been closed and the playlist sent to {host_mention}. {dm_status}")

@@ -176,20 +176,19 @@ def get_user_submission_db(round_id: int, user_id: int) -> dict | None:
         logger.error("Error fetching user submission: %s", ex)
         return None
 
-def upsert_submission_db(round_id: int, user_id: int, video_id: str, raw_title: str, clean_title: str) -> bool:
+def upsert_submission_db(round_id: int, user_id: int, video_id: str, raw_title: str) -> bool:
     """Inserts a new submission or overwrites an existing one."""
     try:
         with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO listen_submissions (round_id, user_id, video_id, raw_title, clean_title)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO listen_submissions (round_id, user_id, video_id, raw_title)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(round_id, user_id) DO UPDATE SET 
                     video_id = excluded.video_id, 
                     raw_title = excluded.raw_title,
-                    clean_title = excluded.clean_title,
                     submitted_at = CURRENT_TIMESTAMP
-            """, (round_id, user_id, video_id, raw_title, clean_title))
+            """, (round_id, user_id, video_id, raw_title))
             return True
     except Exception as ex:
         logger.error("Error upserting submission: %s", ex)

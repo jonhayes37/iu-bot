@@ -215,3 +215,7 @@ def add_video_to_playlist(playlist_id: str, video_id: str) -> bool:
         else:
             logger.error("Failed to add video %s: %s", video_id, ex)
         return False
+
+def contains_youtube_url(text: str) -> bool:
+    """Checks if a string contains a valid YouTube URL."""
+    return bool(YT_REGEX.search(text))
