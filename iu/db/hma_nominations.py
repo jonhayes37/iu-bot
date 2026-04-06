@@ -2,8 +2,7 @@
 
 import os
 import sqlite3
-from datetime import datetime
-import zoneinfo
+from utils.end_of_year import get_current_award_year
 
 DB_PATH_HMA_NOMINATIONS = os.getenv('DB_PATH_HMA_NOMINATIONS')
 
@@ -18,15 +17,6 @@ def get_family_choices(family_id: str) -> list[tuple[str, str]]:
             ORDER BY name
         """, (family_id,))
         return cursor.fetchall()
-
-def get_current_award_year() -> int:
-    """Calculates the award year based on the Dec 1 - Nov 30 offset."""
-    # Eastern time zone handles Daylight Saving Time automatically
-    est_zone = zoneinfo.ZoneInfo("America/Toronto")
-    now = datetime.now(est_zone)
-
-    # If we hit December, nominations count towards the following year's awards
-    return now.year + 1 if now.month == 12 else now.year
 
 def add_nomination(user_id: int, category_id: str, text: str) -> int:
     """Saves the nomination securely and returns the calculated award year."""

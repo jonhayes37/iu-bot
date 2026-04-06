@@ -10,6 +10,7 @@ from commands.biases import (
     update_bias_group, update_ultimate_bias
 )
 from commands.bot import set_iu_status
+from commands.end_of_year import end_of_year_nominations
 from commands.hearts import check_balance, modify_balance, random_award
 from commands.hma_nominations import hma_nomination, hma_nomination_export
 from commands.listen_game import (
@@ -48,21 +49,25 @@ GUILD = os.getenv('DISCORD_GUILD')
 DB_PATH_BIASES = os.getenv('DB_PATH_BIASES')
 DB_PATH_BOT = os.getenv('DB_PATH_BOT')
 DB_PATH_HMA_NOMINATIONS = os.getenv('DB_PATH_HMA_NOMINATIONS')
+DB_PATH_HOF_NOMINATIONS = os.getenv('DB_PATH_HOF_NOMINATIONS')
 DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
 DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
 DB_PATH_RELEASES = os.getenv('DB_PATH_RELEASES')
 DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
+DB_PATH_TOP_SONGS = os.getenv('DB_PATH_TOP_SONGS')
 DB_PATH_TOURNAMENTS = os.getenv('DB_PATH_TOURNAMENTS')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_BIASES = os.path.join(BASE_DIR, "db/schema/biases.sql")
 SCHEMA_PATH_BOT = os.path.join(BASE_DIR, "db/schema/bot.sql")
 SCHEMA_PATH_HMA_NOMINATIONS = os.path.join(BASE_DIR, "db/schema/hma_nominations.sql")
+SCHEMA_PATH_HOF_NOMINATIONS = os.path.join(BASE_DIR, "db/schema/hof_nominations.sql")
 SCHEMA_PATH_LISTEN_GAME = os.path.join(BASE_DIR, "db/schema/listen_game.sql")
 SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
 SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "db/schema/merch.sql")
 SCHEMA_PATH_RELEASES = os.path.join(BASE_DIR, "db/schema/releases.sql")
 SCHEMA_PATH_ROLES = os.path.join(BASE_DIR, "db/schema/roles.sql")
+SCHEMA_PATH_TOP_SONGS = os.path.join(BASE_DIR, "db/schema/top_songs.sql")
 SCHEMA_PATH_TOURNAMENTS = os.path.join(BASE_DIR, "db/schema/tournaments.sql")
 
 # Connect to Discord
@@ -89,7 +94,8 @@ tree.add_command(set_iu_status)
 tree.add_command(check_balance)
 tree.add_command(modify_balance)
 tree.add_command(random_award)
-# HMA nominations
+# End of year
+tree.add_command(end_of_year_nominations)
 tree.add_command(hma_nomination)
 tree.add_command(hma_nomination_export)
 # Listen Game
@@ -267,11 +273,13 @@ def initialize_databases():
         (DB_PATH_BIASES, SCHEMA_PATH_BIASES),
         (DB_PATH_BOT, SCHEMA_PATH_BOT),
         (DB_PATH_HMA_NOMINATIONS, SCHEMA_PATH_HMA_NOMINATIONS),
+        (DB_PATH_HOF_NOMINATIONS, SCHEMA_PATH_HOF_NOMINATIONS),
         (DB_PATH_LISTEN_GAME, SCHEMA_PATH_LISTEN_GAME),
         (DB_PATH_LISTS, SCHEMA_PATH_LISTS),
         (DB_PATH_MERCH, SCHEMA_PATH_MERCH),
         (DB_PATH_RELEASES, SCHEMA_PATH_RELEASES),
         (DB_PATH_ROLES, SCHEMA_PATH_ROLES),
+        (DB_PATH_TOP_SONGS, SCHEMA_PATH_TOP_SONGS),
         (DB_PATH_TOURNAMENTS, SCHEMA_PATH_TOURNAMENTS)
     ]
 

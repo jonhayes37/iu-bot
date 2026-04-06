@@ -1,9 +1,9 @@
 """UI components and validation logic for list submissions."""
 
-import re
 import logging
 import discord
 from db.lists import get_event_details, save_submission, get_user_submission
+from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
 
@@ -34,7 +34,7 @@ class DynamicListModal(discord.ui.Modal):
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
         raw_list = self.submission_text.value
-        is_valid, error_msg, clean_text, urls = process_submission(raw_list, self.expected_count)
+        is_valid, error_msg, clean_text, urls = sanitize_list(raw_list, self.expected_count)
         if not is_valid:
             # Echo their submission so they don't lose it
             fail_msg = (
@@ -63,47 +63,6 @@ class DynamicListModal(discord.ui.Modal):
                 "Something went wrong saving your list to the database. Please ping an admin!",
                 ephemeral=True)
 
-def process_submission(raw_text: str, expected_count: int) -> tuple[bool, str, str, str]:
-    """
-    Parses the raw modal text. 
-    Returns: (is_valid, error_msg, cleaned_text, comma_separated_urls)
-    """
-    # Split by line break and remove completely empty lines
-    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
-
-    # Hard validation: Check the line count
-    if expected_count > 0 and len(lines) != expected_count:
-        return False, f"Oops! This event requires exactly {expected_count} items, but I counted {len(lines)}.", "", ""
-
-    cleaned_lines = []
-    extracted_urls = []
-    for i, line in enumerate(lines, start=1):
-        url_match = re.search(r'(https?://[^\s()]+)', line)
-        if url_match:
-            url = url_match.group(1)
-            extracted_urls.append(url)
-            # Remove the URL from the text, including optional surrounding parentheses
-            line = re.sub(r'\s*\(\s*https?://[^\s()]+\s*\)\s*', '', line)
-            line = re.sub(r'\s*https?://[^\s()]+\s*', '', line)
-        else:
-            extracted_urls.append("")
-
-        # Normalize varying slashes like "// ", " //", or "//" to exactly " // "
-        line = re.sub(r'\s*//\s*', ' // ', line)
-
-        # If there is no "//" but they used a spaced hyphen, convert only the first one
-        if ' // ' not in line and ' - ' in line:
-            line = line.replace(' - ', ' // ', 1)
-
-        # Normalize starting numbers from 1., 1), 1, etc
-        line = re.sub(r'^\d+[\.\)\-]?\s*', '', line)
-        cleaned_lines.append(f"{i}. {line}")
-
-    # 3. Reassemble the final strings for the database
-    final_text = "\n".join(cleaned_lines)
-    final_urls = ",".join(extracted_urls)
-
-    return True, "", final_text, final_urls
 
 async def handle_list_button_click(interaction: discord.Interaction, event_id: str):
     """Triggered when a user clicks the 'Submit' button on an announcement."""
