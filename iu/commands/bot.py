@@ -1,30 +1,34 @@
 """Bot management commands"""
-import typing
 
 import discord
+from discord import app_commands
+from db.bot import save_bot_status_db
+from utils.validation import validate_channel
 
-@discord.app_commands.command(name='set-status',
-              description="[Admin] Change IU's status message.")
-@discord.app_commands.describe(
-    status_text="The text to display after 'Listening to'"
+@app_commands.command(name='set-status', description="[Admin] Change IU's status message.")
+@app_commands.describe(
+    status_text="The text to display (leave blank to clear)",
+    days="How many days until this status expires (Default: 7)"
 )
-@discord.app_commands.default_permissions(administrator=True)
-async def set_iu_status(interaction: discord.Interaction, status_text: typing.Optional[str]):
-    """Changes the bot's status and logs the user who requested it."""
+@app_commands.default_permissions(administrator=True)
+async def set_iu_status(interaction: discord.Interaction, status_text: str, days: int = 7):
+    """Changes the bot's status and saves it for reconnections."""
 
-    if interaction.channel.name != 'sandbox':
-        await interaction.response.send_message(
-            "This command can only be used in the #sandbox channel.", 
-            ephemeral=True
-        )
+    validate_channel(interaction, 'sandbox')
+
+    # Save to the database
+    success = save_bot_status_db(status_text, days)
+    if not success:
+        await interaction.response.send_message("❌ Database error: Could not save the status.", ephemeral=True)
         return
 
-    # Update the bot's presence
+    # Update the active presence
     if status_text == "":
         await interaction.client.change_presence(status=discord.Status.online, activity=None)
+        await interaction.response.send_message("✅ IU's status has been cleared!")
     else:
         activity = discord.Activity(type=discord.ActivityType.listening, name=status_text)
         await interaction.client.change_presence(status=discord.Status.online, activity=activity)
-
-    # Log the change with the member tagged!
-    await interaction.response.send_message("<@1132749272488624189>'s status has been updated!")
+        await interaction.response.send_message(
+            f"✅ IU's status has been updated to `{status_text}` and will expire in {days} days."
+        )

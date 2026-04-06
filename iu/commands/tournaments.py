@@ -8,11 +8,12 @@ from tasks.tournaments import post_round_polls
 @discord.app_commands.command(name="new-tournament", description="[Admin] Creates a new bracket tournament.")
 @discord.app_commands.describe(
     title="The name of the tournament",
-    entrants_csv="Comma-separated list of tracks, perfectly ordered from Seed #1 to the lowest seed.",
+    description="A short description of the tournament's theme or rules.",
+    entrants="Comma-separated list of tracks, ordered from seed #1 to the lowest seed.",
     days_per_round="How long each voting round lasts (default 2)"
 )
 @discord.app_commands.default_permissions(administrator=True)
-async def new_tournament(interaction: discord.Interaction, title: str, entrants_csv: str, days_per_round: int = 2):
+async def new_tournament(interaction: discord.Interaction, title: str, description: str, entrants_csv: str, days_per_round: int = 2):
     await interaction.response.defer(ephemeral=True)
 
     # Parse and validate entrants
@@ -32,7 +33,7 @@ async def new_tournament(interaction: discord.Interaction, title: str, entrants_
         return
 
     # Create the Database State
-    success, t_id, error_msg = create_tournament(title, entrants, days_per_round)
+    success, t_id, error_msg = create_tournament(title, description, entrants, days_per_round)
 
     if not success:
         await interaction.followup.send(f"Database error while creating the tournament: {error_msg}")
@@ -43,8 +44,9 @@ async def new_tournament(interaction: discord.Interaction, title: str, entrants_
     tournaments_channel = discord.utils.get(interaction.guild.text_channels, name="tournaments")
     bracket_file = discord.File(fp=image_buffer, filename=f"bracket_{t_id}.png")
     msg = (
-        f"🏆 **{title} has begun!** 🏆\n\n"
-        f"The bracket has been seeded. Round 1 voting polls will appear below shortly!"
+        f"🏆 **{title} has begun!** 🏆\n"
+        f"{description}\n\n"
+        "Round 1 voting polls will appear below shortly!"
     )
 
     await tournaments_channel.send(content=msg, file=bracket_file)

@@ -25,6 +25,7 @@ from commands.merch import add_merch, view_merch, purchase, purchase_history
 from commands.releases import backfill_releases
 from commands.roles import register_role, sync_roles
 from commands.tournaments import force_close_round, new_tournament
+from db.bot import get_active_bot_status_db
 from db.tournaments import process_user_vote
 from db.merch import modify_db_balance
 from tasks.listen_game import check_listen_game_reminders
@@ -45,6 +46,7 @@ logger = logging.getLogger('iu-bot')
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 DB_PATH_BIASES = os.getenv('DB_PATH_BIASES')
+DB_PATH_BOT = os.getenv('DB_PATH_BOT')
 DB_PATH_HMA_NOMINATIONS = os.getenv('DB_PATH_HMA_NOMINATIONS')
 DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
 DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
@@ -54,6 +56,7 @@ DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
 DB_PATH_TOURNAMENTS = os.getenv('DB_PATH_TOURNAMENTS')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_BIASES = os.path.join(BASE_DIR, "db/schema/biases.sql")
+SCHEMA_PATH_BOT = os.path.join(BASE_DIR, "db/schema/bot.sql")
 SCHEMA_PATH_HMA_NOMINATIONS = os.path.join(BASE_DIR, "db/schema/hma_nominations.sql")
 SCHEMA_PATH_LISTEN_GAME = os.path.join(BASE_DIR, "db/schema/listen_game.sql")
 SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
@@ -142,6 +145,14 @@ async def on_ready():
         tree.copy_global_to(guild=guild)
         await tree.sync(guild=guild)
         logger.info("Command tree synced to guild %s", GUILD)
+
+        # Set the bot's status
+        saved_status = get_active_bot_status_db()
+        if saved_status:
+            activity = discord.Activity(type=discord.ActivityType.listening, name=saved_status)
+            await client.change_presence(status=discord.Status.online, activity=activity)
+        else:
+            await client.change_presence(status=discord.Status.online, activity=None)
     else:
         logger.info("⚠️ Global sync triggered (May take 24 hours).")
         await tree.sync()
@@ -253,6 +264,7 @@ def initialize_databases():
     logger.info("Initializing databases...")
     db_configs = [
         (DB_PATH_BIASES, SCHEMA_PATH_BIASES),
+        (DB_PATH_BOT, SCHEMA_PATH_BOT),
         (DB_PATH_HMA_NOMINATIONS, SCHEMA_PATH_HMA_NOMINATIONS),
         (DB_PATH_LISTEN_GAME, SCHEMA_PATH_LISTEN_GAME),
         (DB_PATH_LISTS, SCHEMA_PATH_LISTS),

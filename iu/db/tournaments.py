@@ -28,7 +28,7 @@ def _get_perfect_seeding(num_entrants: int) -> List[int]:
         matches = out
     return matches
 
-def create_tournament(name: str, entrants: List[str], days_per_round: int) -> Tuple[bool, str, str]:
+def create_tournament(name: str, description: str, entrants: List[str], days_per_round: int) -> Tuple[bool, str, str]:
     """
     Creates a tournament, entrants, and the linked match tree in one transaction.
     Returns: (Success, Tournament ID, Error Message)
@@ -43,9 +43,9 @@ def create_tournament(name: str, entrants: List[str], days_per_round: int) -> Tu
 
             # 1. Create the parent tournament record
             cursor.execute("""
-                INSERT INTO tournaments (tournament_id, name, days_per_round)
-                VALUES (?, ?, ?)
-            """, (tournament_id, name, days_per_round))
+                INSERT INTO tournaments (tournament_id, name, description, days_per_round)
+                VALUES (?, ?, ?, ?)
+            """, (tournament_id, name, description, days_per_round))
 
             # 2. Insert entrants and map their seeds to their new DB IDs
             seed_to_entrant_id = {}
