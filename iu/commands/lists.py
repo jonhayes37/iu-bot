@@ -155,7 +155,38 @@ def _process_export_data(event_name: str, submissions: list[dict]) -> tuple[str,
 
                         # Extract the timestamp (matches ?t=58s, &t=1m2s, ?t=123, etc.)
                         time_match = re.search(r'[?&]t=([0-9hms]+)', url)
-                        timestamp = f"(starts at {time_match.group(1)})" if time_match else ""
-                        editor_buffer.write(f"{pick_text}\n-> {url}{timestamp}\n\n")
+                        timestamp_suffix = ""
+
+                        if time_match:
+                            raw_t = time_match.group(1)
+                            total_seconds = 0
+
+                            # Parse pure seconds vs combined formats (139 vs 1m2s)
+                            if raw_t.isdigit():
+                                total_seconds = int(raw_t)
+                            else:
+                                h_match = re.search(r'(\d+)h', raw_t)
+                                m_match = re.search(r'(\d+)m', raw_t)
+                                s_match = re.search(r'(\d+)s', raw_t)
+                                if h_match:
+                                    total_seconds += int(h_match.group(1)) * 3600
+                                if m_match:
+                                    total_seconds += int(m_match.group(1)) * 60
+                                if s_match:
+                                    total_seconds += int(s_match.group(1))
+
+                            # Format into MM:SS or H:MM:SS
+                            hours, remainder = divmod(total_seconds, 3600)
+                            minutes, seconds = divmod(remainder, 60)
+
+                            if hours > 0:
+                                formatted_time = f"{hours}:{minutes:02d}:{seconds:02d}"
+                            else:
+                                formatted_time = f"{minutes}:{seconds:02d}"
+
+                            # The leading space is explicitly added here
+                            timestamp_suffix = f" (starts at {formatted_time})"
+
+                        editor_buffer.write(f"{pick_text}\n-> {url}{timestamp_suffix}\n\n")
 
     return stats_buffer.getvalue(), editor_buffer.getvalue()
