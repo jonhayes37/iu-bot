@@ -10,6 +10,8 @@ from commands.biases import (
     update_bias_group, update_ultimate_bias
 )
 from commands.bot import set_iu_status
+from commands.hearts import check_balance, modify_balance, random_award
+from commands.hma_nominations import hma_nomination, hma_nomination_export
 from commands.listen_game import (
     listen_game_create, listen_game_start, listen_game_set_theme, submit_song,
     listen_game_submit_ranking
@@ -19,8 +21,6 @@ from commands.listen_game_gm import (
     listen_game_gm_remove_player, listen_game_gm_force_start_round, listen_game_gm_force_submit
 )
 from commands.lists import create_list_event, close_list_event, export_lists
-from commands.hearts import check_balance, modify_balance, random_award
-from commands.hma_nominations import hma_nomination
 from commands.merch import add_merch, view_merch, purchase, purchase_history
 from commands.releases import backfill_releases
 from commands.roles import register_role, sync_roles
@@ -91,6 +91,7 @@ tree.add_command(modify_balance)
 tree.add_command(random_award)
 # HMA nominations
 tree.add_command(hma_nomination)
+tree.add_command(hma_nomination_export)
 # Listen Game
 tree.add_command(listen_game_create)
 tree.add_command(listen_game_start)

@@ -2,10 +2,9 @@
 import io
 import discord
 from db.hma_nominations import (
-    add_nomination, get_family_choices,
-    get_yearly_export_data, get_current_award_year
+    get_family_choices, get_yearly_export_data, get_current_award_year
 )
-from services.youtube import contains_youtube_url
+from ui.hma_nominations import MultiNominationView
 
 
 def build_dropdown(family_id: str) -> list[discord.app_commands.Choice[str]]:
@@ -15,75 +14,16 @@ def build_dropdown(family_id: str) -> list[discord.app_commands.Choice[str]]:
     # We slice [:25] just in case the DB ever exceeds it, preventing a bot crash.
     return [discord.app_commands.Choice(name=name, value=cat_id) for cat_id, name in items][:25]
 
-
 @discord.app_commands.command(name='hma-nomination', description="Submit a nomination for the HallyU Music Awards!")
 @discord.app_commands.describe(
-    nominee="Who or what are you nominating? (e.g., 'IVE - HEYA', a YouTube link)",
-    daesang="Daesang Awards (Optional)",
-    bonsang="Bonsang Awards (Optional)",
-    fun="Fun Awards (Optional)"
+    nominee="Who or what are you nominating? (e.g., 'IVE - HEYA', a YouTube link)"
 )
-@discord.app_commands.choices(
-    # These functions run once when the bot boots up!
-    daesang=build_dropdown('daesang'),
-    bonsang=build_dropdown('bonsang'),
-    fun=build_dropdown('fun')
-)
-async def hma_nomination(
-    interaction: discord.Interaction,
-    nominee: str,
-    daesang: discord.app_commands.Choice[str] = None,
-    bonsang: discord.app_commands.Choice[str] = None,
-    fun: discord.app_commands.Choice[str] = None
-):
+async def hma_nomination(interaction: discord.Interaction, nominee: str):
     """The Discord command logic for multi-category HMA nominations."""
 
-    # Validation: Ensure they picked at least one category
-    selected_categories = [cat for cat in (daesang, bonsang, fun) if cat is not None]
-    if not selected_categories:
-        await interaction.response.send_message(
-            "❌ You must select at least one award category from the dropdowns to submit your nomination!", 
-            ephemeral=True
-        )
-        return
-
-    # Validate a YouTube URL exists for covers
-    cover_category_ids = {'best_vocal_cover', 'best_dance_cover'}
-    requires_url = any(cat.value in cover_category_ids for cat in selected_categories)
-    if requires_url:
-        if contains_youtube_url(nominee):
-            await interaction.response.send_message(
-                "❌ Nominations for **Best Vocal Cover** and **Best Dance Cover** must include a valid YouTube link!", 
-                ephemeral=True
-            )
-            return
-
-    # Process the nominations
-    try:
-        award_year = None
-        category_names = []
-
-        # Loop through whatever they selected and add a database row for each
-        for category in selected_categories:
-            award_year = add_nomination(interaction.user.id, category.value, nominee)
-            category_names.append(f"• {category.name}")
-
-    except Exception as ex:
-        await interaction.response.send_message(f"❌ Database error: {ex}", ephemeral=True)
-        return
-
-    # Format the confirmation message
-    formatted_categories = "\n".join(category_names)
-
-    embed = discord.Embed(
-        title="🏆 Nomination Submitted!",
-        description=f"Your nomination for the **{award_year} HallyU Music Awards** has been recorded.",
-        color=discord.Color.gold()
-    )
-    embed.add_field(name="Nominee", value=f"**{nominee}**", inline=False)
-    embed.add_field(name="Categories", value=formatted_categories, inline=False)
-
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    view = MultiNominationView(nominee)
+    msg = f"Nominating **{nominee}**\nSelect all award categories below:"
+    await interaction.response.send_message(content=msg, view=view, ephemeral=True)
 
 @discord.app_commands.command(name='hma-nomination-export',
                               description="[Admin] Export all HMA nominations to a text file.")

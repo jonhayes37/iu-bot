@@ -13,11 +13,11 @@ from tasks.tournaments import post_round_polls
     days_per_round="How long each voting round lasts (default 2)"
 )
 @discord.app_commands.default_permissions(administrator=True)
-async def new_tournament(interaction: discord.Interaction, title: str, description: str, entrants_csv: str, days_per_round: int = 2):
+async def new_tournament(interaction: discord.Interaction, title: str, description: str, entrants: str, days_per_round: int = 2):
     await interaction.response.defer(ephemeral=True)
 
     # Parse and validate entrants
-    entrants = [e.strip() for e in entrants_csv.split(',') if e.strip()]
+    entrants = [e.strip() for e in entrants.split(',') if e.strip()]
     num_entrants = len(entrants)
 
     # Minimum size check

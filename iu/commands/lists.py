@@ -93,7 +93,7 @@ async def close_list_event(
         await interaction.followup.send("Event closed, but failed to edit the message.", ephemeral=True)
 
 @discord.app_commands.command(name='export-lists',
-              description="[Admin] Export all list submissions for a specific event to .csv and .txt files.")
+              description="[Admin] Export all list submissions for a specific event to .txt files.")
 @discord.app_commands.default_permissions(administrator=True)
 async def export_lists(interaction: discord.Interaction, event_id: str):
     """Fetches data, formats it via the helper, and uploads the files to Discord."""
@@ -110,20 +110,20 @@ async def export_lists(interaction: discord.Interaction, event_id: str):
         return
 
     event_name = event_details.get('event_name', event_id)
-    csv_string, txt_string = _process_export_data(event_name, submissions)
+    lists_string, url_string = _process_export_data(event_name, submissions)
 
-    csv_file = discord.File(
-        fp=io.BytesIO(csv_string.encode('utf-8')),
-        filename=f"{event_id}_stats.csv"
+    lists_file = discord.File(
+        fp=io.BytesIO(lists_string.encode('utf-8')),
+        filename=f"{event_id}_stats.txt"
     )
-    txt_file = discord.File(
-        fp=io.BytesIO(txt_string.encode('utf-8')),
+    urls_file = discord.File(
+        fp=io.BytesIO(url_string.encode('utf-8')),
         filename=f"{event_id}_urls.txt"
     )
 
     await interaction.followup.send(
         content=f"Exported **{len(submissions)}** submissions for `{event_id}`!",
-        files=[csv_file, txt_file]
+        files=[lists_file, urls_file]
     )
 
 def _process_export_data(event_name: str, submissions: list[dict]) -> tuple[str, str]:
