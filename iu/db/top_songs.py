@@ -17,7 +17,7 @@ def get_current_award_year() -> int:
     return now.year + 1 if now.month == 12 else now.year
 
 def save_top_songs(
-    user_id: int, username: str, 
+    user_id: int, username: str,
     t25_raw: str, t25_clean: str, t25_urls: str,
     hms_raw: str, hms_clean: str, hms_urls: str
 ) -> int:

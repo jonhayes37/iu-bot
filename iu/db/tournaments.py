@@ -225,10 +225,15 @@ def get_expired_unresolved_matches() -> list[dict] | None:
             cursor = conn.cursor()
             now_iso = datetime.now(timezone.utc).isoformat()
             cursor.execute("""
-                SELECT match_id, tournament_id, round_num, match_position, message_id,
-                       entrant_a_id, entrant_b_id
-                FROM tournament_matches
-                WHERE end_timestamp <= ? AND winner_id IS NULL AND message_id IS NOT NULL
+                SELECT 
+                    m.match_id, m.tournament_id, m.round_num, m.match_position, m.message_id,
+                    m.entrant_a_id, m.entrant_b_id,
+                    e1.seed AS entrant_a_seed,
+                    e2.seed AS entrant_b_seed
+                FROM tournament_matches m
+                LEFT JOIN tournament_entrants e1 ON m.entrant_a_id = e1.entrant_id
+                LEFT JOIN tournament_entrants e2 ON m.entrant_b_id = e2.entrant_id
+                WHERE m.end_timestamp <= ? AND m.winner_id IS NULL AND m.message_id IS NOT NULL
             """, (now_iso,))
 
             return [dict(row) for row in cursor.fetchall()]

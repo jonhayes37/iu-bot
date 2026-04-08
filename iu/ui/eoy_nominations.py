@@ -2,7 +2,7 @@
 import logging
 
 import discord
-from db.hof_nominations import save_hof_nomination, get_hof_nomination
+from db.hall_of_fame import save_hof_nomination, get_hof_nomination
 from db.top_songs import save_top_songs, get_user_top_songs
 from utils.validation import sanitize_list
 
@@ -83,7 +83,7 @@ class Top25Modal(discord.ui.Modal):
 
             embed = discord.Embed(
                 title=f"🎵 {self.year} Top 25 Submitted!",
-                description=f"Your Top 25 Songs of **{self.year}** has been submitted! "
+                description=f"Your **Top 25 Songs of {self.year}** has been submitted!\n\n"
                     "Need to make a change? Just click the button again to edit your submission!",
                 color=discord.Color.green()
             )
@@ -120,7 +120,7 @@ class HoFModal(discord.ui.Modal):
             )
             embed = discord.Embed(
                 title="🏛️ HallyU Hall of Fame Nominations Submitted!",
-                description=f"Your ballot for the **{award_year} Class** has been recorded.\n\n"
+                description=f"Your nominees for the **{award_year} HallyU Hall of Fame** have been recorded.\n\n"
                             "Need to make a change? Just click the button again to edit your submission!",
                 color=discord.Color.gold()
             )
@@ -140,14 +140,16 @@ class EOYNominationsHub(discord.ui.View):
 
         # Dynamically overwrite the button labels after they are created by the decorators
         for child in self.children:
-            if getattr(child, "custom_id", None) == "btn_eoy_top25":
+            if getattr(child, "custom_id", None) == "btn_top25":
                 child.label = f"Submit {self.year} Top 25 Songs"
-            elif getattr(child, "custom_id", None) == "btn_eoy_hof":
+                child.custom_id = f"btn_top25_{self.year}"
+            elif getattr(child, "custom_id", None) == "btn_nom_hof":
                 child.label = f"{self.year} HallyU Hall of Fame"
+                child.custom_id = f"btn_nom_hof_{self.year}"
 
     @discord.ui.button(label="Top 25 Songs",
                        style=discord.ButtonStyle.primary,
-                       custom_id="btn_eoy_top25",
+                       custom_id="btn_top25",
                        emoji="🎵")
     async def btn_top_25(self, interaction: discord.Interaction, _: discord.ui.Button):
         existing_data = get_user_top_songs(interaction.user.id)
@@ -159,7 +161,7 @@ class EOYNominationsHub(discord.ui.View):
 
     @discord.ui.button(label="HallyU Hall of Fame",
                        style=discord.ButtonStyle.success,
-                       custom_id="btn_eoy_hof",
+                       custom_id="btn_nom_hof",
                        emoji="🏛️")
     async def btn_hof(self, interaction: discord.Interaction, _: discord.ui.Button):
         existing_text = get_hof_nomination(interaction.user.id)

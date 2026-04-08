@@ -2,9 +2,11 @@
 import io
 import discord
 from db.top_songs import get_all_top_songs
-from db.hof_nominations import get_all_hof_nominations
+from db.hall_of_fame import get_all_hof_nominations
 from ui.eoy_nominations import EOYNominationsHub
+from ui.eoy_voting import EOYVotingHub
 from utils.end_of_year import get_current_award_year
+
 
 @discord.app_commands.command(name='end-of-year-nominations',
                               description="[Admin] Posts the End of Year nominations buttons.")
@@ -95,3 +97,28 @@ async def export_eoy_nominations(interaction: discord.Interaction):
         f"Hall of Fame ballots for **{year}**!",
         files=files
     )
+
+
+@discord.app_commands.command(name='end-of-year-voting',
+                              description="[Admin] Starts End of Year Voting.")
+@discord.app_commands.default_permissions(administrator=True)
+async def end_of_year_voting(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
+    year = get_current_award_year()
+    embed = discord.Embed(
+        title=f"{year} End of Year Voting is Live!",
+        description=(
+            "The nominations are in, and it's time to cast your official ballots for the "
+            f"**{year} HallyU Music Awards** and the **{year} HallyU Hall of Fame** inductees!\n\n"
+            "**Voting is done by a ranked ballot - submit your top 3 choices!**\n"
+            "• 🥇 1st Choice = 3 Points\n"
+            "• 🥈 2nd Choice = 2 Points\n"
+            "• 🥉 3rd Choice = 1 Point\n\n"
+            "Click the buttons below to vote. You can change your votes at any time before the deadline!"
+        ),
+        color=discord.Color.blue()
+    )
+
+    await interaction.channel.send(embed=embed, view=EOYVotingHub(year))
+    await interaction.followup.send("End of Year Voting posted successfully!")

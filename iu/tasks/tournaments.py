@@ -50,8 +50,6 @@ async def post_round_polls(channel: discord.TextChannel, tournament_id: str, rou
             logger.error("Failed to post poll for match %s: %s", match['match_id'], ex)
 
 
-logger = logging.getLogger('iu-bot')
-
 @tasks.loop(minutes=5)
 async def tournament_resolution_loop(client: discord.Client, guild_id: int):
     """Wakes up every 5 minutes to resolve expired tournament polls."""

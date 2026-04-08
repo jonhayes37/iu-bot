@@ -10,9 +10,13 @@ from commands.biases import (
     update_bias_group, update_ultimate_bias
 )
 from commands.bot import set_iu_status
-from commands.end_of_year import end_of_year_nominations
+from commands.end_of_year import end_of_year_nominations, end_of_year_voting, export_eoy_nominations
+from commands.hall_of_fame import hall_of_fame_set_nominees
 from commands.hearts import check_balance, modify_balance, random_award
-from commands.hma_nominations import hma_nomination, hma_nomination_export
+from commands.hmas import (
+    hma_nomination, hma_nomination_export, hma_set_nominees,
+    hma_suggestions_export, end_of_year_hma_suggestions
+)
 from commands.listen_game import (
     listen_game_create, listen_game_start, listen_game_set_theme, submit_song,
     listen_game_submit_ranking
@@ -38,7 +42,11 @@ from triggers.message import check_message_for_replies, respond_to_ping
 from triggers.releases import store_new_release
 from triggers.roles import handle_role_assignment
 from triggers.scheduled_events import process_event
+from ui.eoy_nominations import EOYNominationsHub
+from ui.eoy_voting import EOYVotingHub
+from ui.hma_suggestions import HMASuggestionsHub
 from ui.lists import handle_list_button_click
+from utils.end_of_year import get_current_award_year
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('iu-bot')
@@ -48,8 +56,8 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 DB_PATH_BIASES = os.getenv('DB_PATH_BIASES')
 DB_PATH_BOT = os.getenv('DB_PATH_BOT')
-DB_PATH_HMA_NOMINATIONS = os.getenv('DB_PATH_HMA_NOMINATIONS')
-DB_PATH_HOF_NOMINATIONS = os.getenv('DB_PATH_HOF_NOMINATIONS')
+DB_PATH_HMAS = os.getenv('DB_PATH_HMAS')
+DB_PATH_HALL_OF_FAME = os.getenv('DB_PATH_HALL_OF_FAME')
 DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
 DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
 DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
@@ -60,8 +68,8 @@ DB_PATH_TOURNAMENTS = os.getenv('DB_PATH_TOURNAMENTS')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH_BIASES = os.path.join(BASE_DIR, "db/schema/biases.sql")
 SCHEMA_PATH_BOT = os.path.join(BASE_DIR, "db/schema/bot.sql")
-SCHEMA_PATH_HMA_NOMINATIONS = os.path.join(BASE_DIR, "db/schema/hma_nominations.sql")
-SCHEMA_PATH_HOF_NOMINATIONS = os.path.join(BASE_DIR, "db/schema/hof_nominations.sql")
+SCHEMA_PATH_HMAS = os.path.join(BASE_DIR, "db/schema/hmas.sql")
+SCHEMA_PATH_HALL_OF_FAME = os.path.join(BASE_DIR, "db/schema/hall_of_fame.sql")
 SCHEMA_PATH_LISTEN_GAME = os.path.join(BASE_DIR, "db/schema/listen_game.sql")
 SCHEMA_PATH_LISTS = os.path.join(BASE_DIR, "db/schema/lists.sql")
 SCHEMA_PATH_MERCH = os.path.join(BASE_DIR, "db/schema/merch.sql")
@@ -95,7 +103,13 @@ tree.add_command(check_balance)
 tree.add_command(modify_balance)
 tree.add_command(random_award)
 # End of year
+tree.add_command(end_of_year_hma_suggestions)
+tree.add_command(hma_suggestions_export)
 tree.add_command(end_of_year_nominations)
+tree.add_command(end_of_year_voting)
+tree.add_command(export_eoy_nominations)
+tree.add_command(hall_of_fame_set_nominees)
+tree.add_command(hma_set_nominees)
 tree.add_command(hma_nomination)
 tree.add_command(hma_nomination_export)
 # Listen Game
@@ -132,6 +146,16 @@ tree.add_command(force_close_round)
 @client.event
 async def on_ready():
     logger.info('%s has connected to Discord!', client.user)
+
+    # Attach UI views
+    try:
+        current_year = get_current_award_year()
+        client.add_view(EOYNominationsHub(current_year))
+        client.add_view(EOYVotingHub(current_year))
+        client.add_view(HMASuggestionsHub(current_year))
+        logger.info("Persistent views successfully restored.")
+    except Exception as e:
+        logger.error("Failed to restore persistent views: %s", e)
 
     if GUILD:
         # Start the background tasks
@@ -272,8 +296,8 @@ def initialize_databases():
     db_configs = [
         (DB_PATH_BIASES, SCHEMA_PATH_BIASES),
         (DB_PATH_BOT, SCHEMA_PATH_BOT),
-        (DB_PATH_HMA_NOMINATIONS, SCHEMA_PATH_HMA_NOMINATIONS),
-        (DB_PATH_HOF_NOMINATIONS, SCHEMA_PATH_HOF_NOMINATIONS),
+        (DB_PATH_HMAS, SCHEMA_PATH_HMAS),
+        (DB_PATH_HALL_OF_FAME, SCHEMA_PATH_HALL_OF_FAME),
         (DB_PATH_LISTEN_GAME, SCHEMA_PATH_LISTEN_GAME),
         (DB_PATH_LISTS, SCHEMA_PATH_LISTS),
         (DB_PATH_MERCH, SCHEMA_PATH_MERCH),

@@ -1,7 +1,7 @@
 """UI view for HMA nominations"""
 
 import discord
-from db.hma_nominations import add_nomination, get_family_choices
+from db.hmas import add_nomination, get_family_choices
 from services.youtube import contains_youtube_url
 
 class MultiNominationView(discord.ui.View):

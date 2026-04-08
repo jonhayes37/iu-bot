@@ -65,3 +65,32 @@ INSERT OR IGNORE INTO hma_categories (category_id, family_id, name, is_active) V
 ('concept_change', 'fun', 'Biggest Concept Change', 1),
 ('crazy_lyric', 'fun', 'Craziest English Lyric', 1),
 ('unique_mv', 'fun', 'Most Unique Music Video Concept', 1);
+
+CREATE TABLE IF NOT EXISTS hma_final_nominees (
+    category_id TEXT NOT NULL,
+    award_year INTEGER NOT NULL,
+    nominee_name TEXT NOT NULL,
+    PRIMARY KEY (category_id, award_year, nominee_name),
+    FOREIGN KEY (category_id) REFERENCES hma_categories(category_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS hma_votes (
+    user_id INTEGER NOT NULL,
+    award_year INTEGER NOT NULL,
+    category_id TEXT NOT NULL,
+    first_choice TEXT NOT NULL,
+    second_choice TEXT NOT NULL,
+    third_choice TEXT NOT NULL,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, award_year, category_id)
+);
+
+CREATE TABLE IF NOT EXISTS hma_category_suggestions (
+    user_id INTEGER NOT NULL,
+    award_year INTEGER NOT NULL,
+    username TEXT NOT NULL,
+    new_categories TEXT,
+    dropped_categories TEXT,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, award_year)
+);
