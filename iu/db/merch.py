@@ -251,3 +251,44 @@ def get_all_item_owners(item_id: str) -> list[tuple[int, int]]:
             WHERE item_id = ? AND quantity_owned > 0
         """, (clean_item_id,))
         return cursor.fetchall()
+
+def check_user_owns_item(user_id: int, item_id: str) -> bool:
+    """Returns True if the user owns at least one of the specified item."""
+    clean_item_id = item_id.upper()
+    with sqlite3.connect(DB_PATH_MERCH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT quantity_owned FROM user_inventory 
+            WHERE user_id = ? AND item_id = ?
+        """, (user_id, clean_item_id))
+        row = cursor.fetchone()
+        return row is not None and row[0] > 0
+
+def consume_item(user_id: int, item_id: str) -> bool:
+    """Deducts one from the user's inventory for the given item. Returns True on success."""
+    clean_item_id = item_id.upper()
+    with sqlite3.connect(DB_PATH_MERCH) as conn:
+        cursor = conn.cursor()
+
+        # Verify they actually have it before trying to subtract
+        cursor.execute("""
+            SELECT quantity_owned FROM user_inventory 
+            WHERE user_id = ? AND item_id = ?
+        """, (user_id, clean_item_id))
+        row = cursor.fetchone()
+
+        if not row or row[0] <= 0:
+            return False
+
+        # Deduct the item
+        cursor.execute("""
+            UPDATE user_inventory 
+            SET quantity_owned = quantity_owned - 1 
+            WHERE user_id = ? AND item_id = ?
+        """, (user_id, clean_item_id))
+
+        # Clean up zero-quantity records to keep the DB lean
+        cursor.execute("DELETE FROM user_inventory WHERE quantity_owned <= 0")
+        conn.commit()
+
+        return True

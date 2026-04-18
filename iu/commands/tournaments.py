@@ -9,15 +9,16 @@ from tasks.tournaments import post_round_polls
 @discord.app_commands.describe(
     title="The name of the tournament",
     description="A short description of the tournament's theme or rules.",
-    entrants="Comma-separated list of tracks, ordered from seed #1 to the lowest seed.",
+    entrants="Pipe-separated list of tracks, ordered from seed #1 to the lowest seed.",
     days_per_round="How long each voting round lasts (default 2)"
 )
 @discord.app_commands.default_permissions(administrator=True)
-async def new_tournament(interaction: discord.Interaction, title: str, description: str, entrants: str, days_per_round: int = 2):
+async def new_tournament(interaction: discord.Interaction, title: str, description: str,
+                         entrants: str, days_per_round: int = 2):
     await interaction.response.defer(ephemeral=True)
 
     # Parse and validate entrants
-    entrants = [e.strip() for e in entrants.split(',') if e.strip()]
+    entrants = [e.strip() for e in entrants.split('|') if e.strip()]
     num_entrants = len(entrants)
 
     # Minimum size check
@@ -28,7 +29,7 @@ async def new_tournament(interaction: discord.Interaction, title: str, descripti
     # Bitwise Power-of-Two check
     if (num_entrants & (num_entrants - 1)) != 0:
         await interaction.followup.send(
-            f"Tournaments require a power oftwo (4, 8, 16, 32), but you provided **{num_entrants}**."
+            f"Tournaments require a power of two (4, 8, 16, 32), but you provided **{num_entrants}**."
         )
         return
 
