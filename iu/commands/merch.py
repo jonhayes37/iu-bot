@@ -241,16 +241,17 @@ async def draw_raffle(interaction: discord.Interaction):
             await interaction.response.send_message("Nobody has bought any raffle tickets yet!", ephemeral=True)
             return
 
-        # Build the weighted pool
-        # This repeats the user's ID in the list for every ticket they own
-        ticket_pool = []
-        total_tickets = 0
-        for user_id, quantity in ticket_data:
-            ticket_pool.extend([user_id] * quantity)
-            total_tickets += quantity
+        # Create parallel lists for weighted random selection
+        user_ids = [user_id for user_id, _ in ticket_data]
+        weights = [quantity for _, quantity in ticket_data]
+        total_tickets = sum(weights)
 
         # Pick a winner
-        winner_id = random.choice(ticket_pool)
+        # The `k=1` parameter returns a list with one item, so we select it.
+        if not user_ids: # Should be caught by the ticket_data check, but for safety
+            await interaction.response.send_message("Raffle pool is empty.", ephemeral=True)
+            return
+        winner_id = random.choices(user_ids, weights=weights, k=1)[0]
         logger.info("Raffle winner: %s", winner_id)
 
         # Wipe the inventories for RAFFLE so everyone is back to 0

@@ -27,6 +27,7 @@ from commands.listen_game_gm import (
 )
 from commands.lists import create_list_event, close_list_event, export_lists
 from commands.merch import add_merch, view_merch, purchase, purchase_history
+from commands.potpourri import create_potpourri_playlist
 from commands.releases import backfill_releases
 from commands.roles import register_role, sync_roles
 from commands.tournaments import force_close_round, new_tournament
@@ -134,6 +135,8 @@ tree.add_command(add_merch)
 tree.add_command(purchase)
 tree.add_command(purchase_history)
 tree.add_command(view_merch)
+# Potpourri
+tree.add_command(create_potpourri_playlist)
 # Releases
 tree.add_command(backfill_releases)
 # Roles

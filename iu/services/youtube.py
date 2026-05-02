@@ -34,26 +34,42 @@ def get_yt_service() -> Any:
     creds = Credentials.from_authorized_user_file(TOKEN_PATH, ['https://www.googleapis.com/auth/youtube'])
     return build('youtube', 'v3', credentials=creds)
 
-def create_releases_playlist(year: int) -> str | None:
-    """Creates an unlisted YouTube playlist and returns its ID."""
+def create_playlist(title: str, description: str = "") -> str | None:
+    """Creates an unlisted YouTube playlist with a custom title and returns its ID."""
     youtube = get_yt_service()
     if not youtube:
         return None
 
-    title = f"{year} K-Pop Releases"
     body = {
-        "snippet": {"title": title, "description": f"Automated playlist for {year} K-Pop releases."},
+        "snippet": {"title": title, "description": description},
         "status": {"privacyStatus": "unlisted"}
     }
 
     try:
         req = youtube.playlists().insert(part="snippet,status", body=body) # pylint: disable=no-member
         response = req.execute()
-        logger.info("Created playlist '%s' with ID %s:\n%s", title, response.get("id"), response)
+        logger.info("Created playlist '%s' with ID %s", title, response.get("id"))
         return response.get("id")
     except HttpError as ex:
-        logger.error("Failed to create YouTube playlist: %s", ex)
+        error_reason = ex.error_details[0].get('reason') if ex.error_details else "Unknown"
+        if error_reason == "quotaExceeded":
+            logger.warning("YouTube API Quota exceeded during playlist creation!")
+            raise QuotaExceededError(ex) from ex
+        logger.error("Failed to create custom YouTube playlist: %s", ex)
         return None
+
+def create_releases_playlist(year: int) -> str | None:
+    """Creates an unlisted YouTube playlist for the given year and returns its ID."""
+    title = f"{year} K-Pop Releases"
+    description = f"Automated playlist for {year} K-Pop releases."
+    return create_playlist(title, description)
+
+
+def create_listen_game_playlist(host_name: str) -> str | None:
+    """Creates an unlisted playlist for a Listen Game round."""
+    title = f"Listen Game Round - {host_name}"
+    description = "Automated playlist for the server Listen Game."
+    return create_playlist(title, description)
 
 def get_video_publish_date(video_id: str) -> datetime | None:
     """Fetches the publish date of a video and returns a datetime object."""
@@ -163,30 +179,6 @@ def get_playlist_video_ids(playlist_id: str) -> set[str]:
     except HttpError as ex:
         logger.error("Failed to fetch playlist items for %s: %s", playlist_id, ex)
         return set()
-
-def create_listen_game_playlist(host_name: str) -> str | None:
-    """Creates an unlisted playlist for a Listen Game round."""
-    youtube = get_yt_service()
-    if not youtube:
-        return None
-
-    title = f"Listen Game Round - {host_name}"
-    body = {
-        "snippet": {"title": title, "description": "Automated playlist for the server Listen Game."},
-        "status": {"privacyStatus": "unlisted"}
-    }
-
-    try:
-        req = youtube.playlists().insert(part="snippet,status", body=body) # pylint: disable=no-member
-        response = req.execute()
-        return response.get("id")
-    except HttpError as ex:
-        error_reason = ex.error_details[0].get('reason') if ex.error_details else "Unknown"
-        if error_reason == "quotaExceeded":
-            logger.warning("YouTube API Quota exceeded during playlist creation!")
-            raise QuotaExceededError(ex) from ex
-        logger.error("Failed to create Listen Game playlist: %s", ex)
-        return None
 
 def add_video_to_playlist(playlist_id: str, video_id: str) -> bool:
     """Adds a video to the specified playlist. Returns True if successful."""
