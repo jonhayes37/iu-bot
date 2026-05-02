@@ -29,9 +29,8 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
         return
 
     try:
-        # Read the file directly from Discord's CDN into memory
         csv_bytes = await file.read()
-        csv_text = csv_bytes.decode('utf-8-sig') # utf-8-sig handles potential BOM characters from Excel
+        csv_text = csv_bytes.decode('utf-8-sig')
         reader = csv.DictReader(io.StringIO(csv_text))
         # Dynamically find the right columns just in case the form question changes slightly
         name_col = next((col for col in reader.fieldnames if 'name' in col.lower() or 'discord' in col.lower()), None)
@@ -49,11 +48,12 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
 
             if user and link:
                 user = user.strip()
+                link = link.strip()
                 video_id = extract_video_id(link)
                 if video_id:
                     if user not in user_links:
                         user_links[user] = []
-                    user_links[user].append(video_id)
+                    user_links[user].append({"id": video_id, "url": link})
 
         if not user_links:
             await interaction.followup.send("❌ No valid YouTube links were found in the uploaded file.")
@@ -78,26 +78,51 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
                 "❌ Failed to create the YouTube playlist. Check your API Quota and bot logs.")
             return
 
-        # Populate the Playlist
+        # Populate the Playlist and Track Failures
         added_count = 0
-        url = f"https://www.youtube.com/playlist?list={playlist_id}"
-        for vid in ordered_videos:
+        failed_urls = []
+        for item in ordered_videos:
             try:
-                success = add_video_to_playlist(playlist_id, vid)
+                success = add_video_to_playlist(playlist_id, item["id"])
                 if success:
                     added_count += 1
+                else:
+                    failed_urls.append(item["url"])
             except QuotaExceededError:
+                failed_urls.append(item["url"])
+
+                # Build a safe error list for Quota hits
+                failed_text = ""
+                if failed_urls:
+                    display_fails = failed_urls[:10]
+                    # Enclosing in <> prevents Discord from expanding the link into giant embeds
+                    failed_text = "\n\n❌ **Failed to add:**\n" + "\n".join(f"• <{url}>" for url in display_fails)
+                    # Note the unattempted videos due to the quota crash
+                    unattempted = len(ordered_videos) - added_count - len(display_fails)
+                    if unattempted > 0:
+                        failed_text += f"\n*...and {unattempted} more unattempted videos.*"
+
+                url = f"https://www.youtube.com/playlist?list={playlist_id}"
                 await interaction.followup.send(
                     f"⚠️ **Quota Exceeded mid-process!**\n"
                     f"Added {added_count} out of {len(ordered_videos)} videos before hitting the YouTube API limit.\n"
-                    f"🔗 {url}"
+                    f"🔗 {url}{failed_text}"
                 )
                 return
 
+        # Build Final Success Message
+        failed_text = ""
+        if failed_urls:
+            display_fails = failed_urls[:10]
+            failed_text = "\n\n❌ **Failed to add:**\n" + "\n".join(f"• <{url}>" for url in display_fails)
+            if len(failed_urls) > 10:
+                failed_text += f"\n*...and {len(failed_urls) - 10} more.*"
+
+        url = f"https://www.youtube.com/playlist?list={playlist_id}"
         await interaction.followup.send(
-            f"✅ **K-Potpourri Playlist Created!**\n"
+            f"✅ **Watch Party Playlist Created!**\n"
             f"Successfully organized and added **{added_count}/{len(ordered_videos)}** videos in round-robin order.\n\n"
-            f"🔗 {url}"
+            f"🔗 {url}{failed_text}"
         )
 
     except Exception as e:
