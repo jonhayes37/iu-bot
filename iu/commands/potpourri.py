@@ -42,6 +42,7 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
 
         # Group links by user
         user_links = {}
+        seen_video_ids = set()  # Tracks unique videos across the entire CSV
         for row in reader:
             user = row.get(name_col)
             link = row.get(link_col)
@@ -51,9 +52,14 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
                 link = link.strip()
                 video_id = extract_video_id(link)
                 if video_id:
-                    if user not in user_links:
-                        user_links[user] = []
-                    user_links[user].append({"id": video_id, "url": link})
+                    # Only process the video if we haven't seen it yet
+                    if video_id not in seen_video_ids:
+                        seen_video_ids.add(video_id)
+
+                        if user not in user_links:
+                            user_links[user] = []
+                        # Store BOTH the extracted ID and the original URL for error reporting
+                        user_links[user].append({"id": video_id, "url": link})
 
         if not user_links:
             await interaction.followup.send("❌ No valid YouTube links were found in the uploaded file.")
