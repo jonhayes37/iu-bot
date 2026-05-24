@@ -34,7 +34,7 @@ class JoinGameView(discord.ui.View):
         # Re-fetch state and instantly overwrite the embed message layout
         await self._refresh_roster_embed(interaction, game)
 
-    @discord.ui.button(label="Join Listen Game!", style=discord.ButtonStyle.premium, custom_id="join_listen_game")
+    @discord.ui.button(label="Join Listen Game!", style=discord.ButtonStyle.primary, custom_id="join_listen_game")
     async def join_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         game = get_game_by_status_db('registration')
         if not game:

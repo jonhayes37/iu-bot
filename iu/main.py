@@ -47,6 +47,7 @@ from triggers.scheduled_events import process_event
 from ui.eoy_nominations import EOYNominationsHub
 from ui.eoy_voting import EOYVotingHub
 from ui.hma_suggestions import HMASuggestionsHub
+from ui.listen_game import JoinGameView
 from ui.lists import handle_list_button_click
 from utils.end_of_year import get_current_award_year
 
@@ -175,6 +176,7 @@ async def on_ready():
         client.add_view(EOYNominationsHub(current_year))
         client.add_view(EOYVotingHub(current_year))
         client.add_view(HMASuggestionsHub(current_year))
+        client.add_view(JoinGameView())
         logger.info("Persistent views successfully restored.")
     except Exception as e:
         logger.error("Failed to restore persistent views: %s", e)
