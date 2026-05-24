@@ -9,7 +9,7 @@ logger = logging.getLogger('iu-bot')
 
 DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
 
-def create_game_db(gm_id: int, max_round_days: int | None) -> int | None:
+def create_game_db(gm_id: int, sub_gm_id: int, max_round_days: int | None) -> int | None:
     """Creates a new game instance in the registration state."""
     try:
         with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
@@ -21,9 +21,9 @@ def create_game_db(gm_id: int, max_round_days: int | None) -> int | None:
                 return None
 
             cursor.execute("""
-                INSERT INTO listen_games (gm_id, status, max_round_days)
-                VALUES (?, 'registration', ?)
-            """, (gm_id, max_round_days))
+                INSERT INTO listen_games (gm_id, sub_gm_id, status, max_round_days)
+                VALUES (?, ?, 'registration', ?)
+            """, (gm_id, sub_gm_id, max_round_days))
 
             return cursor.lastrowid
     except Exception as ex:
@@ -148,7 +148,7 @@ def set_round_theme_db(round_id: int, theme: str) -> bool:
             """, (theme, round_id))
             return cursor.rowcount > 0
     except Exception as ex:
-        logger.error("Error setting round theme: %s", ex)
+        logger.error("Error setting round ruleset: %s", ex)
         return False
 
 def get_round_submissions_db(round_id: int) -> list[dict]:
@@ -506,3 +506,69 @@ def update_round_status_message_db(round_id: int, message_id: int) -> bool:
     except Exception as ex:
         logger.error("Error updating status message ID: %s", ex)
         return False
+
+def swap_player_orders_db(game_id: int, user_id1: int, user_id2: int) -> dict:
+    """Swaps the turn order of two players if they are both later in the order than the current host.
+    
+    Returns a dictionary indicating success status and an appropriate response message.
+    """
+    try:
+        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+            cursor = conn.cursor()
+
+            # 1. Find the current host's turn order using the active round
+            cursor.execute("""
+                SELECT p.turn_order 
+                FROM listen_rounds r
+                JOIN listen_players p ON r.host_id = p.user_id AND r.game_id = p.game_id
+                WHERE r.game_id = ? AND r.status NOT IN ('completed', 'skipped')
+                ORDER BY r.round_id DESC LIMIT 1
+            """, (game_id,))
+            host_row = cursor.fetchone()
+
+            if not host_row:
+                return {"success": False, "message": "❌ Could not determine the current active host or turn order."}
+
+            current_host_turn = host_row[0]
+
+            # 2. Get the turn orders for both target players
+            cursor.execute("SELECT turn_order FROM listen_players WHERE game_id = ? AND user_id = ?",
+                           (game_id, user_id1))
+            p1_row = cursor.fetchone()
+            cursor.execute("SELECT turn_order FROM listen_players WHERE game_id = ? AND user_id = ?",
+                           (game_id, user_id2))
+            p2_row = cursor.fetchone()
+
+            if not p1_row or not p2_row:
+                return {"success": False, "message": "❌ One or both specified players are not registered in this game."}
+
+            p1_turn = p1_row[0]
+            p2_turn = p2_row[0]
+
+            # 3. Check if both turn orders are strictly greater than the current host's position
+            if p1_turn <= current_host_turn or p2_turn <= current_host_turn:
+                return {
+                    "success": False, 
+                    "message": "❌ Cannot swap: Both players must be scheduled *after* the current host's turn."
+                }
+
+            # 4. Swap their positions
+            cursor.execute("UPDATE listen_players SET turn_order = ? WHERE game_id = ? AND user_id = ?",
+                           (p2_turn, game_id, user_id1))
+            cursor.execute("UPDATE listen_players SET turn_order = ? WHERE game_id = ? AND user_id = ?",
+                           (p1_turn, game_id, user_id2))
+
+            return {"success": True, "message": "✅ Successfully swapped the turn orders!"}
+
+    except Exception as ex:
+        logger.error("Error swapping player turn orders: %s", ex)
+        return {"success": False, "message": "❌ An internal database error occurred while trying to swap orders."}
+
+def get_active_gm_id(game: dict, active_round: dict | None = None) -> int:
+    """Determines who should act as GM for the current round."""
+    if not game:
+        return 0
+    # If there is an active round and the primary GM is the host, route to substitute
+    if active_round and active_round.get('host_id') == game.get('gm_id'):
+        return game.get('sub_gm_id')
+    return game.get('gm_id')

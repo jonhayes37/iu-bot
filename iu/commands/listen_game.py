@@ -1,105 +1,28 @@
 """Commands for the listen game"""
 import logging
-import typing
 
 import discord
 from discord import app_commands
 from db.listen_game import (
-    create_game_db, get_current_round_db, get_game_by_status_db,
-    get_registered_players_db, get_round_submissions_db, start_game_db,
+    get_current_round_db, get_game_by_status_db,
+    get_registered_players_db, get_round_submissions_db,
     update_round_playlist_db, is_round_complete_db, upsert_submission_db,
-    get_user_submission_db
+    get_user_submission_db, get_active_gm_id
 )
 from services.youtube import (
     get_video_title, create_listen_game_playlist, add_video_to_playlist,
     remove_video_from_playlist, extract_video_id, QuotaExceededError
 )
-from ui.listen_game import JoinGameView, SetThemeModal, ListenGameRankingView
+from ui.listen_game import SetThemeModal, ListenGameRankingView
 from utils.validation import validate_channel
 
 logger = logging.getLogger('iu-bot')
 
 
-@app_commands.command(name="listen-game-create", description="[GM] Open a new Listen Game for registration.")
-@app_commands.describe(max_round_days="Optional: Auto-close rounds after X days if players haven't submitted.")
-@app_commands.default_permissions(administrator=True)
-async def listen_game_create(interaction: discord.Interaction, max_round_days: typing.Optional[int] = None):
-    restricted = await validate_channel(interaction, 'sandbox')
-    if restricted:
-        return
-
-    game_id = create_game_db(interaction.user.id, max_round_days)
-    if not game_id:
-        await interaction.response.send_message(
-            "❌ There is already an active game running! Finish it before creating a new one.",
-            ephemeral=True)
-        return
-
-    player_role = discord.utils.get(interaction.guild.roles, name='Listen Game Player')
-    deadline_text = f"**Max Round Duration:** {max_round_days} Days" if max_round_days \
-        else "**Max Round Duration:** None (GM Managed)"
-
-    embed = discord.Embed(
-        title="A New Listen Game is Starting!",
-        description=f"The GM has opened registration for a new game.\n\n{deadline_text}\n\n"
-            "Click the button below to secure your spot!",
-        color=0x9b59b6
-    )
-
-    await interaction.response.send_message(content=player_role.mention, embed=embed, view=JoinGameView())
-
-
-@app_commands.command(name="listen-game-start", description="[GM] Close registration and officially start the game.")
-@app_commands.default_permissions(administrator=True)
-async def listen_game_start(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'sandbox')
-    if restricted:
-        return
-
-    game = get_game_by_status_db('registration')
-    if not game:
-        await interaction.response.send_message("❌ Cannot find a game in the registration phase.", ephemeral=True)
-        return
-    game_id = game.get('game_id')
-
-    players = get_registered_players_db(game_id)
-    if len(players) < 2:
-        await interaction.response.send_message(
-            f"❌ You need at least 3 players to start! Currently have {len(players)}.", ephemeral=True)
-        return
-
-    # Now returns the full shuffled list of IDs
-    ordered_players = start_game_db(game['game_id'])
-    if not ordered_players:
-        await interaction.response.send_message("❌ Failed to start the game. Check the logs.", ephemeral=True)
-        return
-
-    # Build the formatted turn order list
-    turn_order_lines = []
-    for i, uid in enumerate(ordered_players, start=1):
-        member = interaction.guild.get_member(uid)
-        name = member.mention if member else "Unknown Player"
-        turn_order_lines.append(f"{i}. {name}")
-
-    turn_order_text = "\n".join(turn_order_lines)
-
-    embed = discord.Embed(
-        title="The Listen Game has officially begun!",
-        description=(
-            f"Registration is closed and the turn order has been randomized!\n\n"
-            f"**Turn Order:**\n{turn_order_text}\n\n"
-            f"Our first host is <@{ordered_players[0]}>! "
-            "Please use `/listen-game-post-theme` when you are ready to post your rules for Round 1."
-        ),
-        color=0x2ecc71
-    )
-
-    await interaction.response.send_message(content=f"<@{ordered_players[0]}>", embed=embed)
-
-
-@app_commands.command(name="listen-game-post-theme", description="[Host] Set the theme and rules for your round.")
+@app_commands.command(name="listen-game-post-ruleset", description="[Listener] Set the ruleset for your round.")
+@app_commands.checks.has_role("Listen Game Player")
 async def listen_game_set_theme(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'sandbox')
+    restricted = await validate_channel(interaction, 'listen-game')
     if restricted:
         return
 
@@ -117,15 +40,15 @@ async def listen_game_set_theme(interaction: discord.Interaction):
 
     # Check the phase
     if active_round['status'] != 'setting_theme':
-        await interaction.response.send_message("⚠️ The game is not currently waiting for a theme.", ephemeral=True)
+        await interaction.response.send_message("⚠️ The game is not currently waiting for a ruleset.", ephemeral=True)
         return
 
     # Authenticate the host
     if interaction.user.id != active_round['host_id']:
         host = interaction.guild.get_member(active_round['host_id'])
-        host_name = host.mention if host else "the current host"
+        host_name = host.mention if host else "the current listener"
         await interaction.response.send_message(
-            f"❌ You are not the host for this round! We are waiting on {host_name}.", ephemeral=True)
+            f"❌ You are not the listener for this round! We are waiting on {host_name}.", ephemeral=True)
         return
 
     # Launch the Modal
@@ -135,8 +58,9 @@ async def listen_game_set_theme(interaction: discord.Interaction):
 @app_commands.command(name="listen-game-submit-song",
                       description="Submit or update your YouTube track for the current round.")
 @app_commands.describe(url="The YouTube link to your song.")
+@app_commands.checks.has_role("Listen Game Player")
 async def submit_song(interaction: discord.Interaction, url: str):
-    restricted = await validate_channel(interaction, 'sandbox')
+    restricted = await validate_channel(interaction, 'listen-game')
     if restricted:
         return
 
@@ -153,7 +77,7 @@ async def submit_song(interaction: discord.Interaction, url: str):
         return
 
     if interaction.user.id == active_round['host_id']:
-        await interaction.followup.send("❌ You are the host! You don't submit a song for your own round.")
+        await interaction.followup.send("❌ You are the listener! You don't submit a song for your own round.")
         return
 
     # Extract Data
@@ -207,7 +131,8 @@ async def submit_song(interaction: discord.Interaction, url: str):
             "playlist yet. The GM has been notified to sync it tomorrow.*"
         )
 
-        gm_user = interaction.client.get_user(game['gm_id']) or await interaction.client.fetch_user(game['gm_id'])
+        active_gm_id = get_active_gm_id(game, active_round)
+        gm_user = interaction.client.get_user(active_gm_id) or await interaction.client.fetch_user(active_gm_id)
         if gm_user:
             try:
                 await gm_user.send(
@@ -227,6 +152,21 @@ async def submit_song(interaction: discord.Interaction, url: str):
         await interaction.followup.send(f"🔄 **Updated!** Your submission has been swapped to `{video_title}`.")
     else:
         await interaction.followup.send(f"✅ **Success!** Your song `{video_title}` has been accepted.")
+
+    # DM the GM about the submission
+    active_gm_id = get_active_gm_id(game, active_round)
+    gm_user = interaction.client.get_user(active_gm_id) or await interaction.client.fetch_user(active_gm_id)
+    if gm_user:
+        try:
+            await gm_user.send(
+                f"🎵 **New Listen Game Submission!**\n\n"
+                f"**Player:** {interaction.user.display_name}\n"
+                f"**Song:** `{video_title}`\n"
+                f"**URL:** {url}\n\n"
+                "You can review this round's playlist or use `/listen-game-gm-reject-song` if this is a duplicate."
+            )
+        except discord.Forbidden:
+            logger.warning("Could not DM GM %s about new submission.", active_gm_id)
 
     # Update the tracker message
     all_players = get_registered_players_db(game['game_id'])
@@ -248,25 +188,41 @@ async def submit_song(interaction: discord.Interaction, url: str):
 
     # Completion Check - Route to GM instead of closing the round
     if not user_previous_sub and is_complete:
-        gm_user = interaction.client.get_user(game['gm_id']) or await interaction.client.fetch_user(game['gm_id'])
+        active_gm_id = get_active_gm_id(game, active_round)
+        gm_user = interaction.client.get_user(active_gm_id) or await interaction.client.fetch_user(active_gm_id)
+
         if gm_user:
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+            all_subs = get_round_submissions_db(active_round['round_id'])
+            summary_lines = []
+            for sub in all_subs:
+                member = interaction.guild.get_member(sub['user_id'])
+                name = member.display_name if member else f"User ID {sub['user_id']}"
+                summary_lines.append(f"• **{name}**: `{sub['raw_title']}`")
+            summary_text = "\n".join(summary_lines)
+
             try:
                 await gm_user.send(
                     "**Listen Game: All Submissions Are In!**\n\n"
                     f"Here is the playlist: {playlist_url}\n\n"
-                    "Please review the submissions for duplicates. If everything looks good, "
-                    "run `/listen-game-gm-approve-playlist` "
-                    "in #listen-game to publish it to the channel and notify the host!"
+                    "**Submission Ledger (For Review):**\n"
+                    f"{summary_text}\n\n"
+                    "Please review the submissions for duplicates. "
+                    "If you need to reject a song, use "
+                    "`/listen-game-gm-reject-song @player [reason]`.\n"
+                    "If everything looks good, run `/listen-game-gm-approve-playlist` "
+                    "in #listen-game to publish it to the channel and notify the listener!"
                 )
             except discord.Forbidden:
                 logger.warning("Could not DM GM about round completion.")
 
 
 @app_commands.command(name="listen-game-submit-ranking",
-                      description="[Host] Rank the submissions and provide commentary.")
+                      description="[Listener] Rank the submissions and provide commentary.")
+@app_commands.checks.has_role("Listen Game Player")
 async def listen_game_submit_ranking(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'sandbox')
+    restricted = await validate_channel(interaction, 'listen-game')
     if restricted:
         return
 
@@ -288,7 +244,7 @@ async def listen_game_submit_ranking(interaction: discord.Interaction):
 
     if interaction.user.id != active_round['host_id']:
         await interaction.response.send_message(
-            "❌ Only the host of the current round can submit the rankings.", ephemeral=True)
+            "❌ Only the listener of the current round can submit the rankings.", ephemeral=True)
         return
 
     # Fetch all submissions to populate the dropdown

@@ -1,4 +1,6 @@
 """UI elements for the listen game"""
+import logging
+
 import asyncio
 import discord
 from discord.ui import View, Select, Modal, TextInput, Button
@@ -9,6 +11,7 @@ from db.listen_game import (
 )
 from utils.strings import get_ordinal, generate_leaderboard_text
 
+logger = logging.getLogger('iu-bot')
 
 class JoinGameView(discord.ui.View):
     """UI view for the join game button"""
@@ -44,17 +47,27 @@ class JoinGameView(discord.ui.View):
             await interaction.response.send_message("You are already registered!", ephemeral=True)
             return
 
+        if interaction.guild and isinstance(interaction.user, discord.Member):
+            target_role = discord.utils.get(interaction.guild.roles, name="Listen Game Player")
+            if target_role and target_role not in interaction.user.roles:
+                try:
+                    await interaction.user.add_roles(target_role)
+                except discord.Forbidden:
+                    logger.error("Error: Bot lacks permission to assign the role.")
+                except discord.HTTPException as ex:
+                    logger.error("HTTPException while assigning role: %s", ex)
+
         players = get_registered_players_db(game['game_id'])
         await interaction.response.send_message(
             f"✅ You've joined! There are now {len(players)} players registered.", ephemeral=True)
 
-class SetThemeModal(discord.ui.Modal, title='Set Listen Game Theme'):
+class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
     """Modal for submitting a theme for a listen game round"""
 
     theme_text = discord.ui.TextInput(
-        label='Round Theme & Rules',
+        label='Round Ruleset',
         style=discord.TextStyle.paragraph,
-        placeholder='Share the rules and theme of your round!',
+        placeholder='Share the ruleset for your round!',
         required=True,
         max_length=3500 # Plenty of space for paragraphs of rules
     )
@@ -69,7 +82,7 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Theme'):
         success = set_round_theme_db(self.round_id, self.theme_text.value)
         if not success:
             await interaction.response.send_message(
-                "❌ Failed to save the theme. Please contact the GM.", ephemeral=True)
+                "❌ Failed to save the ruleset. Please contact the GM.", ephemeral=True)
             return
 
         # Build the broadcast embed
@@ -81,7 +94,7 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Theme'):
 
         # Display the host's avatar and name
         avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
-        embed.set_author(name=f"Host: {interaction.user.display_name}", icon_url=avatar_url)
+        embed.set_author(name=f"Listener: {interaction.user.display_name}", icon_url=avatar_url)
         embed.set_footer(text="Use `/submit-song` to submit your track!")
 
         # Listen Game Player role is hardcoded here
@@ -89,7 +102,7 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Theme'):
         role_mention = target_role.mention if target_role else ""
 
         await interaction.response.send_message(
-            content=f"{role_mention} The new theme has been posted. It's time to submit your songs!",
+            content=f"{role_mention} The new ruleset has been posted. It's time to submit your songs!",
             embed=embed
         )
 
@@ -250,7 +263,7 @@ class ConfirmRankingButton(Button):
         ranking_text = "\n".join(ranking_lines)
         message_str = f"🎉 **Round complete!**\n\n{summary_text}\n\n{ranking_text}\n\n"
         if next_host_id:
-            message_str += f"The next host is <@{next_host_id}>! Use `/listen-game-post-theme` " \
+            message_str += f"The next listener is <@{next_host_id}>! Use `/listen-game-post-ruleset` " \
                 "when you are ready to begin."
 
         # Send last round's results

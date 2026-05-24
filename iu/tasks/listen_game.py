@@ -57,7 +57,7 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
                 try:
                     await host_user.send(msg)
                 except discord.Forbidden:
-                    logger.warning("Could not DM host %s about round timeout.", host_id)
+                    logger.warning("Could not DM listener %s about round timeout.", host_id)
 
     # ---------------------------------------------------------
     # Phase 2: Send Reminders (Only for rounds still active)

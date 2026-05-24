@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS listen_games (
     game_id INTEGER PRIMARY KEY AUTOINCREMENT,
     gm_id INTEGER NOT NULL,
+    sub_gm_id INTEGER NOT NULL,
     status TEXT NOT NULL,
     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     max_round_days INTEGER DEFAULT NULL

@@ -18,10 +18,11 @@ from commands.hmas import (
     hma_suggestions_export, end_of_year_hma_suggestions
 )
 from commands.listen_game import (
-    listen_game_create, listen_game_start, listen_game_set_theme, submit_song,
+    listen_game_set_theme, submit_song,
     listen_game_submit_ranking
 )
 from commands.listen_game_gm import (
+    listen_game_create, listen_game_start,
     listen_game_gm_sync_playlist, listen_game_gm_reject_song, listen_game_gm_skip_turn,
     listen_game_gm_remove_player, listen_game_gm_force_start_round, listen_game_gm_force_submit
 )
@@ -114,12 +115,12 @@ tree.add_command(hma_set_nominees)
 tree.add_command(hma_nomination)
 tree.add_command(hma_nomination_export)
 # Listen Game
-tree.add_command(listen_game_create)
-tree.add_command(listen_game_start)
 tree.add_command(listen_game_set_theme)
 tree.add_command(submit_song)
 tree.add_command(listen_game_submit_ranking)
 # Listen Game (GM)
+tree.add_command(listen_game_create)
+tree.add_command(listen_game_start)
 tree.add_command(listen_game_gm_sync_playlist)
 tree.add_command(listen_game_gm_reject_song)
 tree.add_command(listen_game_gm_skip_turn)
