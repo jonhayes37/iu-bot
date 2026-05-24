@@ -91,6 +91,24 @@ client = discord.Client(intents=intents)
 
 # Configure all commands
 tree = discord.app_commands.CommandTree(client)
+
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+    # Check for missing role
+    if isinstance(error, discord.app_commands.errors.MissingRole):
+        await interaction.response.send_message(
+            f"❌ You must have the '{error.missing_role}' role to use this command.",
+            ephemeral=True
+        )
+    else:
+        logger.error("Global App Command Error: %s", error)
+        # Check if the interaction was already deferred or responded to prevent crashes
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "❌ An unexpected error occurred while running this command.", 
+                ephemeral=True
+            )
+
 # Bias cards
 tree.add_command(bias_group)
 tree.add_command(create_bias_group)

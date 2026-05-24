@@ -54,14 +54,14 @@ async def listen_game_create(interaction: discord.Interaction, substitute_gm: di
         else "**Max Round Duration:** None (GM Managed)"
 
     embed = discord.Embed(
-        title="A New Listen Game is Starting!",
-        description=f"The GM has opened registration for a new game.\n\n{deadline_text}\n\n"
+        title="🎵 A New Listen Game is Starting!",
+        description=f"{interaction.user.mention} has opened registration for a new game.\n\n{deadline_text}\n\n"
             "Click the button below to secure your spot!",
         color=0x9b59b6
     )
 
-    await interaction.response.send_message(content=player_role.mention, embed=embed, view=JoinGameView())
-
+    await interaction.response.send_message(content=player_role.mention if player_role else None,
+                                            embed=embed, view=JoinGameView())
 
 @app_commands.command(name="listen-game-start", description="[GM] Close registration and officially start the game.")
 @app_commands.checks.has_role("Listen Game GM")
@@ -109,6 +109,15 @@ async def listen_game_start(interaction: discord.Interaction):
     )
 
     await interaction.response.send_message(content=f"<@{ordered_players[0]}>", embed=embed)
+
+    # Pin the message sent
+    try:
+        message = await interaction.original_response()
+        await message.pin(reason="Listen Game Turn Order")
+    except discord.Forbidden:
+        logger.warning("Bot lacks permission to pin messages in the listen-game channel.")
+    except discord.HTTPException as e:
+        logger.error("Failed to pin the turn order message: %s", e)
 
 @app_commands.command(name="listen-game-gm-sync-playlist",
                       description="[GM] Syncs DB submissions with the YouTube playlist.")
@@ -185,16 +194,6 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
 
     await interaction.followup.send(msg)
 
-@listen_game_gm_sync_playlist.error
-async def sync_playlist_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.errors.MissingRole):
-        await interaction.response.send_message(
-            "❌ You must have the 'Listen Game GM' role to use this command.", ephemeral=True)
-    else:
-        logger.error("Error in gm-sync-playlist: %s", error)
-        if not interaction.response.is_done():
-            await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
-
 @app_commands.command(name="listen-game-gm-reject-song", description="[GM] Reject a player's submission.")
 @app_commands.describe(
     player="The player whose song you are rejecting.",
@@ -256,16 +255,6 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
 
     # Acknowledge GM
     await interaction.followup.send(f"✅ **Success!** Removed `{submission['raw_title']}`. {dm_status}")
-
-@listen_game_gm_reject_song.error
-async def reject_song_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.errors.MissingRole):
-        await interaction.response.send_message("❌ You must have the 'Listen Game GM' role to use this command.",
-                                                ephemeral=True)
-    else:
-        logger.error("Error in gm-reject-song: %s", error)
-        if not interaction.response.is_done():
-            await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
 
 @app_commands.command(name="listen-game-gm-skip-turn", description="[GM] Forcefully skip the current listener's turn.")
 @app_commands.describe(
@@ -333,16 +322,6 @@ async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: dis
         if leaderboard:
             await listen_channel.send(generate_leaderboard_text(leaderboard))
 
-
-@listen_game_gm_skip_turn.error
-async def skip_turn_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.errors.MissingRole):
-        await interaction.response.send_message(
-            "❌ You must have the 'Listen Game GM' role to use this command.", ephemeral=True)
-    else:
-        logger.error("Error in gm-skip-turn: %s", error)
-        if not interaction.response.is_done():
-            await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
 
 @app_commands.command(name="listen-game-gm-remove-player", description="[GM] Remove a player from the game entirely.")
 @app_commands.describe(
@@ -442,16 +421,6 @@ async def listen_game_gm_remove_player(interaction: discord.Interaction, player:
                     logger.warning("Could not DM listener %s about round completion after player removal.",
                                    active_round['host_id'])
 
-@listen_game_gm_remove_player.error
-async def remove_player_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.errors.MissingRole):
-        await interaction.response.send_message("❌ You must have the 'Listen Game GM' role to use this command.",
-                                                ephemeral=True)
-    else:
-        logger.error("Error in gm-remove-player: %s", error)
-        if not interaction.response.is_done():
-            await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
-
 @app_commands.command(name="listen-game-gm-force-start-round",
                       description="[GM] Force start ranking phase by explicitly skipping outstanding players.")
 @app_commands.describe(skipped_users="Tag the exact users you are skipping (e.g., @User1 @User2).")
@@ -540,17 +509,6 @@ async def listen_game_gm_force_start_round(interaction: discord.Interaction, ski
         dm_status = "Could not find listener user."
 
     await interaction.followup.send(f"✅ **Success!** Round forced closed. {dm_status}")
-
-@listen_game_gm_force_start_round.error
-async def force_start_round_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    """Local error handler for the force start command."""
-    if isinstance(error, app_commands.errors.MissingRole):
-        await interaction.response.send_message(
-            "❌ You must have the 'Listen Game GM' role to use this command.", ephemeral=True)
-    else:
-        logger.error("Error in gm-force-start-round: %s", error)
-        if not interaction.response.is_done():
-            await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
 
 @app_commands.command(name="listen-game-gm-force-submit",
                       description="[GM] Bypass filters to forcefully submit a song for a player.")
@@ -681,17 +639,6 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
     else:
         await interaction.followup.send(
             f"✅ **Success!** `{video_title}` accepted for {player.display_name}. {dm_status}")
-
-@listen_game_gm_force_submit.error
-async def force_submit_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    """Local error handler for the force submit command."""
-    if isinstance(error, app_commands.errors.MissingRole):
-        await interaction.response.send_message("❌ You must have the 'Listen Game GM' role to use this command.",
-                                                ephemeral=True)
-    else:
-        logger.error("Error in gm-force-submit: %s", error)
-        if not interaction.response.is_done():
-            await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
 
 @app_commands.command(name="listen-game-gm-approve-playlist",
                       description="[GM] Approve the round's playlist and notify the listener.")

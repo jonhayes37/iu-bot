@@ -19,10 +19,11 @@ class JoinGameView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red, custom_id="leave_listen_game")
+    @discord.ui.button(label="Leave", style=discord.ButtonStyle.secondary, custom_id="leave_listen_game")
     async def leave_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         game = get_game_by_status_db('registration')
         if not game:
+            await interaction.response.send_message("⚠️ No registration session is active.", ephemeral=True)
             return
 
         success = unregister_player_db(game['game_id'], interaction.user.id)
@@ -30,16 +31,14 @@ class JoinGameView(discord.ui.View):
             await interaction.response.send_message("You aren't registered for this game.", ephemeral=True)
             return
 
-        players = get_registered_players_db(game['game_id'])
-        await interaction.response.send_message(
-            f"You've left the game. There are now {len(players)} players registered.", ephemeral=True)
+        # Re-fetch state and instantly overwrite the embed message layout
+        await self._refresh_roster_embed(interaction, game)
 
-    @discord.ui.button(label="Join Listen Game!", style=discord.ButtonStyle.green, custom_id="join_listen_game")
+    @discord.ui.button(label="Join Listen Game!", style=discord.ButtonStyle.premium, custom_id="join_listen_game")
     async def join_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         game = get_game_by_status_db('registration')
         if not game:
-            await interaction.response.send_message(
-                "⚠️ There is no game currently open for registration.", ephemeral=True)
+            await interaction.response.send_message("⚠️ No registration session is active.", ephemeral=True)
             return
 
         success = register_player_db(game['game_id'], interaction.user.id)
@@ -47,6 +46,7 @@ class JoinGameView(discord.ui.View):
             await interaction.response.send_message("You are already registered!", ephemeral=True)
             return
 
+        # Handle backend role assignment
         if interaction.guild and isinstance(interaction.user, discord.Member):
             target_role = discord.utils.get(interaction.guild.roles, name="Listen Game Player")
             if target_role and target_role not in interaction.user.roles:
@@ -57,9 +57,49 @@ class JoinGameView(discord.ui.View):
                 except discord.HTTPException as ex:
                     logger.error("HTTPException while assigning role: %s", ex)
 
+        # Re-fetch state and overwrite the embed message layout
+        await self._refresh_roster_embed(interaction, game)
+
+    async def _refresh_roster_embed(self, interaction: discord.Interaction, game: dict):
+        """Helper function to recalculate the roster and update the embed."""
         players = get_registered_players_db(game['game_id'])
-        await interaction.response.send_message(
-            f"✅ You've joined! There are now {len(players)} players registered.", ephemeral=True)
+        max_round_days = game.get('max_round_days')
+        deadline_text = f"**Max Round Duration:** {max_round_days} Days" if max_round_days \
+            else "**Max Round Duration:** None (GM Managed)"
+
+        # Rebuild the base embed layout
+        gm_mention = f"<@{game['gm_id']}>"
+        embed = discord.Embed(
+            title="🎵 A New Listen Game is Starting!",
+            description=f"{gm_mention} has opened registration for a new game.\n\n{deadline_text}\n\n"
+                        "Click the buttons below to secure your spot!",
+            color=0x9b59b6
+        )
+
+        if players:
+            player_mentions = []
+            for uid in players:
+                member = interaction.guild.get_member(uid)
+                if member:
+                    player_mentions.append(f"• {member.mention}")
+                else:
+                    player_mentions.append(f"• <@{uid}>")
+
+            # Display a clean text list of every player currently signed up, one per line
+            embed.add_field(
+                name=f"👥 {len(players)} Registered Players",
+                value="\n".join(player_mentions),
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="👥 Registered Players (0)",
+                value="No one has joined yet. Be the first!",
+                inline=False
+            )
+
+        # Edit the parent message directly
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
     """Modal for submitting a theme for a listen game round"""

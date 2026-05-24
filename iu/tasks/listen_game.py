@@ -97,7 +97,7 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
                         "🎧 **Listen Game Reminder!**\n\n"
                         "It's been over 48 hours since the current round started, "
                         "and you haven't submitted your song yet! "
-                        f"Please review the theme in {channel.mention} and use `/submit-song` "
+                        f"Please review the ruleset in {channel.mention} and use `/submit-song` "
                         f"when you are ready.{deadline_text}"
                     )
 
