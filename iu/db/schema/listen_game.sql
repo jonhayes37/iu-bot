@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS listen_rounds (
     status TEXT, 
     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     status_message_id INTEGER DEFAULT NULL,
+    ruleset_message_id INTEGER DEFAULT NULL,
     FOREIGN KEY (game_id) REFERENCES listen_games(game_id) ON DELETE CASCADE
 );
 

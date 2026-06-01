@@ -246,7 +246,7 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
             f"🚨 **Listen Game Update** 🚨\n\n"
             f"The Game Master has rejected your submission for the current round (`{submission['raw_title']}`).\n"
             f"**Reason:** {reason}\n\n"
-            f"Please find a new track and use `/submit-song` to try again!"
+            f"Please find a new track and use `/listen-game-submit-song` to try again!"
         )
         await player.send(msg)
         dm_status = "Player was DMed the reason."

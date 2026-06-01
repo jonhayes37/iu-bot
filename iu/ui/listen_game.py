@@ -7,7 +7,8 @@ from discord.ui import View, Select, Modal, TextInput, Button
 from db.listen_game import (
     get_game_by_status_db, register_player_db, save_round_results_db,
     advance_game_turn_db, unregister_player_db, get_registered_players_db,
-    set_round_theme_db, get_game_leaderboard_db, update_round_status_message_db
+    set_round_theme_db, get_game_leaderboard_db, update_round_status_message_db,
+    update_round_ruleset_message_db
 )
 from utils.strings import get_ordinal, generate_leaderboard_text
 
@@ -135,7 +136,7 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
         # Display the host's avatar and name
         avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
         embed.set_author(name=f"Listener: {interaction.user.display_name}", icon_url=avatar_url)
-        embed.set_footer(text="Use `/submit-song` to submit your track!")
+        embed.set_footer(text="Use `/listen-game-submit-song` to submit your track!")
 
         # Listen Game Player role is hardcoded here
         target_role = discord.utils.get(interaction.guild.roles, name="Listen Game Player")
@@ -145,6 +146,12 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
             content=f"{role_mention} The new ruleset has been posted. It's time to submit your songs!",
             embed=embed
         )
+
+        try:
+            ruleset_msg = await interaction.original_response()
+            update_round_ruleset_message_db(self.round_id, ruleset_msg.id)
+        except Exception as e:
+            logger.warning("Failed to fetch and save ruleset message ID: %s", e)
 
         players = get_registered_players_db(self.game_id)
         total_needed = len(players) - 1

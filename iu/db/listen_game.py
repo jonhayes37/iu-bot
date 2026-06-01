@@ -235,7 +235,7 @@ def get_missing_players_for_reminders_db() -> list[dict]:
             cursor.execute("""
                 SELECT 
                     p.user_id, p.game_id, p.last_reminded_at,
-                    r.round_id, r.started_at, 
+                    r.round_id, r.started_at, r.ruleset_message_id, 
                     g.max_round_days 
                 FROM listen_rounds r
                 JOIN listen_games g ON r.game_id = g.game_id
@@ -572,3 +572,18 @@ def get_active_gm_id(game: dict, active_round: dict | None = None) -> int:
     if active_round and active_round.get('host_id') == game.get('gm_id'):
         return game.get('sub_gm_id')
     return game.get('gm_id')
+
+def update_round_ruleset_message_db(round_id: int, message_id: int) -> bool:
+    """Saves the message ID of the host's ruleset post."""
+    try:
+        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE listen_rounds
+                SET ruleset_message_id = ?
+                WHERE round_id = ?
+            """, (message_id, round_id))
+            return cursor.rowcount > 0
+    except Exception as ex:
+        logger.error("Error updating ruleset message ID: %s", ex)
+        return False

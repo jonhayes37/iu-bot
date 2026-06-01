@@ -24,7 +24,7 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
         logger.error("Could not find guild with ID: %s", guild_id)
         return
 
-    channel = discord.utils.get(guild.text_channels, name='sandbox')
+    channel = discord.utils.get(guild.text_channels, name='listen-game')
     if not channel:
         logger.error("Could not find #listen-game channel.")
         return
@@ -40,7 +40,7 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
 
         logger.info("Round %s has timed out! Closing submissions.", round_id)
 
-        # Lock the round so /submit-song stops working
+        # Lock the round so /listen-game-submit-song stops working
         success = close_round_db(round_id)
         if success:
             host_user = client.get_user(host_id) or await client.fetch_user(host_id)
@@ -93,11 +93,17 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
                         deadline_ts = int(deadline_dt.timestamp())
                         deadline_text = f"\n\n⏰ **Automated Deadline:** <t:{deadline_ts}:R> (<t:{deadline_ts}:f>)"
 
+                    ruleset_msg_id = row.get('ruleset_message_id')
+                    if ruleset_msg_id:
+                        link_text = f"https://discord.com/channels/{guild.id}/{channel.id}/{ruleset_msg_id}"
+                    else:
+                        link_text = f"the ruleset in **[#listen-game](<{channel.jump_url}>)**"
+
                     msg = (
                         "🎧 **Listen Game Reminder!**\n\n"
                         "It's been over 48 hours since the current round started, "
-                        "and you haven't submitted your song yet! "
-                        f"Please review the ruleset in {channel.mention} and use `/submit-song` "
+                        "and you haven't submitted your song yet!\n"
+                        f"Please review the ruleset in {link_text} and use `/listen-game-submit-song` "
                         f"when you are ready.{deadline_text}"
                     )
 

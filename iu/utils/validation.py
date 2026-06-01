@@ -41,8 +41,8 @@ def sanitize_list(raw_text: str, expected_count: int) -> tuple[bool, str, str, s
 
         line = re.sub(r'\s*//\s*', ' // ', line)
 
-        if ' // ' not in line and ' - ' in line:
-            line = line.replace(' - ', ' // ', 1)
+        if ' // ' not in line:
+            line = re.sub(r'\s+[-/]\s+', ' // ', line, count=1)
 
         line = re.sub(r'^\d+[\.\)\-]?\s*', '', line)
         cleaned_lines.append(f"{i}. {line}")
