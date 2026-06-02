@@ -22,9 +22,10 @@ from commands.listen_game import (
     listen_game_submit_ranking
 )
 from commands.listen_game_gm import (
-    listen_game_create, listen_game_start,
+    listen_game_create, listen_game_start, listen_game_gm_swap_players,
     listen_game_gm_sync_playlist, listen_game_gm_reject_song, listen_game_gm_skip_turn,
-    listen_game_gm_remove_player, listen_game_gm_force_start_round, listen_game_gm_force_submit
+    listen_game_gm_remove_player, listen_game_gm_force_start_round, listen_game_gm_force_submit,
+    listen_game_gm_approve_playlist
 )
 from commands.lists import create_list_event, close_list_event, export_lists
 from commands.merch import add_merch, view_merch, purchase, purchase_history
@@ -146,6 +147,8 @@ tree.add_command(listen_game_gm_skip_turn)
 tree.add_command(listen_game_gm_remove_player)
 tree.add_command(listen_game_gm_force_start_round)
 tree.add_command(listen_game_gm_force_submit)
+tree.add_command(listen_game_gm_swap_players)
+tree.add_command(listen_game_gm_approve_playlist)
 # Lists
 tree.add_command(create_list_event)
 tree.add_command(close_list_event)

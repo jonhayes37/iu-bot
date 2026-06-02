@@ -587,3 +587,32 @@ def update_round_ruleset_message_db(round_id: int, message_id: int) -> bool:
     except Exception as ex:
         logger.error("Error updating ruleset message ID: %s", ex)
         return False
+
+def update_game_start_message_db(game_id: int, message_id: int) -> bool:
+    """Saves the message ID of the game start (turn order) post."""
+    try:
+        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE listen_games
+                SET game_start_message_id = ?
+                WHERE game_id = ?
+            """, (message_id, game_id))
+            return cursor.rowcount > 0
+    except Exception as ex:
+        logger.error("Error updating game start message ID: %s", ex)
+        return False
+
+def get_ordered_players_db(game_id: int) -> list[int]:
+    """Returns a list of user_ids ordered by their current turn order."""
+    try:
+        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT user_id FROM listen_players WHERE game_id = ? ORDER BY turn_order ASC",
+                (game_id,)
+            )
+            return [row[0] for row in cursor.fetchall()]
+    except Exception as ex:
+        logger.error("Error fetching ordered players: %s", ex)
+        return []

@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS listen_games (
     sub_gm_id INTEGER NOT NULL,
     status TEXT NOT NULL,
     started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    max_round_days INTEGER DEFAULT NULL
+    max_round_days INTEGER DEFAULT NULL,
+    game_start_message_id INTEGER DEFAULT NULL
 );
 
 -- Tracks the players, their turn order, and scores for a specific game

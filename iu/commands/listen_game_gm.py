@@ -13,7 +13,8 @@ from db.listen_game import (
     get_user_submission_db, delete_submission_db, skip_game_turn_db,
     get_game_leaderboard_db, remove_player_from_game_db, get_registered_players_db,
     is_round_complete_db, close_round_db, upsert_submission_db,
-    swap_player_orders_db, get_active_gm_id
+    swap_player_orders_db, get_active_gm_id, update_game_start_message_db,
+    get_ordered_players_db
 )
 from services.youtube import (
     get_playlist_video_ids, add_video_to_playlist, remove_video_from_playlist,
@@ -114,6 +115,7 @@ async def listen_game_start(interaction: discord.Interaction):
     try:
         message = await interaction.original_response()
         await message.pin(reason="Listen Game Turn Order")
+        update_game_start_message_db(game_id, message.id)
     except discord.Forbidden:
         logger.warning("Bot lacks permission to pin messages in the listen-game channel.")
     except discord.HTTPException as e:
@@ -716,7 +718,17 @@ async def listen_game_gm_approve_playlist(interaction: discord.Interaction):
     else:
         dm_status = "Could not find listener user."
 
-    # Acknowledge the GM silently
+    # Announce it publicly in the channel
+    try:
+        await interaction.channel.send(
+            f"✅ **Playlist Approved!**\n"
+            f"{host_mention}, all submissions are in and your playlist has been sent to your DMs! "
+            "Please review the songs and use `/listen-game-submit-ranking` when you are ready."
+        )
+    except discord.Forbidden:
+        logger.warning("Failed to send public approval message. Check bot permissions in #listen-game.")
+
+    # Acknowledge the GM
     await interaction.followup.send(
         f"✅ **Success!** The round has been closed and the playlist sent to {host_mention}. {dm_status}")
 
@@ -748,10 +760,42 @@ async def listen_game_gm_swap_players(
 
     # 4. Respond to the GM
     if result["success"]:
-        await interaction.response.send_message(
-            f"🔄 {result['message']}\n"
-            f"**{player1.display_name}** and **{player2.display_name}** have swapped positions in the turn order.",
-            ephemeral=False
+        await interaction.response.defer(ephemeral=False)
+
+        # Build the new turn order text
+        ordered_players = get_ordered_players_db(game['game_id'])
+        turn_order_lines = []
+        for i, uid in enumerate(ordered_players, start=1):
+            member = interaction.guild.get_member(uid)
+            name = member.mention if member else f"<@{uid}>"
+            turn_order_lines.append(f"{i}. {name}")
+
+        turn_order_text = "\n".join(turn_order_lines)
+
+        # Directly fetch the message by ID and update it
+        start_msg_id = game.get('game_start_message_id')
+        if start_msg_id:
+            try:
+                start_msg = await interaction.channel.fetch_message(start_msg_id)
+                if start_msg.embeds:
+                    embed = start_msg.embeds[0]
+                    # Overwrite the description with the new turn order
+                    embed.description = (
+                        f"Registration is closed and the turn order has been randomized!\n\n"
+                        f"**Turn Order:**\n{turn_order_text}\n\n"
+                        f"Our first listener is <@{ordered_players[0]}>! "
+                        "Please use `/listen-game-post-ruleset` when you are ready to post your rules for Round 1."
+                    )
+                    await start_msg.edit(embed=embed)
+            except discord.NotFound:
+                logger.warning("Game start message %s not found.", start_msg_id)
+            except Exception as e:
+                logger.error("Failed to update the turn order message: %s", e)
+
+        # Send the success confirmation to the channel
+        await interaction.followup.send(
+            f"🔄 {player1.mention} and {player2.mention} have swapped positions in the turn order. "
+            "The pinned turn order message has been updated!"
         )
     else:
         await interaction.response.send_message(result["message"], ephemeral=True)

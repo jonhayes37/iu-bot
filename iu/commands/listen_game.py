@@ -212,7 +212,7 @@ async def submit_song(interaction: discord.Interaction, url: str):
                     "If you need to reject a song, use "
                     "`/listen-game-gm-reject-song @player [reason]`.\n"
                     "If everything looks good, run `/listen-game-gm-approve-playlist` "
-                    "in #listen-game to publish it to the channel and notify the listener!"
+                    f"in {interaction.channel.mention} to publish it to the channel and notify the listener!"
                 )
             except discord.Forbidden:
                 logger.warning("Could not DM GM about round completion.")
