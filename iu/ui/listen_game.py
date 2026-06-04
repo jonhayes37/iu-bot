@@ -265,7 +265,10 @@ class ConfirmRankingButton(Button):
         if not channel:
             return
 
-        await channel.send(f"🎧 **{interaction.user.mention} has finished their rankings! Here are the results:**")
+        player_role = discord.utils.get(interaction.guild.roles, name='Listen Game Player')
+        await channel.send(
+            f"🎧 **{player_role.mention}, {interaction.user.mention} has finished their rankings! "
+            "Here are the results:**")
         await asyncio.sleep(2)
 
         reversed_reveals = sorted(results_to_save, key=lambda x: x['rank'], reverse=True)
