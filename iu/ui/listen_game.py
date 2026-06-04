@@ -269,7 +269,7 @@ class ConfirmRankingButton(Button):
         await channel.send(
             f"🎧 **{player_role.mention}, {interaction.user.mention} has finished their rankings! "
             "Here are the results:**")
-        await asyncio.sleep(2)
+        await asyncio.sleep(15)
 
         reversed_reveals = sorted(results_to_save, key=lambda x: x['rank'], reverse=True)
         for result in reversed_reveals:
