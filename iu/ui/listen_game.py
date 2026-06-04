@@ -277,7 +277,7 @@ class ConfirmRankingButton(Button):
 
             msg = f"**{rank_str}: [{title}](<{url}>)**\n*{commentary}*"
             await channel.send(msg)
-            await asyncio.sleep(5)
+            await asyncio.sleep(15)
 
         next_host_id = advance_game_turn_db(self.game_id, self.round_id)
 
