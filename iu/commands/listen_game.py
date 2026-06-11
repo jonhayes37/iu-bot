@@ -178,10 +178,6 @@ async def submit_song(interaction: discord.Interaction, url: str):
         try:
             tracker_msg = await interaction.channel.fetch_message(active_round['status_message_id'])
             tracker_text = f"🎧 **Round Status:** We are at `{current_count}/{total_needed}` submissions for the round."
-
-            if is_complete:
-                tracker_text += "\n\n✅ **All submissions received! Awaiting GM approval.**"
-
             await tracker_msg.edit(content=tracker_text)
         except Exception as e:
             logger.warning("Failed to update status message: %s", e)

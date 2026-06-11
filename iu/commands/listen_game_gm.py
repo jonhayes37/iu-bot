@@ -602,11 +602,6 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
             tracker_text = f"🎧 **Round Status:** We are at `{len(current_submissions)}/{total_needed}` " \
                 "submissions for the round."
 
-            if is_complete:
-                host_member = interaction.guild.get_member(active_round['host_id'])
-                host_mention = host_member.mention if host_member else "the listener"
-                tracker_text += f"\n\n✅ **All submissions received! Playlist sent to {host_mention}!**"
-
             await tracker_msg.edit(content=tracker_text)
         except (discord.NotFound, discord.Forbidden):
             logger.warning("Could not update status message.")
@@ -691,7 +686,6 @@ async def listen_game_gm_approve_playlist(interaction: discord.Interaction):
 
             tracker_text = f"🎧 **Round Status:** We are at `{len(current_submissions)}/{total_needed}` " \
                 "submissions for the round."
-            tracker_text += f"\n\n✅ **All submissions received! Playlist sent to {host_mention}!**"
 
             await tracker_msg.edit(content=tracker_text)
         except (discord.NotFound, discord.Forbidden) as e:

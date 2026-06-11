@@ -278,7 +278,7 @@ class ConfirmRankingButton(Button):
             url = f"https://youtu.be/{result['video_id']}"
             commentary = result['commentary']
 
-            msg = f"**{rank_str}: [{title}](<{url}>)**\n*{commentary}*"
+            msg = f"**{rank_str}: [{title}](<{url}>)**\n{commentary}"
             await channel.send(msg)
             await asyncio.sleep(15)
 
