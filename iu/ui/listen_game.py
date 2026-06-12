@@ -8,7 +8,7 @@ from db.listen_game import (
     get_game_by_status_db, register_player_db, save_round_results_db,
     advance_game_turn_db, unregister_player_db, get_registered_players_db,
     set_round_theme_db, get_game_leaderboard_db, update_round_status_message_db,
-    update_round_ruleset_message_db
+    update_round_ruleset_message_db, get_game_rounds_db
 )
 from utils.strings import get_ordinal, generate_leaderboard_text
 
@@ -103,7 +103,7 @@ class JoinGameView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
-    """Modal for submitting a theme for a listen game round"""
+    """Modal for submitting or updating a theme for a listen game round"""
 
     theme_text = discord.ui.TextInput(
         label='Round Ruleset',
@@ -113,10 +113,15 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
         max_length=3500 # Plenty of space for paragraphs of rules
     )
 
-    def __init__(self, game_id: int, round_id: int):
+    def __init__(self, game_id: int, round_id: int, existing_theme: str = None, ruleset_msg_id: int = None):
         super().__init__()
         self.game_id = game_id
         self.round_id = round_id
+        self.ruleset_msg_id = ruleset_msg_id
+
+        # Pre-populate the text box if an existing ruleset was passed in
+        if existing_theme:
+            self.theme_text.default = existing_theme
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
@@ -142,27 +147,43 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
         target_role = discord.utils.get(interaction.guild.roles, name="Listen Game Player")
         role_mention = target_role.mention if target_role else ""
 
-        await interaction.response.send_message(
-            content=f"{role_mention} The new ruleset has been posted. It's time to submit your songs!",
-            embed=embed
-        )
+        if self.ruleset_msg_id:
+            try:
+                # Fetch and edit the original message
+                ruleset_msg = await interaction.channel.fetch_message(self.ruleset_msg_id)
+                await ruleset_msg.edit(embed=embed)
 
-        try:
-            ruleset_msg = await interaction.original_response()
-            update_round_ruleset_message_db(self.round_id, ruleset_msg.id)
-        except Exception as e:
-            logger.warning("Failed to fetch and save ruleset message ID: %s", e)
+                # Publicly announce the update
+                await interaction.response.send_message(
+                    f"📢 {role_mention} **The ruleset has been updated by {interaction.user.mention}!**"
+                )
+            except discord.NotFound:
+                await interaction.response.send_message(
+                    "⚠️ The ruleset was saved, but the original message was deleted so it couldn't be updated", 
+                    ephemeral=True
+                )
+        else:
+            await interaction.response.send_message(
+                content=f"{role_mention} The new ruleset has been posted. It's time to submit your songs!",
+                embed=embed
+            )
 
-        players = get_registered_players_db(self.game_id)
-        total_needed = len(players) - 1
+            try:
+                ruleset_msg = await interaction.original_response()
+                update_round_ruleset_message_db(self.round_id, ruleset_msg.id)
+            except Exception as e:
+                logger.warning("Failed to fetch and save ruleset message ID: %s", e)
 
-        # Post the initial tracker message
-        tracker_msg = await interaction.channel.send(
-            f"🎧 **Round Status:** We are at `0/{total_needed}` submissions for the round."
-        )
+            players = get_registered_players_db(self.game_id)
+            total_needed = len(players) - 1
 
-        # Save it to the DB
-        update_round_status_message_db(self.round_id, tracker_msg.id)
+            # Post the initial tracker message
+            tracker_msg = await interaction.channel.send(
+                f"🎧 **Round Status:** We are at `0/{total_needed}` submissions for the round."
+            )
+
+            # Save it to the DB
+            update_round_status_message_db(self.round_id, tracker_msg.id)
 
 
 class CommentaryModal(Modal):
@@ -322,6 +343,24 @@ class ConfirmRankingButton(Button):
         # The game is over
         if not next_host_id:
             await channel.send(generate_leaderboard_text(leaderboard))
+
+            # Send the compilation of all playlists
+            rounds = get_game_rounds_db(self.game_id)
+            if rounds:
+                playlist_lines = ["🎶 **Here's all of the playlists from this game:**"]
+                for i, r_data in enumerate(rounds, start=1):
+                    host_mention = f"<@{r_data['host_id']}>"
+
+                    if r_data['playlist_id']:
+                        playlist_url = f"https://www.youtube.com/playlist?list={r_data['playlist_id']}"
+                    else:
+                        playlist_url = "*No playlist generated*"
+
+                    playlist_lines.append(f"**Round {i}** ({host_mention}): {playlist_url}")
+
+                # Add a slight delay so it posts cleanly after the leaderboard
+                await asyncio.sleep(2)
+                await channel.send("\n".join(playlist_lines))
 
 
 class ListenGameRankingView(View):

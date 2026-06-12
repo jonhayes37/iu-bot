@@ -616,3 +616,20 @@ def get_ordered_players_db(game_id: int) -> list[int]:
     except Exception as ex:
         logger.error("Error fetching ordered players: %s", ex)
         return []
+
+def get_game_rounds_db(game_id: int) -> list[dict]:
+    """Fetches all rounds for a given game to compile the playlists."""
+    try:
+        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT host_id, playlist_id 
+                FROM listen_rounds 
+                WHERE game_id = ? 
+                ORDER BY round_id ASC
+            """, (game_id,))
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception as ex:
+        logger.error("Error fetching game rounds: %s", ex)
+        return []

@@ -19,31 +19,23 @@ from utils.validation import validate_channel
 logger = logging.getLogger('iu-bot')
 
 
-@app_commands.command(name="listen-game-post-ruleset", description="[Listener] Set the ruleset for your round.")
+@app_commands.command(name="listen-game-post-ruleset", description="[Listener] Set or update the ruleset for your round.")
 @app_commands.checks.has_role("Listen Game Player")
 async def listen_game_set_theme(interaction: discord.Interaction):
     restricted = await validate_channel(interaction, 'listen-game')
     if restricted:
         return
 
-    # Check if a game is actually playing
     game = get_game_by_status_db('playing')
     if not game:
         await interaction.response.send_message("⚠️ There is no active game right now.", ephemeral=True)
         return
 
-    # Fetch the current round
     active_round = get_current_round_db(game['game_id'])
     if not active_round:
         await interaction.response.send_message("⚠️ Could not find an active round.", ephemeral=True)
         return
 
-    # Check the phase
-    if active_round['status'] != 'setting_theme':
-        await interaction.response.send_message("⚠️ The game is not currently waiting for a ruleset.", ephemeral=True)
-        return
-
-    # Authenticate the host
     if interaction.user.id != active_round['host_id']:
         host = interaction.guild.get_member(active_round['host_id'])
         host_name = host.mention if host else "the current listener"
@@ -51,8 +43,29 @@ async def listen_game_set_theme(interaction: discord.Interaction):
             f"❌ You are not the listener for this round! We are waiting on {host_name}.", ephemeral=True)
         return
 
-    # Launch the Modal
-    await interaction.response.send_modal(SetThemeModal(game['game_id'], active_round['round_id']))
+    # Check if a ruleset already exists
+    existing_theme = active_round.get('theme')
+    if existing_theme:
+        if active_round['status'] != 'submitting' or is_round_complete_db(game['game_id'], active_round['round_id']):
+            await interaction.response.send_message(
+                "❌ All players have already submitted their songs! You can no longer change the ruleset.", 
+                ephemeral=True
+            )
+            return
+    else:
+        if active_round['status'] != 'setting_theme':
+            await interaction.response.send_message(
+                "⚠️ The game is not currently waiting for a ruleset.", ephemeral=True)
+        return
+
+    # Launch the modal, passing in the existing data (if any)
+    modal = SetThemeModal(
+        game_id=game['game_id'],
+        round_id=active_round['round_id'],
+        existing_theme=existing_theme,
+        ruleset_msg_id=active_round.get('ruleset_message_id')
+    )
+    await interaction.response.send_modal(modal)
 
 
 @app_commands.command(name="listen-game-submit-song",
