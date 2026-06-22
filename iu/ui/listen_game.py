@@ -155,7 +155,8 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
 
                 # Publicly announce the update
                 await interaction.response.send_message(
-                    f"📢 {role_mention} **The ruleset has been updated by {interaction.user.mention}!**"
+                    f"📢 {role_mention} **The ruleset has been updated by {interaction.user.mention}!**",
+                    allowed_mentions=discord.AllowedMentions(roles=True)
                 )
             except discord.NotFound:
                 await interaction.response.send_message(
@@ -165,7 +166,8 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
         else:
             await interaction.response.send_message(
                 content=f"{role_mention} The new ruleset has been posted. It's time to submit your songs!",
-                embed=embed
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions(roles=True)
             )
 
             try:

@@ -19,7 +19,8 @@ from utils.validation import validate_channel
 logger = logging.getLogger('iu-bot')
 
 
-@app_commands.command(name="listen-game-post-ruleset", description="[Listener] Set or update the ruleset for your round.")
+@app_commands.command(name="listen-game-post-ruleset",
+                      description="[Listener] Set or update the ruleset for your round.")
 @app_commands.checks.has_role("Listen Game Player")
 async def listen_game_set_theme(interaction: discord.Interaction):
     restricted = await validate_channel(interaction, 'listen-game')
@@ -44,7 +45,7 @@ async def listen_game_set_theme(interaction: discord.Interaction):
         return
 
     # Check if a ruleset already exists
-    existing_theme = active_round.get('theme')
+    existing_theme = active_round['theme']
     if existing_theme:
         if active_round['status'] != 'submitting' or is_round_complete_db(game['game_id'], active_round['round_id']):
             await interaction.response.send_message(
@@ -56,14 +57,14 @@ async def listen_game_set_theme(interaction: discord.Interaction):
         if active_round['status'] != 'setting_theme':
             await interaction.response.send_message(
                 "⚠️ The game is not currently waiting for a ruleset.", ephemeral=True)
-        return
+            return
 
     # Launch the modal, passing in the existing data (if any)
     modal = SetThemeModal(
         game_id=game['game_id'],
         round_id=active_round['round_id'],
         existing_theme=existing_theme,
-        ruleset_msg_id=active_round.get('ruleset_message_id')
+        ruleset_msg_id=active_round['ruleset_message_id']
     )
     await interaction.response.send_modal(modal)
 
