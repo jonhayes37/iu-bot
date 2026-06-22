@@ -7,7 +7,7 @@ from db.listen_game import (
     get_current_round_db, get_game_by_status_db,
     get_registered_players_db, get_round_submissions_db,
     update_round_playlist_db, is_round_complete_db, upsert_submission_db,
-    get_user_submission_db, get_active_gm_id
+    get_user_submission_db, get_active_gm_id, is_video_claimed_by_other_db
 )
 from services.youtube import (
     get_video_title, create_listen_game_playlist, add_video_to_playlist,
@@ -103,6 +103,12 @@ async def submit_song(interaction: discord.Interaction, url: str):
     video_title = get_video_title(video_id)
     if not video_title:
         await interaction.followup.send("❌ Could not fetch that video. It may be private or deleted.")
+        return
+
+    if is_video_claimed_by_other_db(active_round['round_id'], interaction.user.id, video_id):
+        await interaction.followup.send(
+            "❌ **Song Already Claimed!** Someone else has already submitted this exact video for this round."
+        )
         return
 
     # Handle Previous Submissions & Duplicate Checking

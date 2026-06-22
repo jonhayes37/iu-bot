@@ -633,3 +633,23 @@ def get_game_rounds_db(game_id: int) -> list[dict]:
     except Exception as ex:
         logger.error("Error fetching game rounds: %s", ex)
         return []
+
+def is_video_claimed_by_other_db(round_id: int, user_id: int, video_id: str) -> bool:
+    """
+    Checks if another player has already submitted this exact video ID in the active round.
+    """
+    try:
+        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT 1 FROM listen_submissions 
+                WHERE round_id = ? AND video_id = ? AND user_id != ? 
+                LIMIT 1
+                """,
+                (round_id, video_id, user_id)
+            )
+            return cursor.fetchone() is not None
+    except Exception as ex:
+        logger.error("Error checking duplicate video ID: %s", ex)
+        return False
