@@ -8,6 +8,8 @@ from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
 
+ADMIN_USER_ID = 904751089633615972
+
 class DynamicListModal(discord.ui.Modal):
     """
     A dynamic modal for list submissions that adjusts its placeholder
@@ -107,6 +109,21 @@ class DynamicListModal(discord.ui.Modal):
                 msg = f"🎟️ **What Are You Listening To Bonus Pick Consumed!**\n{msg}"
 
             await interaction.response.send_message(msg, ephemeral=True)
+
+            # Notify admin
+            try:
+                admin_user = interaction.client.get_user(ADMIN_USER_ID) or \
+                    await interaction.client.fetch_user(ADMIN_USER_ID)
+                if admin_user:
+                    action = "updated" if previous_lines else "submitted"
+                    await admin_user.send(
+                        f"📥 {username} {action.title()} their list for{self.event_name}!"
+                    )
+            except discord.Forbidden:
+                logger.warning("Could not DM admin (ID: %s) about list submission. DMs might be closed.", ADMIN_USER_ID)
+            except Exception as ex:
+                logger.error("Failed to send admin notification DM: %s", ex)
+
         else:
             logger.error("Database error when saving submission for user %s on event %s. Full submission:\n%s",
                          user_id, self.event_id, raw_list)
