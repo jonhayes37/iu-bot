@@ -220,7 +220,7 @@ class CommentaryModal(Modal):
             if s['video_id'] != self.selected_song['video_id']
         ]
 
-        self.view_instance.current_rank += 1
+        self.view_instance.current_rank -= 1
         await self.view_instance.update_ui(interaction)
 
 
@@ -372,7 +372,7 @@ class ListenGameRankingView(View):
         super().__init__(timeout=None)
         self.unranked_submissions = submissions
         self.ranked_submissions = []
-        self.current_rank = 1
+        self.current_rank = len(submissions)
 
         # Store the IDs in the View
         self.game_id = game_id

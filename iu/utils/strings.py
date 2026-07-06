@@ -12,7 +12,7 @@ def generate_leaderboard_text(leaderboard: list[dict]) -> str:
     board_text += "Thank you all for playing! Here are the final standings:\n\n"
 
     for i, player in enumerate(leaderboard, start=1):
-        medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🏅"
+        medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else ""
         board_text += f"{medal} **{get_ordinal(i)}:** <@{player['user_id']}> — {player['score']} pts\n"
 
     return board_text
