@@ -117,7 +117,7 @@ class DynamicListModal(discord.ui.Modal):
                 if admin_user:
                     action = "updated" if previous_lines else "submitted"
                     await admin_user.send(
-                        f"📥 {username} {action.title()} their list for{self.event_name}!"
+                        f"📥 **{username}** {action.title()} their list for **{self.event_name}**!"
                     )
             except discord.Forbidden:
                 logger.warning("Could not DM admin (ID: %s) about list submission. DMs might be closed.", ADMIN_USER_ID)
