@@ -116,6 +116,13 @@ TRIGGER_LIST = {
     'filename': 'cha_eunwoo_preacher_saturday.gif'}],
     'generation': [{'content': '_La, la-la, la, la-la, la, la-la_', 'filename': 'triples_generation.gif'}], 
     'asap': [{'filename': 'stayc_asap.gif'}],
+    '6 7': [{'filename': 'ive_67.gif'}],
+    '6 or 7': [{'filename': 'ive_67.gif'}],
+    '6 maybe 7': [{'filename': 'ive_67.gif'}],
+    '6, maybe 7': [{'filename': 'ive_67.gif'}],
+    'six or seven': [{'filename': 'ive_67.gif'}],
+    'six or 7': [{'filename': 'ive_67.gif'}],
+    '6 or seven': [{'filename': 'ive_67.gif'}],
 }
 
 async def reply_with_gif(incoming, content, filename):
