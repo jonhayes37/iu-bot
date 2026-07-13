@@ -116,13 +116,13 @@ TRIGGER_LIST = {
     'filename': 'cha_eunwoo_preacher_saturday.gif'}],
     'generation': [{'content': '_La, la-la, la, la-la, la, la-la_', 'filename': 'triples_generation.gif'}], 
     'asap': [{'filename': 'stayc_asap.gif'}],
-    '6 7': [{'filename': 'ive_67.gif'}],
-    '6 or 7': [{'filename': 'ive_67.gif'}],
-    '6 maybe 7': [{'filename': 'ive_67.gif'}],
-    '6, maybe 7': [{'filename': 'ive_67.gif'}],
-    'six or seven': [{'filename': 'ive_67.gif'}],
-    'six or 7': [{'filename': 'ive_67.gif'}],
-    '6 or seven': [{'filename': 'ive_67.gif'}],
+    '6 7': [{'filename': 'ive_67.gif', 'skip_url': True}],
+    '6 or 7': [{'filename': 'ive_67.gif', 'skip_url': True}],
+    '6 maybe 7': [{'filename': 'ive_67.gif', 'skip_url': True}],
+    '6, maybe 7': [{'filename': 'ive_67.gif', 'skip_url': True}],
+    'six or seven': [{'filename': 'ive_67.gif', 'skip_url': True}],
+    'six or 7': [{'filename': 'ive_67.gif', 'skip_url': True}],
+    '6 or seven': [{'filename': 'ive_67.gif', 'skip_url': True}],
 }
 
 async def reply_with_gif(incoming, content, filename):
@@ -170,12 +170,32 @@ def find_unique_triggers(text):
                       if trigger in text and not is_subword(text, trigger)]
     unique_filenames = set()
     unique_triggers = set()
+    
     for f_t in found_triggers:
         cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(f_t)]
         if all(fname not in unique_filenames for fname in cur_filenames):
             unique_triggers.add(f_t)
             for fname in cur_filenames:
-                unique_filenames.add(fname)
+                if fname:
+                    unique_filenames.add(fname)
+
+    url_regex = r'(https?://[^\s]+)'
+    contains_url = bool(re.search(url_regex, text))
+
+    # Create a version of the text with all links completely removed
+    text_without_urls = re.sub(url_regex, ' ', text)
+    if contains_url:
+        triggers_to_remove = set()
+        for tr in unique_triggers:
+            # Check if this specific trigger has 'skip_url': True
+            if any(opt.get('skip_url') for opt in TRIGGER_LIST.get(tr)):
+                # If the trigger doesn't exist in the URL-free text,
+                # or it only exists as a subword now, it means the valid
+                # match was inside the URL.
+                if tr not in text_without_urls or is_subword(text_without_urls, tr):
+                    triggers_to_remove.add(tr)
+
+        unique_triggers.difference_update(triggers_to_remove)
 
     # Don't trigger both 'purple' and 'purple kiss' in the same message
     if 'purple kiss' in unique_triggers and 'purple' in unique_triggers:
@@ -198,10 +218,9 @@ def find_unique_triggers(text):
         unique_triggers.discard('father')
         unique_triggers.add('preacher_is_saturday_currently')
 
-    # Only trigger 'ballad' if there's also a link in the message
+    # Only trigger 'ballad' if there's also a link in the original message
     if 'ballad' in unique_triggers or 'ballads' in unique_triggers:
-        url_regex = r'(https?://[^\s]+)'
-        if not re.search(url_regex, text):
+        if not contains_url:
             unique_triggers.discard('ballad')
             unique_triggers.discard('ballads')
 
