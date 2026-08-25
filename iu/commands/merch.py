@@ -35,11 +35,8 @@ async def add_merch(
 ):
     """The Discord command logic for adding/updating merch items."""
 
-    if interaction.channel.name != 'dispatch-news':
-        await interaction.response.send_message(
-            "This command can only be used in the #dispatch-news channel.", 
-            ephemeral=True
-        )
+    restricted = await validate_channel(interaction, 'dispatch-news')
+    if restricted:
         return
 
     # Basic validation
@@ -227,11 +224,8 @@ async def draw_raffle(interaction: discord.Interaction):
     """The Discord command logic for drawing a raffle winner."""
 
     # Restrict to dispatch-news like the other admin commands
-    if interaction.channel.name != 'dispatch-news':
-        await interaction.response.send_message(
-            "This command can only be used in the #dispatch-news channel.", 
-            ephemeral=True
-        )
+    restricted = await validate_channel(interaction, 'dispatch-news')
+    if restricted:
         return
 
     try:

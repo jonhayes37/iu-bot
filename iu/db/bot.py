@@ -1,9 +1,9 @@
 """Database operations for core bot management."""
 
 import os
-import sqlite3
 import logging
 from datetime import datetime, timezone, timedelta
+from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
@@ -12,7 +12,7 @@ DB_PATH_BOT = os.getenv('DB_PATH_BOT')
 def save_bot_status_db(status_text: str, days: int) -> bool:
     """Saves a new status to the ledger."""
     try:
-        with sqlite3.connect(DB_PATH_BOT) as conn:
+        with db_connection(DB_PATH_BOT) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO statuses (status_text, max_duration_days)
@@ -26,19 +26,18 @@ def save_bot_status_db(status_text: str, days: int) -> bool:
 
 def get_active_bot_status_db() -> str | None:
     """
-    Fetches the most recent status. 
+    Fetches the most recent status.
     Returns None if there are no statuses or if the latest one has expired.
     """
     try:
-        with sqlite3.connect(DB_PATH_BOT) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_BOT, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Grab the absolute latest status
             cursor.execute("""
-                SELECT status_text, max_duration_days, created_at 
-                FROM statuses 
-                ORDER BY created_at DESC 
+                SELECT status_text, max_duration_days, created_at
+                FROM statuses
+                ORDER BY created_at DESC
                 LIMIT 1
             """)
 

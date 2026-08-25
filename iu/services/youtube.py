@@ -232,7 +232,7 @@ def add_video_to_playlist(playlist_id: str, video_id: str) -> bool:
         if error_reason == "quotaExceeded":
             logger.warning("YouTube API Quota exceeded during video addition!")
             raise QuotaExceededError(ex) from ex
-        elif error_reason == "videoNotFound":
+        if error_reason == "videoNotFound":
             logger.warning("Video %s cannot be added (it may be private or deleted).", video_id)
         else:
             logger.error("Failed to add video %s: %s", video_id, ex)

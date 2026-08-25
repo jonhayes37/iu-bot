@@ -2,6 +2,7 @@
 import sqlite3
 import logging
 import os
+from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
@@ -12,10 +13,10 @@ def create_ultimate_bias_db(user_id: int, name: str, birth_name: str, birthday: 
                             image_filename: str, position: str, reason: str) -> bool:
     """Inserts a new ultimate bias record for a user."""
     try:
-        with sqlite3.connect(DB_PATH_BIASES) as conn:
+        with db_connection(DB_PATH_BIASES) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO ultimate_biases 
+                INSERT INTO ultimate_biases
                 (user_id, name, birth_name, birthday, colour, group_name, hometown, image_filename, position, reason)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (user_id, name, birth_name, birthday, colour, group_name, hometown, image_filename, position, reason))
@@ -34,7 +35,7 @@ def update_ultimate_bias_db(user_id: int, **updates) -> bool:
         return False
 
     try:
-        with sqlite3.connect(DB_PATH_BIASES) as conn:
+        with db_connection(DB_PATH_BIASES) as conn:
             cursor = conn.cursor()
 
             # Dynamically construct the SET clause based on provided arguments
@@ -60,9 +61,8 @@ def update_ultimate_bias_db(user_id: int, **updates) -> bool:
 def get_ultimate_bias(user_id: int) -> dict:
     """Fetches the ultimate bias record for a user."""
     try:
-        with sqlite3.connect(DB_PATH_BIASES) as conn:
-            # Using Row factory allows us to access columns by name (like a dictionary)
-            conn.row_factory = sqlite3.Row
+        # Using Row factory allows us to access columns by name (like a dictionary)
+        with db_connection(DB_PATH_BIASES, row_factory=True) as conn:
             cursor = conn.cursor()
 
             cursor.execute("SELECT * FROM ultimate_biases WHERE user_id = ?", (user_id,))
@@ -82,10 +82,10 @@ def create_artist_bias_db(
 ) -> bool:
     """Inserts a new artist bias (bias group) record for a user."""
     try:
-        with sqlite3.connect(DB_PATH_BIASES) as conn:
+        with db_connection(DB_PATH_BIASES) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO artist_biases 
+                INSERT INTO artist_biases
                 (user_id, name, album, b_track, bias, colour, debut_date, image_filename, label, members, reason, title_track)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (user_id, name, album, b_track, bias, colour, debut_date, image_filename, label, members, reason,
@@ -105,7 +105,7 @@ def update_artist_bias_db(user_id: int, **updates) -> bool:
         return False
 
     try:
-        with sqlite3.connect(DB_PATH_BIASES) as conn:
+        with db_connection(DB_PATH_BIASES) as conn:
             cursor = conn.cursor()
 
             set_clauses = []
@@ -114,7 +114,7 @@ def update_artist_bias_db(user_id: int, **updates) -> bool:
                 set_clauses.append(f"{key} = ?")
                 values.append(value)
 
-            values.append(user_id) 
+            values.append(user_id)
 
             query = f"UPDATE artist_biases SET {', '.join(set_clauses)} WHERE user_id = ?"
             cursor.execute(query, tuple(values))
@@ -128,8 +128,7 @@ def update_artist_bias_db(user_id: int, **updates) -> bool:
 def get_artist_bias(user_id: int) -> dict:
     """Fetches the artist bias record for a user."""
     try:
-        with sqlite3.connect(DB_PATH_BIASES) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_BIASES, row_factory=True) as conn:
             cursor = conn.cursor()
 
             cursor.execute("SELECT * FROM artist_biases WHERE user_id = ?", (user_id,))

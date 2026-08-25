@@ -88,11 +88,8 @@ async def random_award(interaction: discord.Interaction, users: str, amount: int
     """The Discord command logic for a random giveaway."""
 
     # Channel restriction check
-    if interaction.channel.name != 'dispatch-news':
-        await interaction.response.send_message(
-            "This command can only be used in the #dispatch-news channel.", 
-            ephemeral=True
-        )
+    restricted = await validate_channel(interaction, 'dispatch-news')
+    if restricted:
         return
 
     # Extract Discord User IDs from the input string using Regex

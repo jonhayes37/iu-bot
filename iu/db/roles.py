@@ -3,19 +3,16 @@
 
 import logging
 import os
-import sqlite3
+from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
+DB_PATH_ROLES = os.getenv('DB_PATH_ROLES')
+
 def get_role_id(alias: str) -> int | None:
     """Fetches the Discord Role ID associated with a given name or alias."""
-    db_path_roles = os.getenv('DB_PATH_ROLES')
-    if not db_path_roles:
-        logger.error("DB_PATH_ROLES environment variable not set! Cannot access roles database.")
-        return None
-
     try:
-        with sqlite3.connect(db_path_roles) as conn:
+        with db_connection(DB_PATH_ROLES) as conn:
             cursor = conn.cursor()
             # UNION merges the results. LOWER(role_name) ensures case-insensitive
             # matching against the user's lowercased input.
@@ -32,12 +29,8 @@ def get_role_id(alias: str) -> int | None:
 
 def get_all_roles_grouped() -> dict:
     """Fetches all roles and aliases, grouped by category."""
-    db_path_roles = os.getenv('DB_PATH_ROLES')
-    if not db_path_roles:
-        return {}
-
     try:
-        with sqlite3.connect(db_path_roles) as conn:
+        with db_connection(DB_PATH_ROLES) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT c.name, r.role_name, a.alias
@@ -64,13 +57,8 @@ def get_all_roles_grouped() -> dict:
 
 def get_display_message_ids() -> list[int]:
     """Retrieves the list of active message IDs from the database."""
-    db_path_roles = os.getenv('DB_PATH_ROLES')
-    if not db_path_roles:
-        logger.error("DB_PATH_ROLES environment variable not set! Cannot fetch display message IDs.")
-        return []
-
     try:
-        with sqlite3.connect(db_path_roles) as conn:
+        with db_connection(DB_PATH_ROLES) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT message_id FROM display_messages")
             return [row[0] for row in cursor.fetchall()]
@@ -80,13 +68,8 @@ def get_display_message_ids() -> list[int]:
 
 def replace_display_message_ids(message_ids: list[int]):
     """Wipes the old tracked IDs and saves the new ones."""
-    db_path_roles = os.getenv('DB_PATH_ROLES')
-    if not db_path_roles:
-        logger.error("DB_PATH_ROLES environment variable not set! Cannot update display message IDs.")
-        return
-
     try:
-        with sqlite3.connect(db_path_roles) as conn:
+        with db_connection(DB_PATH_ROLES) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM display_messages")
             cursor.executemany("INSERT INTO display_messages (message_id) VALUES (?)", [(m,) for m in message_ids])
@@ -96,12 +79,8 @@ def replace_display_message_ids(message_ids: list[int]):
 
 def register_new_role(role_id: int, role_name: str, category_name: str, aliases: list[str]) -> bool:
     """Inserts a new role, its category, and its aliases into the database."""
-    db_path_roles = os.getenv('DB_PATH_ROLES')
-    if not db_path_roles:
-        return False
-
     try:
-        with sqlite3.connect(db_path_roles) as conn:
+        with db_connection(DB_PATH_ROLES) as conn:
             cursor = conn.cursor()
 
             # Upsert the category
@@ -115,7 +94,7 @@ def register_new_role(role_id: int, role_name: str, category_name: str, aliases:
 
             # Add the role
             cursor.execute("""
-                INSERT OR REPLACE INTO assignable_roles (role_id, category_id, role_name) 
+                INSERT OR REPLACE INTO assignable_roles (role_id, category_id, role_name)
                 VALUES (?, ?, ?)
             """, (role_id, category_id, role_name))
 
@@ -125,7 +104,7 @@ def register_new_role(role_id: int, role_name: str, category_name: str, aliases:
 
             for alias in all_aliases:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO role_aliases (alias, role_id) 
+                    INSERT OR IGNORE INTO role_aliases (alias, role_id)
                     VALUES (?, ?)
                 """, (alias, role_id))
 

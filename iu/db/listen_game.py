@@ -4,6 +4,7 @@ import sqlite3
 import random
 import logging
 from datetime import datetime, timedelta, timezone
+from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
@@ -12,7 +13,7 @@ DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
 def create_game_db(gm_id: int, sub_gm_id: int, max_round_days: int | None) -> int | None:
     """Creates a new game instance in the registration state."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
 
             # Check if there is already an active game
@@ -33,7 +34,7 @@ def create_game_db(gm_id: int, sub_gm_id: int, max_round_days: int | None) -> in
 def start_game_db(game_id: int) -> list[int] | None:
     """Transitions game, randomizes DB turn orders, and sets up Round 1."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
 
             # Fetch current players who registered via the UI
@@ -70,8 +71,7 @@ def start_game_db(game_id: int) -> list[int] | None:
 def get_game_by_status_db(status: str) -> dict | None:
     """Fetches a game record based on its current phase."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM listen_games WHERE status = ?", (status,))
             row = cursor.fetchone()
@@ -83,7 +83,7 @@ def get_game_by_status_db(status: str) -> dict | None:
 def register_player_db(game_id: int, user_id: int) -> bool:
     """Adds a player to a game. Returns True if added, False if they already joined."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             # Score and turn_order default to 0/NULL
             cursor.execute("""
@@ -100,7 +100,7 @@ def register_player_db(game_id: int, user_id: int) -> bool:
 def unregister_player_db(game_id: int, user_id: int) -> bool:
     """Removes a player from a game during registration."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM listen_players WHERE game_id = ? AND user_id = ?", (game_id, user_id))
             return cursor.rowcount > 0
@@ -111,7 +111,7 @@ def unregister_player_db(game_id: int, user_id: int) -> bool:
 def get_registered_players_db(game_id: int) -> list[int]:
     """Returns a list of user_ids registered for the game."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT user_id FROM listen_players WHERE game_id = ?", (game_id,))
             return [row[0] for row in cursor.fetchall()]
@@ -122,8 +122,7 @@ def get_registered_players_db(game_id: int) -> list[int]:
 def get_current_round_db(game_id: int) -> dict | None:
     """Fetches the currently active round for a game."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT * FROM listen_rounds WHERE game_id = ? AND "
@@ -139,7 +138,7 @@ def get_current_round_db(game_id: int) -> dict | None:
 def set_round_theme_db(round_id: int, theme: str) -> bool:
     """Saves the theme, starts the timer, and advances the state to submitting."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE listen_rounds 
@@ -154,8 +153,7 @@ def set_round_theme_db(round_id: int, theme: str) -> bool:
 def get_round_submissions_db(round_id: int) -> list[dict]:
     """Fetches all successful submissions for a given round."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM listen_submissions WHERE round_id = ?", (round_id,))
             return [dict(row) for row in cursor.fetchall()]
@@ -166,8 +164,7 @@ def get_round_submissions_db(round_id: int) -> list[dict]:
 def get_user_submission_db(round_id: int, user_id: int) -> dict | None:
     """Fetches a specific user's submission for the current round."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM listen_submissions WHERE round_id = ? AND user_id = ?", (round_id, user_id))
             row = cursor.fetchone()
@@ -179,7 +176,7 @@ def get_user_submission_db(round_id: int, user_id: int) -> dict | None:
 def upsert_submission_db(round_id: int, user_id: int, video_id: str, raw_title: str) -> bool:
     """Inserts a new submission or overwrites an existing one."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO listen_submissions (round_id, user_id, video_id, raw_title)
@@ -197,7 +194,7 @@ def upsert_submission_db(round_id: int, user_id: int, video_id: str, raw_title: 
 def update_round_playlist_db(round_id: int, playlist_id: str) -> bool:
     """Saves the generated YouTube playlist ID to the round."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE listen_rounds SET playlist_id = ? WHERE round_id = ?", (playlist_id, round_id))
             return cursor.rowcount > 0
@@ -208,7 +205,7 @@ def update_round_playlist_db(round_id: int, playlist_id: str) -> bool:
 def is_round_complete_db(game_id: int, round_id: int) -> bool:
     """Checks if all non-host players have submitted their songs."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             # Get total players
             cursor.execute("SELECT COUNT(*) FROM listen_players WHERE game_id = ?", (game_id,))
@@ -227,8 +224,7 @@ def is_round_complete_db(game_id: int, round_id: int) -> bool:
 def get_missing_players_for_reminders_db() -> list[dict]:
     """Fetches players who haven't submitted, along with round timing info."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Joins players to the active round, checking who DOES NOT have a submission
@@ -254,7 +250,7 @@ def get_missing_players_for_reminders_db() -> list[dict]:
 def update_last_reminded_db(game_id: int, user_id: int) -> bool:
     """Updates the last_reminded_at timestamp for a player."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE listen_players 
@@ -269,8 +265,7 @@ def update_last_reminded_db(game_id: int, user_id: int) -> bool:
 def get_expired_rounds_db() -> list[dict]:
     """Fetches rounds that are still accepting submissions but have passed their deadline."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Find rounds in 'submitting' state where max_round_days is set and exceeded
@@ -301,7 +296,7 @@ def get_expired_rounds_db() -> list[dict]:
 def close_round_db(round_id: int) -> bool:
     """Transitions a round from 'submitting' to 'ranking'."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE listen_rounds 
@@ -316,7 +311,7 @@ def close_round_db(round_id: int) -> bool:
 def save_round_results_db(game_id: int, round_id: int, results: list[dict]) -> bool:
     """Saves rankings/commentary and applies points to player scores in one transaction."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
 
             for res in results:
@@ -347,7 +342,7 @@ def advance_game_turn_db(game_id: int, round_id: int) -> int | None:
     """
 
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
 
             # Close current round
@@ -392,8 +387,7 @@ def advance_game_turn_db(game_id: int, round_id: int) -> int | None:
 def get_game_leaderboard_db(game_id: int) -> list[dict]:
     """Fetches the final scores for all players in a game, sorted highest to lowest."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
@@ -411,7 +405,7 @@ def get_game_leaderboard_db(game_id: int) -> list[dict]:
 def delete_submission_db(round_id: int, user_id: int) -> bool:
     """Removes a user's submission from the specified round."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "DELETE FROM listen_submissions WHERE round_id = ? AND user_id = ?",
@@ -428,7 +422,7 @@ def skip_game_turn_db(game_id: int, round_id: int) -> int | None:
     Returns the next host's user ID, or None if the game has ended.
     """
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
 
             # Close current round as skipped
@@ -472,7 +466,7 @@ def skip_game_turn_db(game_id: int, round_id: int) -> int | None:
 def remove_player_from_game_db(game_id: int, user_id: int) -> bool:
     """Removes a player from the active game roster."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "DELETE FROM listen_players WHERE game_id = ? AND user_id = ?",
@@ -495,7 +489,7 @@ def update_round_status_message_db(round_id: int, message_id: int) -> bool:
         bool: True if the update was successful, False otherwise.
     """
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE listen_rounds
@@ -513,7 +507,7 @@ def swap_player_orders_db(game_id: int, user_id1: int, user_id2: int) -> dict:
     Returns a dictionary indicating success status and an appropriate response message.
     """
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
 
             # 1. Find the current host's turn order using the active round
@@ -576,7 +570,7 @@ def get_active_gm_id(game: dict, active_round: dict | None = None) -> int:
 def update_round_ruleset_message_db(round_id: int, message_id: int) -> bool:
     """Saves the message ID of the host's ruleset post."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE listen_rounds
@@ -591,7 +585,7 @@ def update_round_ruleset_message_db(round_id: int, message_id: int) -> bool:
 def update_game_start_message_db(game_id: int, message_id: int) -> bool:
     """Saves the message ID of the game start (turn order) post."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE listen_games
@@ -606,7 +600,7 @@ def update_game_start_message_db(game_id: int, message_id: int) -> bool:
 def get_ordered_players_db(game_id: int) -> list[int]:
     """Returns a list of user_ids ordered by their current turn order."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT user_id FROM listen_players WHERE game_id = ? ORDER BY turn_order ASC",
@@ -620,8 +614,7 @@ def get_ordered_players_db(game_id: int) -> list[int]:
 def get_game_rounds_db(game_id: int) -> list[dict]:
     """Fetches all rounds for a given game to compile the playlists."""
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT host_id, playlist_id 
@@ -639,7 +632,7 @@ def is_video_claimed_by_other_db(round_id: int, user_id: int, video_id: str) -> 
     Checks if another player has already submitted this exact video ID in the active round.
     """
     try:
-        with sqlite3.connect(DB_PATH_LISTEN_GAME) as conn:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """

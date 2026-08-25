@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS tournaments (
     tournament_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    description TEXT,
     days_per_round INTEGER NOT NULL DEFAULT 2,
     status TEXT NOT NULL DEFAULT 'active', -- 'active', 'completed', 'cancelled'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -1,13 +1,13 @@
 """Database operations and math helpers for the tournament bracket feature."""
 
 import os
-import sqlite3
 import logging
 import math
 import random
 import uuid
 from datetime import datetime, timezone
 from typing import List, Tuple
+from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
@@ -38,7 +38,7 @@ def create_tournament(name: str, description: str, entrants: List[str], days_per
     tournament_id = uuid.uuid4().hex[:8] # Clean, short ID
 
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
 
             # 1. Create the parent tournament record
@@ -99,8 +99,7 @@ def get_bracket_render_data(tournament_id: str) -> dict | None:
     Supports any power-of-2 entrant size (4, 8, 16, 32, 64, etc.).
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_TOURNAMENTS, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Get Tournament Name
@@ -176,8 +175,7 @@ def get_unpolled_matches(tournament_id: str, round_num: int) -> list[dict] | Non
     Fetches matches in a specific round that have fully populated entrants but no poll message_id.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_TOURNAMENTS, row_factory=True) as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
@@ -203,7 +201,7 @@ def set_match_poll_data(match_id: int, message_id: int, end_time: datetime) -> b
     Saves the Discord message ID and the exact expiration timestamp to the match record.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
             # Storing as an ISO-8601 string makes it incredibly easy to parse later
             cursor.execute("""
@@ -220,8 +218,7 @@ def set_match_poll_data(match_id: int, message_id: int, end_time: datetime) -> b
 def get_expired_unresolved_matches() -> list[dict] | None:
     """Fetches matches where the poll has ended but no winner has been declared."""
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_TOURNAMENTS, row_factory=True) as conn:
             cursor = conn.cursor()
             now_iso = datetime.now(timezone.utc).isoformat()
             cursor.execute("""
@@ -244,7 +241,7 @@ def get_expired_unresolved_matches() -> list[dict] | None:
 def advance_winner(match_id: int, tournament_id: str, current_round: int, current_pos: int, winner_id: int) -> bool:
     """Marks the winner and slots them into the next round of the bracket."""
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
 
             # Mark the winner of the current match
@@ -282,8 +279,7 @@ def check_round_status(tournament_id: str) -> dict:
     Returns: { 'tournament_name': str, 'current_round': int, 'is_finished': bool, 'is_tournament_over': bool }
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_TOURNAMENTS, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Find the lowest round number that isn't fully resolved
@@ -340,7 +336,7 @@ def get_tournament_days(tournament_id: str) -> int:
     Defaults to 1 if something goes wrong to prevent the bot from stalling.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT days_per_round FROM tournaments WHERE tournament_id = ?", 
@@ -357,7 +353,7 @@ def get_tournament_winner_name(tournament_id: str) -> str:
     Fetches the name of the entrant who won the final match of the tournament.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
             # Select the winner_id from the highest round_num
             cursor.execute("""
@@ -380,8 +376,7 @@ def process_user_vote(message_id: int, user_id: int, answer_id: int) -> dict | N
     for the user, it locks the reward ledger and returns tournament details.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_TOURNAMENTS, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Identify the match and its entrants
@@ -457,8 +452,7 @@ def get_tournament_raffle_winner(tournament_id: str) -> dict | None:
     Returns the winning user_id, their ticket count, and the total pool size.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
-            conn.row_factory = sqlite3.Row
+        with db_connection(DB_PATH_TOURNAMENTS, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Count total votes per user across the entire tournament
@@ -502,7 +496,7 @@ def force_close_active_round(tournament_id: str) -> int:
     Returns the number of matches affected.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
             now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -525,7 +519,7 @@ def get_active_tournament_id() -> str | None:
     Retrieves the ID of the most recently created active tournament.
     """
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
@@ -546,7 +540,7 @@ def get_active_tournament_id() -> str | None:
 def set_tournament_completed(tournament_id: str) -> bool:
     """Marks a tournament as completed so the background task stops tracking it."""
     try:
-        with sqlite3.connect(DB_PATH_TOURNAMENTS) as conn:
+        with db_connection(DB_PATH_TOURNAMENTS) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE tournaments 

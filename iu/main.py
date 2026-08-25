@@ -35,6 +35,7 @@ from commands.releases import backfill_releases
 from commands.roles import register_role, sync_roles
 from commands.tournaments import force_close_round, new_tournament
 from db.bot import get_active_bot_status_db
+from db.connection import ensure_column
 from db.tournaments import process_user_vote
 from db.merch import modify_db_balance
 from tasks.listen_game import check_listen_game_reminders
@@ -356,6 +357,16 @@ def initialize_databases():
             logger.critical("Error: Could not find schema file at %s", schema_path)
         except Exception as e:
             logger.error("Failed to initialize DB at %s: %s", db_path, e)
+
+    # One-off migration: tournaments.db predates the `description` column that
+    # create_tournament() writes to. CREATE TABLE IF NOT EXISTS above won't add a column
+    # to an already-existing table, so patch it in directly if it's missing. Safe to run
+    # on every startup -- a no-op once the column is there.
+    if DB_PATH_TOURNAMENTS:
+        try:
+            ensure_column(DB_PATH_TOURNAMENTS, "tournaments", "description", "TEXT")
+        except Exception as e:
+            logger.error("Failed to migrate tournaments.db: %s", e)
 
     logger.info("All databases initialized successfully.")
 
