@@ -1,5 +1,6 @@
 """Utility module for rendering HTML/CSS templates into images using Playwright."""
 
+import asyncio
 import io
 import logging
 import os
@@ -10,6 +11,38 @@ from db.tournaments import get_bracket_render_data
 logger = logging.getLogger('iu-bot')
 
 TEMPLATE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+class _BrowserCache:
+    """Lazily launches and caches a single shared Chromium instance for reuse across renders.
+
+    A fresh headless Chromium launch costs 1-3 seconds. Renders happen several times per
+    tournament (creation, every round advance, the finale), so one browser is launched
+    lazily and reused for every render instead of relaunching each time.
+    """
+
+    def __init__(self):
+        self._playwright = None
+        self._browser = None
+        self._lock = asyncio.Lock()
+
+    async def get_browser(self):
+        """Returns the shared Chromium instance, launching (or relaunching, if it crashed) it as needed."""
+        async with self._lock:
+            if self._browser is None or not self._browser.is_connected():
+                if self._playwright is None:
+                    self._playwright = await async_playwright().start()
+                self._browser = await self._playwright.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+                )
+                logger.info("Launched shared Chromium instance for bracket rendering.")
+        return self._browser
+
+    def invalidate(self):
+        """Forces a relaunch on the next render, e.g. after the browser crashed mid-render."""
+        self._browser = None
+
+_browser_cache = _BrowserCache()
 
 async def generate_bracket_image(tournament_id: str) -> io.BytesIO | None:
     """
@@ -57,40 +90,37 @@ async def generate_bracket_image(tournament_id: str) -> io.BytesIO | None:
 
 async def render_html_to_image(html_content: str, width: int = 2100, height: int = 950) -> io.BytesIO | None:
     """
-    Spins up a headless browser, renders the provided HTML, and takes a screenshot.
-    
+    Renders the provided HTML in the shared headless browser and takes a screenshot.
+
     Args:
         html_content: The raw HTML string (with embedded CSS) to render.
         width: The viewport width in pixels.
         height: The viewport height in pixels.
-        
+
     Returns:
         An io.BytesIO object containing the raw PNG image data, or None if it fails.
     """
     try:
-        async with async_playwright() as p:
-            # Launch Chromium. The arguments are strictly required to run inside a Docker container.
-            browser = await p.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-            )
-
-            page = await browser.new_page(viewport={"width": width, "height": height})
-
+        browser = await _browser_cache.get_browser()
+        page = await browser.new_page(viewport={"width": width, "height": height})
+        try:
             # Load the HTML content directly into the browser
             # wait_until="networkidle" ensures external fonts/images finish loading before the screenshot
             await page.set_content(html_content, wait_until="networkidle")
 
             # Take the screenshot as a byte array
             screenshot_bytes = await page.screenshot(type="png")
-            await browser.close()
+        finally:
+            await page.close()
 
-            # Wrap it in BytesIO so Discord can consume it directly as a discord.File
-            image_buffer = io.BytesIO(screenshot_bytes)
-            image_buffer.seek(0)
+        # Wrap it in BytesIO so Discord can consume it directly as a discord.File
+        image_buffer = io.BytesIO(screenshot_bytes)
+        image_buffer.seek(0)
 
-            return image_buffer
+        return image_buffer
 
     except Exception as ex:
         logger.error("Failed to render HTML to image: %s", ex)
+        # The shared browser may have crashed or disconnected -- force a relaunch next time.
+        _browser_cache.invalidate()
         return None

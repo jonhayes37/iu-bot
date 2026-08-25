@@ -52,3 +52,8 @@ CREATE TABLE IF NOT EXISTS tournament_rewards_ledger (
     PRIMARY KEY (tournament_id, round_num, user_id), -- The lock
     FOREIGN KEY (tournament_id) REFERENCES tournaments(tournament_id) ON DELETE CASCADE
 );
+
+-- process_user_vote looks up the match by message_id on every single poll vote;
+-- most other match queries filter by tournament_id.
+CREATE INDEX IF NOT EXISTS idx_tournament_matches_message_id ON tournament_matches(message_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_matches_tournament_id ON tournament_matches(tournament_id);

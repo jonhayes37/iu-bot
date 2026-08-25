@@ -3,6 +3,7 @@
 import os
 import re
 import logging
+import threading
 from typing import Any
 from datetime import datetime
 from google.oauth2.credentials import Credentials
@@ -26,13 +27,42 @@ class QuotaExceededError(Exception):
         super().__init__(ex_str)
 
 
-def get_yt_service() -> Any:
-    if not os.path.exists(TOKEN_PATH):
-        logger.error("token.json missing at %s! Cannot authenticate.", TOKEN_PATH)
-        return None
+class _YouTubeServiceCache:
+    """Lazily builds and caches the YouTube API client.
 
-    creds = Credentials.from_authorized_user_file(TOKEN_PATH, ['https://www.googleapis.com/auth/youtube'])
-    return build('youtube', 'v3', credentials=creds)
+    Rebuilding used to happen on every single call -- re-reading token.json from disk and
+    re-parsing the discovery document each time. The underlying credentials already refresh
+    themselves as needed on each request, so there's no reason to rebuild the client itself.
+    Callers run in worker threads (via asyncio.to_thread), so the build is guarded by a lock
+    rather than raced once per thread.
+    """
+
+    def __init__(self):
+        self._service = None
+        self._lock = threading.Lock()
+
+    def get(self) -> Any:
+        if self._service is not None:
+            return self._service
+
+        with self._lock:
+            if self._service is not None:
+                return self._service
+
+            if not os.path.exists(TOKEN_PATH):
+                logger.error("token.json missing at %s! Cannot authenticate.", TOKEN_PATH)
+                return None
+
+            creds = Credentials.from_authorized_user_file(TOKEN_PATH, ['https://www.googleapis.com/auth/youtube'])
+            self._service = build('youtube', 'v3', credentials=creds)
+
+        return self._service
+
+_yt_service_cache = _YouTubeServiceCache()
+
+def get_yt_service() -> Any:
+    """Returns a cached YouTube API client, building it once and reusing it after that."""
+    return _yt_service_cache.get()
 
 def create_playlist(title: str, description: str = "") -> str | None:
     """Creates an unlisted YouTube playlist with a custom title and returns its ID."""
