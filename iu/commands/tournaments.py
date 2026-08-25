@@ -1,5 +1,6 @@
 """Discord slash commands for managing and interacting with bracket tournaments."""
 
+import asyncio
 import discord
 from db.tournaments import create_tournament, force_close_active_round
 from ui.bracket_renderer import generate_bracket_image
@@ -33,8 +34,11 @@ async def new_tournament(interaction: discord.Interaction, title: str, descripti
         )
         return
 
-    # Create the Database State
-    success, t_id, error_msg = create_tournament(title, description, entrants, days_per_round)
+    # Create the Database State (inserts the full entrant + match tree in one call,
+    # so it runs off the event loop)
+    success, t_id, error_msg = await asyncio.to_thread(
+        create_tournament, title, description, entrants, days_per_round
+    )
 
     if not success:
         await interaction.followup.send(f"Database error while creating the tournament: {error_msg}")

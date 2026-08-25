@@ -1,5 +1,6 @@
 """IU Bot for the HallyU Discord server"""
 
+import asyncio
 import logging
 import os
 import sqlite3
@@ -261,8 +262,10 @@ async def on_raw_poll_vote_add(payload: discord.RawPollVoteActionEvent):
     if payload.user_id == client.user.id:
         return
 
-    # Save the vote and check the ledger
-    reward_data = process_user_vote(
+    # Save the vote and check the ledger. This fires on every poll click, so the
+    # blocking sqlite work runs in a thread rather than stalling the event loop.
+    reward_data = await asyncio.to_thread(
+        process_user_vote,
         message_id=payload.message_id,
         user_id=payload.user_id,
         answer_id=payload.answer_id
@@ -274,10 +277,13 @@ async def on_raw_poll_vote_add(payload: discord.RawPollVoteActionEvent):
         r_num = reward_data['round_num']
 
         # Award the heart
-        modify_db_balance("IU bot",
-                          payload.user_id,
-                          1,
-                          f"Voted in every matchup for round {r_num} of **{t_name}**")
+        await asyncio.to_thread(
+            modify_db_balance,
+            "IU bot",
+            payload.user_id,
+            1,
+            f"Voted in every matchup for round {r_num} of **{t_name}**"
+        )
 
         # Post to #dispatch-news
         guild = client.get_guild(payload.guild_id)

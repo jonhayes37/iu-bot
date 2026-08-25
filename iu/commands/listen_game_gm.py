@@ -1,5 +1,6 @@
 """GM specific commands for administrating the Listen Game."""
 
+import asyncio
 import logging
 import re
 import typing
@@ -151,27 +152,18 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
         await interaction.followup.send("ℹ️ There are no submissions in the database to sync.")
         return
 
-    existing_yt_vids = get_playlist_video_ids(playlist_id)
+    # Each of these is a blocking YouTube API call; the list call and the per-video
+    # insert loop both run in a thread so they don't stall the event loop.
+    existing_yt_vids = await asyncio.to_thread(get_playlist_video_ids, playlist_id)
     missing_vids = [sub for sub in submissions if sub['video_id'] not in existing_yt_vids]
 
     if not missing_vids:
         await interaction.followup.send("✅ The YouTube playlist is completely up to date with the database!")
         return
 
-    added_count = 0
-    failed_count = 0
-    quota_hit = False
-
-    for sub in missing_vids:
-        try:
-            success = add_video_to_playlist(playlist_id, sub['video_id'])
-            if success:
-                added_count += 1
-            else:
-                failed_count += 1
-        except QuotaExceededError:
-            quota_hit = True
-            break
+    added_count, failed_count, quota_hit = await asyncio.to_thread(
+        _sync_missing_videos, playlist_id, missing_vids
+    )
 
     msg = f"🔄 **Sync Complete!**\nAdded {added_count} missing videos to the playlist."
     if failed_count > 0:
@@ -195,6 +187,25 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
         return
 
     await interaction.followup.send(msg)
+
+def _sync_missing_videos(playlist_id: str, missing_vids: list[dict]) -> tuple[int, int, bool]:
+    """Synchronous worker: adds each missing video to the YouTube playlist."""
+    added_count = 0
+    failed_count = 0
+    quota_hit = False
+
+    for sub in missing_vids:
+        try:
+            success = add_video_to_playlist(playlist_id, sub['video_id'])
+            if success:
+                added_count += 1
+            else:
+                failed_count += 1
+        except QuotaExceededError:
+            quota_hit = True
+            break
+
+    return added_count, failed_count, quota_hit
 
 @app_commands.command(name="listen-game-gm-reject-song", description="[GM] Reject a player's submission.")
 @app_commands.describe(

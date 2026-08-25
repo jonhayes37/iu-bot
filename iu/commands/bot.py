@@ -14,7 +14,9 @@ from utils.validation import validate_channel
 async def set_iu_status(interaction: discord.Interaction, status_text: str, days: int = 7):
     """Changes the bot's status and saves it for reconnections."""
 
-    validate_channel(interaction, 'sandbox')
+    restricted = await validate_channel(interaction, 'sandbox')
+    if restricted:
+        return
 
     # Save to the database
     success = save_bot_status_db(status_text, days)

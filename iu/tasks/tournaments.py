@@ -64,21 +64,27 @@ async def tournament_resolution_loop(client: discord.Client, guild_id: int):
         logger.error("Could not find #tournaments channel to resolve polls.")
         return
 
-    expired_matches = get_expired_unresolved_matches()
-    if len(expired_matches) > 0:
-        logger.info("Found %d expired matches to resolve.", len(expired_matches))
-        await _process_expired_matches(tournaments_channel, expired_matches)
-        t_id = expired_matches[0]['tournament_id']
+    try:
+        expired_matches = get_expired_unresolved_matches()
+        if len(expired_matches) > 0:
+            logger.info("Found %d expired matches to resolve.", len(expired_matches))
+            await _process_expired_matches(tournaments_channel, expired_matches)
+            t_id = expired_matches[0]['tournament_id']
 
-        # Let Discord's backend catch up and post all "Poll Closed" messages
-        await asyncio.sleep(max(10,2*len(expired_matches)))
-    else:
-        t_id = get_active_tournament_id()
-        if not t_id:
-            logger.info("No active tournament found, skipping round completion check.")
-            return
+            # Let Discord's backend catch up and post all "Poll Closed" messages
+            await asyncio.sleep(max(10,2*len(expired_matches)))
+        else:
+            t_id = get_active_tournament_id()
+            if not t_id:
+                logger.info("No active tournament found, skipping round completion check.")
+                return
 
-    await check_round_completion(tournaments_channel, t_id, get_tournament_days(t_id))
+        await check_round_completion(tournaments_channel, t_id, get_tournament_days(t_id))
+    except Exception:
+        # An unhandled exception here would otherwise propagate out of the loop body,
+        # which permanently stops tasks.loop from ticking again (no auto-retry) --
+        # silently halting every active tournament until the bot is restarted.
+        logger.exception("Unhandled error in tournament resolution loop; will retry next tick.")
 
 async def _process_expired_matches(tournaments_channel, expired_matches):
     for match in expired_matches:
@@ -164,21 +170,27 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
             modify_db_balance("IU bot", winner_id, 5, f"Won the raffle for {t_name}!")
 
             guild = channel.guild
+            # Fall back to a raw mention if the winner has since left the server --
+            # fetch_member raises NotFound in that case, which shouldn't stop the finale.
+            try:
+                member = await guild.fetch_member(winner_id)
+                winner_mention = member.mention
+            except discord.NotFound:
+                logger.warning("Raffle winner %s is no longer in the guild; mentioning by ID.", winner_id)
+                winner_mention = f"<@{winner_id}>"
+
             news_channel = discord.utils.get(guild.text_channels, name="dispatch-news")
             if news_channel:
-                # Safely fetch the member to ping them
-                member = await guild.fetch_member(winner_id)
                 msg = (
-                    f"{member.mention} earned **5 hearts** for winning the participation raffle "
+                    f"{winner_mention} earned **5 hearts** for winning the participation raffle "
                     f"for the **{t_name}**!"
                 )
                 await news_channel.send(msg)
 
-            member = await guild.fetch_member(winner_id)
             finale_msg += (
                 f"\n\n**Participation Raffle**\n"
                 f"Every vote cast was a ticket in our Grand Prize draw (Total Pool: {total_pool} votes).\n"
-                f"Congratulations to {member.mention}! You had {tickets} votes in the raffle, and one was pulled! "
+                f"Congratulations to {winner_mention}! You had {tickets} votes in the raffle, and one was pulled! "
                 "You've earned **5 hearts** as a result!"
             )
 

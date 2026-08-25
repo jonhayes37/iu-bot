@@ -38,7 +38,7 @@ async def create_list_event(
     # Post it to the channel with a minimal anchor text
     msg_content = f"**{event_name}**\nClick below to submit your list!"
     announcement_msg = await interaction.channel.send(content=msg_content, view=view)
-    set_event_message_id(event_id, str(announcement_msg.id))
+    set_event_message_id(event_id, f"{interaction.channel.id}:{announcement_msg.id}")
 
     await interaction.delete_original_response()
 
@@ -57,8 +57,8 @@ async def close_list_event(
         await interaction.followup.send(f"Could not find event `{event_id}` in the database.", ephemeral=True)
         return
 
-    message_id = event_details.get("message_id")
-    if not message_id:
+    stored_message_id = event_details.get("message_id")
+    if not stored_message_id:
         await interaction.followup.send(f"Event `{event_id}` exists, but it has no message ID to update.",
                                         ephemeral=True)
         return
@@ -69,9 +69,30 @@ async def close_list_event(
         await interaction.followup.send("Failed to close event in the database.", ephemeral=True)
         return
 
+    # The announcement may have been posted in a different channel than the one this
+    # command is being run from -- newer events store "channel_id:message_id" so we can
+    # fetch from the right place. Older events only stored a bare message_id, so fall
+    # back to searching the current channel for those.
+    channel = interaction.channel
+    message_id = stored_message_id
+    if ":" in stored_message_id:
+        channel_id_str, message_id = stored_message_id.split(":", 1)
+        try:
+            channel = interaction.guild.get_channel(int(channel_id_str)) or \
+                await interaction.guild.fetch_channel(int(channel_id_str))
+        except (discord.NotFound, discord.Forbidden):
+            channel = None
+
+    if not channel:
+        await interaction.followup.send(
+            "Event closed in DB, but the channel the announcement was posted in no longer exists.",
+            ephemeral=True
+        )
+        return
+
     # Find the announcement message and edit the button
     try:
-        message = await interaction.channel.fetch_message(int(message_id))
+        message = await channel.fetch_message(int(message_id))
         view = discord.ui.View(timeout=None)
         button = discord.ui.Button(
             label="Submissions Closed",

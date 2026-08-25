@@ -261,6 +261,16 @@ class ConfirmRankingButton(Button):
         self.listen_channel_id = listen_channel_id
 
     async def callback(self, interaction: discord.Interaction):
+        # Guard against a double-click re-triggering the whole publish flow (double-awarded
+        # points, duplicate reveal messages, an extra round) -- set before any await so a
+        # near-simultaneous second click can never slip through.
+        if self.view.results_confirmed:
+            await interaction.response.send_message(
+                "Results are already being published for this round.", ephemeral=True
+            )
+            return
+        self.view.results_confirmed = True
+
         await interaction.response.defer()
 
         total_submissions = len(self.view.ranked_submissions)
@@ -278,6 +288,7 @@ class ConfirmRankingButton(Button):
 
         success = save_round_results_db(self.game_id, self.round_id, results_to_save)
         if not success:
+            self.view.results_confirmed = False  # allow a retry since nothing was actually saved
             await interaction.followup.send("❌ Error saving results to the database. Aborting reveal.", ephemeral=True)
             return
 
@@ -378,6 +389,7 @@ class ListenGameRankingView(View):
         self.game_id = game_id
         self.round_id = round_id
         self.listen_channel_id = listen_channel_id
+        self.results_confirmed = False
 
         self.setup_select_menu()
 
