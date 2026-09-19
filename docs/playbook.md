@@ -42,7 +42,7 @@ uv sync        # creates .venv with the locked dependencies (install uv first: h
 Before every commit:
 
 ```bash
-uv run pylint iu        # must exit 0, CI fails on any message
+uv run pylint iu tests  # must exit 0, CI fails on any message
 uv run pytest --cov=iu  # once tests exist; CI requires 80% coverage
 ```
 
@@ -77,7 +77,7 @@ git push -u origin short-description-of-change
 ```
 
 Open a pull request on GitHub (or run `gh pr create` if you have the GitHub CLI). CI runs
-automatically and checks three things: `pylint iu`, the tests, and the 80% coverage minimum.
+automatically and checks three things: `pylint iu tests`, the tests, and the 80% coverage minimum.
 
 > **Current state:** there are no tests yet, so the test and coverage steps fail by design and CI is
 > red. Until the first tests land, decide deliberately whether to merge with CI red, and re-read

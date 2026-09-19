@@ -25,6 +25,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "freezegun==1.5.5",
     "isort==8.0.1",
     "mdformat==0.7.17",
     "parameterized==0.9.0",
@@ -40,4 +41,17 @@ package = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-pythonpath = ["iu"]
+# iu/ so tests import the code the way it imports itself (from db.lists import ...); tests/ so the
+# shared helpers are importable as testsupport.*
+pythonpath = ["iu", "tests"]
+testpaths = ["tests"]
+# importlib mode: test files need no __init__.py, so tests/db/test_lists.py and tests/ui/test_lists.py
+# can share a name, and a tests/db folder can't shadow the real db package
+addopts = "--import-mode=importlib"
+
+[tool.coverage.run]
+source = ["iu"]
+omit = [
+    "iu/main.py",               # wiring only, see CLAUDE.md
+    "iu/scripts/*",             # one-off manual helpers
+]

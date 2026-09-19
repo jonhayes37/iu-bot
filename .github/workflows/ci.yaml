@@ -28,7 +28,7 @@ jobs:
 
       - name: Lint
         run: |
-          uv run --frozen pylint iu
+          uv run --frozen pylint iu tests
 
       - name: Unit test
         run: uv run --frozen pytest --cov=iu

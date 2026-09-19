@@ -67,7 +67,10 @@ ignored-modules=
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
-#init-hook=
+# The code imports itself relative to iu/ (from db.x import ...) and the tests import their helpers
+# relative to tests/, so both folders go on the path. Relative to the working directory: run from the repo root.
+init-hook='import sys; sys.path[:0] = ["iu", "tests"]'
+
 
 # Use multiple processes to speed up Pylint. Specifying 0 will auto-detect the
 # number of processors available to use, and will cap the count on Windows to
