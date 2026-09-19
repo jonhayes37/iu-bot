@@ -419,7 +419,7 @@ class ListenGameRankingView(View):
             song_title = item['submission']['raw_title']
             embed.add_field(
                 name=f"#{item['rank']} - {song_title}",
-                value=f"*{item['commentary']}*",
+                value=item['commentary'],
                 inline=False
             )
 
