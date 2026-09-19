@@ -4,14 +4,14 @@ import discord
 from discord import app_commands
 from config import Channel
 from db.bot import save_bot_status_db
-from utils.validation import validate_channel
+from utils.validation import admin_only, validate_channel
 
 @app_commands.command(name='set-status', description="[Admin] Change IU's status message.")
 @app_commands.describe(
     status_text="The text to display (leave blank to clear)",
     days="How many days until this status expires (Default: 7)"
 )
-@app_commands.default_permissions(administrator=True)
+@admin_only
 async def set_iu_status(interaction: discord.Interaction, status_text: str, days: int = 7):
     """Changes the bot's status and saves it for reconnections."""
 

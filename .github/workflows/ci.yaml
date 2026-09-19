@@ -16,25 +16,32 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.14'
+          enable-cache: true
 
+      # --frozen installs exactly what uv.lock says and fails if pyproject.toml has drifted from it.
       - name: Install dependencies
-        run: |
-          pip install -e .
-          pip install -r requirements-dev.txt
+        run: uv sync --frozen
 
       - name: Lint
         run: |
-          pylint iu
+          uv run --frozen pylint iu
 
       - name: Unit test
-        run: pytest --cov=iu
+        run: uv run --frozen pytest --cov=iu
 
       # Runs even when the tests fail, so a failing run reports both problems at once.
       - name: Testing coverage
         if: ${{ !cancelled() }}
         run: |
-          coverage report --fail-under=80
+          uv run --frozen coverage report --fail-under=80
+
+      # Known-vulnerability scan of what production installs (the locked runtime dependencies).
+      - name: Audit dependencies
+        if: ${{ !cancelled() }}
+        run: |
+          uv export --frozen --no-dev --no-emit-project --no-hashes -o requirements-audit.txt
+          uvx pip-audit --no-deps --disable-pip -r requirements-audit.txt

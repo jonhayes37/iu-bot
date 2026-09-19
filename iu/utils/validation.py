@@ -1,6 +1,18 @@
 """Validation helpers"""
 import re
 import discord
+from discord import app_commands
+
+def admin_only(command):
+    """
+    Restricts a slash command to server administrators. Apply directly beneath the @command decorator.
+
+    default_permissions only sets what the Discord UI offers by default; a server admin can override
+    it under Server Settings > Integrations, and the bot never sees that. The check makes the bot
+    enforce it on every call, whatever the UI says.
+    """
+    command = app_commands.checks.has_permissions(administrator=True)(command)
+    return app_commands.default_permissions(administrator=True)(command)
 
 async def validate_channel(interaction: discord.Interaction, channel: str) -> bool:
     if interaction.channel.name != channel:

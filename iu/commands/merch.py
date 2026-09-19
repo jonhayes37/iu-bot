@@ -11,6 +11,7 @@ from db.merch import (
     get_user_balance, get_user_inventory, get_user_merch_catalog,
     process_purchase, upsert_merch_item, get_all_item_owners, reset_item_inventory
 )
+from utils.validation import admin_only
 
 logger = logging.getLogger('iu-bot')
 
@@ -22,7 +23,7 @@ logger = logging.getLogger('iu-bot')
     price="Cost in hearts",
     max_per_user="Optional: Maximum times a single user can buy this"
 )
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def add_merch(
     interaction: discord.Interaction,
     item_id: str,
@@ -201,7 +202,7 @@ def _add_items_to_embed(embed, items):
 @discord.app_commands.command(
         name='draw-raffle',
         description="[Admin] Draw a random winner from all RAFFLE ticket holders and reset the pool.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def draw_raffle(interaction: discord.Interaction):
     """The Discord command logic for drawing a raffle winner."""
 

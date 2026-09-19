@@ -5,7 +5,7 @@ import re
 import discord
 from config import Channel
 from db.merch import get_user_balance, modify_db_balance
-from utils.validation import validate_channel
+from utils.validation import admin_only, validate_channel
 
 logger = logging.getLogger('iu-bot')
 
@@ -39,7 +39,7 @@ async def check_balance(interaction: discord.Interaction):
     amount="The number of hearts to add (use negative to subtract)",
     reason="Why this modification is being made (for the audit log)"
 )
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def modify_balance(interaction: discord.Interaction, member: discord.Member, amount: int,
                          reason: str):
     """The Discord command logic for modifying a balance."""
@@ -74,7 +74,7 @@ async def modify_balance(interaction: discord.Interaction, member: discord.Membe
     amount="The number of hearts to award the winner",
     reason="What this award is for (e.g., Watch Party Attendee)"
 )
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def random_award(interaction: discord.Interaction, users: str, amount: int, reason: str):
     """The Discord command logic for a random giveaway."""
 

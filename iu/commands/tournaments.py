@@ -6,6 +6,7 @@ from config import Channel
 from db.tournaments import create_tournament, force_close_active_round
 from ui.bracket_renderer import generate_bracket_image
 from tasks.tournaments import post_round_polls
+from utils.validation import admin_only
 
 # Discord's limits for a poll: 55 characters per answer, and a poll can run for at most 32 days
 MAX_ENTRANT_NAME_LENGTH = 55
@@ -18,7 +19,7 @@ MAX_DAYS_PER_ROUND = 32
     entrants="Pipe-separated list of tracks, ordered from seed #1 to the lowest seed.",
     days_per_round="How long each voting round lasts (default 2)"
 )
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def new_tournament(interaction: discord.Interaction, title: str, description: str,
                          entrants: str, days_per_round: int = 2):
     await interaction.response.defer(ephemeral=True)
@@ -87,7 +88,7 @@ async def new_tournament(interaction: discord.Interaction, title: str, descripti
 
 @discord.app_commands.command(name="force-close-round",
                               description="[Admin] Immediately end the active voting round for a tournament.")
-@discord.app_commands.default_permissions(administrator=True) # Locks this to server admins
+@admin_only
 async def force_close_round(interaction: discord.Interaction, tournament_id: str):
     """Fast-forwards the clock on active polls so the background task resolves them."""
     await interaction.response.defer(ephemeral=True)

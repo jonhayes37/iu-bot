@@ -6,11 +6,12 @@ from db.hall_of_fame import get_all_hof_nominations
 from ui.eoy_nominations import EOYNominationsHub
 from ui.eoy_voting import EOYVotingHub
 from utils.end_of_year import get_current_award_year
+from utils.validation import admin_only
 
 
 @discord.app_commands.command(name='end-of-year-nominations',
                               description="[Admin] Posts the End of Year nominations buttons.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def end_of_year_nominations(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
@@ -34,7 +35,7 @@ async def end_of_year_nominations(interaction: discord.Interaction):
 
 @discord.app_commands.command(name='export-end-of-year-nominations',
                               description="[Admin] Export all End of Year nomination data")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def export_eoy_nominations(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
@@ -101,7 +102,7 @@ async def export_eoy_nominations(interaction: discord.Interaction):
 
 @discord.app_commands.command(name='end-of-year-voting',
                               description="[Admin] Starts End of Year Voting.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def end_of_year_voting(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 

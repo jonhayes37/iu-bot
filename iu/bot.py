@@ -35,6 +35,10 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
             f"❌ You must have the '{error.missing_role}' role to use this command.",
             ephemeral=True
         )
+    elif isinstance(error, discord.app_commands.errors.MissingPermissions):
+        await interaction.response.send_message(
+            "❌ Only server administrators can use this command.", ephemeral=True
+        )
     else:
         # Logs the traceback and tells the user (database failures get their own message)
         await report_interaction_error(interaction, error)

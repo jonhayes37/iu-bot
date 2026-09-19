@@ -1,13 +1,14 @@
 """Commands for the hall of fame"""
 import discord
 from db.hall_of_fame import set_hof_final_nominees
+from utils.validation import admin_only
 
 @discord.app_commands.command(name='hall-of-fame-set-nominees',
                               description="[Admin] Set the shortlist of nominees for the Hall of Fame.")
 @discord.app_commands.describe(
     nominees_pipe="Pipe-separated list of nominees (e.g., 'BTS | Girls Generation | Seventeen')"
 )
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def hall_of_fame_set_nominees(interaction: discord.Interaction, nominees_pipe: str):
     await interaction.response.defer(ephemeral=True)
 

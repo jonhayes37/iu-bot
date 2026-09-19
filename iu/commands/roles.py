@@ -7,12 +7,13 @@ from db.roles import (
     get_all_roles_grouped, get_display_message_ids, register_new_role,
     replace_display_message_ids
 )
+from utils.validation import admin_only
 
 logger = logging.getLogger('iu-bot')
 
 @discord.app_commands.command(name='register-role',
                               description="[Admin] Add a new assignable role to the #roles channel.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def register_role(
     interaction: discord.Interaction,
     role: discord.Role,
@@ -39,7 +40,7 @@ async def register_role(
         logger.error("Roles channel not found during sync attempt.")
 
 @discord.app_commands.command(name='sync-roles', description="[Admin] Sync the roles display in the #roles channel.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def sync_roles(
     interaction: discord.Interaction
 ):

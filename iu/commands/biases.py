@@ -8,6 +8,7 @@ from db.biases import (
     create_artist_bias_db, create_ultimate_bias_db, get_artist_bias, get_ultimate_bias,
     update_artist_bias_db, update_ultimate_bias_db
 )
+from utils.validation import admin_only
 
 @app_commands.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
 @app_commands.describe(member='The member whose bias you want to see. Leave empty for your own.')
@@ -68,7 +69,7 @@ async def ultimate_bias(interaction: discord.Interaction, member: typing.Optiona
     image_filename="Filename in the local images folder (e.g., seohyun.jpg)",
     reason="Why is this their ultimate bias? (Paste the full text here)"
 )
-@app_commands.default_permissions(administrator=True)
+@admin_only
 async def create_ultimate_bias(
     interaction: discord.Interaction,
     member: discord.Member,
@@ -134,7 +135,7 @@ async def create_ultimate_bias(
     image_filename="Exact filename in the local images folder",
     reason="Why is this their ultimate bias?"
 )
-@app_commands.default_permissions(administrator=True)
+@admin_only
 async def update_ultimate_bias(
     interaction: discord.Interaction,
     member: discord.Member,
@@ -207,7 +208,7 @@ async def update_ultimate_bias(
     image_filename="Exact filename in the local images folder",
     reason="Why is this their bias group?"
 )
-@app_commands.default_permissions(administrator=True)
+@admin_only
 async def create_bias_group(
     interaction: discord.Interaction,
     member: discord.Member,
@@ -247,7 +248,7 @@ async def create_bias_group(
 @app_commands.command(name="update-bias-group",
                       description="[Admin] Update specific fields of an existing bias group record.")
 @app_commands.describe(member="The server member whose record you want to update.")
-@app_commands.default_permissions(administrator=True)
+@admin_only
 async def update_bias_group(
     interaction: discord.Interaction,
     member: discord.Member,

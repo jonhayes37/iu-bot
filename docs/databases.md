@@ -77,9 +77,10 @@ choose Copy User ID to look one up.
 
 ## Fix the file permissions
 
-The bot runs as `root` inside the container, so the files it creates are owned by `root`. Windows
-then can't see or open them, or opens them read-only. Fix it in the Unraid terminal (adjust the
-path to your data folder):
+The bot runs as `nobody:users` (`99:100`) inside the container, the same owner Unraid's shares use,
+so new files normally open fine from Windows. Files the bot created before it ran as that user, or
+that were copied in by hand, may still belong to `root`, and the bot can't write to those. Fix it in
+the Unraid terminal (adjust the path to your data folder):
 
 ```bash
 cd /mnt/user/appdata/iu-bot
@@ -95,13 +96,13 @@ on shares. It does the same job for the whole share; stop the Docker service or 
 Make sure the `appdata` share is visible to Windows (**Shares → appdata → SMB**). For a private
 share, use a Windows login that has read/write access to it.
 
-**A new database needs this again.** The bot creates its file the next time it starts, as `root`, so
-repeat the two commands afterwards.
+New databases are created as `99:100` with owner read/write and read-only for everyone else, so a
+Windows login that is not the owner can open them read-only. Run the commands above again if you
+need to edit them there.
 
-> **Don't run the container as a different user with `--user`.** It looks like a permanent fix, but
-> the image installs its headless browser (used for tournament brackets) under `/root`, so a
-> non-root user can't launch it and bracket images would break. A better permanent fix is a small
-> code change so the bot creates its files with open permissions (setting a umask at startup).
+> **Running the container as a different user with `--user`** works only if that account can write
+> to the data folder. The image's headless browser (used for tournament brackets) is installed
+> where any user can run it.
 
 ## Back up and restore
 
@@ -177,7 +178,7 @@ For a new feature that needs its own file:
    file name (`EXAMPLE = "example"` means `iu/db/schema/example.sql`, and the environment variable is
    `DB_PATH_EXAMPLE`).
 2. Write the schema in `iu/db/schema/example.sql`, using `CREATE TABLE IF NOT EXISTS`.
-3. Add `ENV DB_PATH_EXAMPLE=${DATA_DIR}/example.db` to the Dockerfile. If you override paths on the
+3. Add `DB_PATH_EXAMPLE=/app/data/example.db` to the `ENV` block in the Dockerfile. If you override paths on the
    Unraid container or in your local `.env`, add it there too.
 4. Write the data functions in `iu/db/example.py` using `db_connection(Database.EXAMPLE)`. They
    raise on failure and return `None`, `[]` or a bool for real outcomes (the contract is in

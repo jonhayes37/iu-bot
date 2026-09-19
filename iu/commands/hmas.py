@@ -9,6 +9,7 @@ from db.hmas import (
 from ui.hma_nominations import MultiNominationView
 from ui.hma_suggestions import HMASuggestionsHub
 from utils.end_of_year import get_current_award_year
+from utils.validation import admin_only
 
 
 def build_dropdown(family_id: str) -> list[discord.app_commands.Choice[str]]:
@@ -32,7 +33,7 @@ async def hma_nomination(interaction: discord.Interaction, nominee: str):
 @discord.app_commands.command(name='hma-nomination-export',
                               description="[Admin] Export all HMA nominations to a text file.")
 @discord.app_commands.describe(year="The award year to export (defaults to the current active year)")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def hma_nomination_export(interaction: discord.Interaction, year: int = None):
     """The Discord command logic for exporting the year's nominations."""
 
@@ -84,7 +85,7 @@ async def hma_nomination_export(interaction: discord.Interaction, year: int = No
     category_id="The ID of the category (e.g., 'soty')",
     nominees_pipe="Pipe-separated list of nominees (e.g., 'IVE - HEYA | aespa - Supernova')"
 )
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def hma_set_nominees(interaction: discord.Interaction, category_id: str, nominees_pipe: str):
     await interaction.response.defer(ephemeral=True)
 
@@ -106,7 +107,7 @@ async def hma_set_nominees(interaction: discord.Interaction, category_id: str, n
 
 @discord.app_commands.command(name='end-of-year-hma-suggestions',
                               description="[Admin] Start the HMA category suggestions")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def end_of_year_hma_suggestions(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     year = get_current_award_year()
@@ -138,7 +139,7 @@ async def end_of_year_hma_suggestions(interaction: discord.Interaction):
     await interaction.followup.send("HMA Category Suggestions posted!")
 
 @discord.app_commands.command(name='hma-suggestions-export', description="[Admin] Export all HMA category suggestions.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def hma_suggestions_export(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 

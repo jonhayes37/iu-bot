@@ -20,14 +20,18 @@ All code lives in `iu/` and imports are **relative to `iu/`** (`from db.lists im
 ## Commands
 
 ```bash
-pip install -e . && pip install -r requirements-dev.txt  # what CI does (runtime deps + dev tools)
-pylint iu                                              # lint (config in .pylintrc, max line 120)
-pytest --cov=iu                                        # tests; CI then requires coverage >= 80%
-make build-push                                        # docker build (linux/amd64), tag, push jonhayes37/iu-bot
-python iu/main.py                                      # run locally (needs env vars below)
+uv sync                    # create .venv from uv.lock (runtime deps + dev tools); install uv: https://docs.astral.sh/uv/
+uv run pylint iu           # lint (config in .pylintrc, max line 120)
+uv run pytest --cov=iu     # tests; CI then requires coverage >= 80%
+uv add <package>           # add a runtime dependency (edits pyproject.toml and uv.lock); add --dev for a dev tool
+uv lock --upgrade          # refresh every locked version (review the diff, run the checks)
+make build-push           # docker build (linux/amd64), tag, push jonhayes37/iu-bot (:latest and :<commit>)
+uv run python iu/main.py   # run locally (needs env vars below)
 ```
 
-CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: pylint, pytest with coverage, and `coverage report --fail-under=80` (which runs even if the tests fail).
+Dependencies are managed with uv: direct dependencies live in [pyproject.toml](pyproject.toml) (`[project] dependencies`, and the `dev` group for pylint/pytest/etc.), and `uv.lock` pins every transitive version. **Commit `uv.lock` with any change to `pyproject.toml`.** There is no `requirements.txt`. The Docker image installs only the runtime dependencies from the lock (`uv sync --frozen --no-dev`). `playwright` is pinned by hand because the wheel and the Chromium the image downloads must match; Dependabot ([.github/dependabot.yml](.github/dependabot.yml)) proposes the other updates weekly.
+
+CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: `uv sync --frozen`, pylint, pytest with coverage, `coverage report --fail-under=80` (which runs even if the tests fail), and a `pip-audit` scan of the locked runtime dependencies.
 
 Deploying, Unraid and logs are covered in [docs/playbook.md](docs/playbook.md). Setup facts (Discord app, required channels/roles, settings) are in [docs/setup.md](docs/setup.md), YouTube credentials and quota in [docs/youtube.md](docs/youtube.md), and database inspection, permissions, backups and adding a new database in [docs/databases.md](docs/databases.md). Keep them in step with changes: a new channel or role name goes in `config.py` and `docs/setup.md`; a new database goes in `docs/databases.md`.
 
@@ -57,6 +61,7 @@ Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `D
 - **Reactions are handled without network calls where possible** (`triggers/merch.py`): the heart reward uses `payload.message_author_id`, reaction counts come from `client.cached_messages`, and a message that isn't cached is fetched at most twice (once to learn its count, once at 5 reactions). Don't add a `fetch_message` per reaction.
 - **YouTube lookups are batched:** use `get_video_snippets(ids)` (50 videos per request, 1 quota unit per request) whenever you have several videos; `get_video_title` is the single-video wrapper. Backfills process messages in batches of 50 for this reason.
 - **Listen game state** (`db/listen_game.py`): `GameStatus` (`registration` -> `playing` -> `finished`) and `RoundStatus` (`setting_theme` -> `submitting` -> `ranking` -> `revealing` -> `completed`, or `skipped`) are `StrEnum`s, and rows come back as dataclasses (`Game`, `Round`, `Submission`, `Standing`, ...), not dicts. Every status change is one guarded `UPDATE ... WHERE status IN (...)`; functions return whether the state moved, and `skip_game_turn_db` raises `InvalidStateError` (reported to users as "things have moved on"). Commands load the round with `require_active_round`, DM people with `send_dm`, and refresh the counter with `update_submission_tracker`. Confirming rankings atomically saves points and moves the round to `revealing` (`save_round_results_db`), so points can only be applied once. `services/listen_game_reveal.py` then posts the reveal in the background and records progress in `listen_rounds.reveal_step`; if the bot restarts mid-reveal, the hourly `check_listen_game_reminders` task (or the listener/GM re-running `/listen-game-submit-ranking`) resumes it.
+- Admin slash commands take `@admin_only` (from `utils/validation.py`) directly under `@app_commands.command`. It hides the command from non-admins **and** rejects them at run time; `default_permissions` alone is only a UI default that server admins can override in Integrations. GM and Player commands use `@app_commands.checks.has_role(Role.X)`.
 - `services/listen_game_playlist.py` is the one place that adds a submission to a round's YouTube playlist (used by both `submit_song` and GM `force-submit`). Its YouTube calls run via `asyncio.to_thread`, so both commands hold `SUBMISSION_LOCK` for the whole check-claimed / update-playlist / save sequence; keep any new code that writes submissions inside that lock.
 - When a user's text may be long (list echoes, exports), attach it with `utils.discord_files.text_file` rather than pasting it into a message (2000 character limit).
 - `ui/bracket_renderer.py` keeps one shared Chromium instance for the process lifetime; the Docker image needs Playwright's Chromium installed.
@@ -66,7 +71,7 @@ Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `D
 
 `pytest`, `pytest-asyncio` (`asyncio_mode = "auto"` in [pyproject.toml](pyproject.toml)), `pytest-cov`, and `parameterized` are the intended tools. There are no tests yet.
 
-Setup already in place: `pytest`, `pytest-asyncio` and `pytest-cov` are in `requirements-dev.txt` (which includes `requirements.txt`; the Docker image installs only `requirements.txt`), and `pythonpath = ["iu"]` is set in [pyproject.toml](pyproject.toml) so `from db.x import ...` resolves in tests.
+Setup already in place: `pytest`, `pytest-asyncio` and `pytest-cov` are in the `dev` dependency group of [pyproject.toml](pyproject.toml) (the Docker image leaves that group out), and `pythonpath = ["iu"]` is set in [pyproject.toml](pyproject.toml) so `from db.x import ...` resolves in tests.
 
 Still to do when adding the first tests:
 

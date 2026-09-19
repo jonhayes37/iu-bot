@@ -11,6 +11,7 @@ from services.youtube import (
     extract_video_id,
     QuotaExceededError
 )
+from utils.validation import admin_only
 
 logger = logging.getLogger('iu-bot')
 
@@ -20,7 +21,7 @@ logger = logging.getLogger('iu-bot')
     file="The .csv file containing Discord Names and Video Links",
     playlist_title="The title for the new YouTube playlist"
 )
-@app_commands.default_permissions(administrator=True)
+@admin_only
 async def create_potpourri_playlist(interaction: discord.Interaction, file: discord.Attachment, playlist_title: str):
     # This might take a while depending on the number of videos, so we defer
     await interaction.response.defer(ephemeral=True)

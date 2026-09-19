@@ -36,16 +36,21 @@ git switch -c short-description-of-change
 Set up once:
 
 ```bash
-python3 -m venv venv && source venv/bin/activate
-pip install -e . && pip install -r requirements-dev.txt
+uv sync        # creates .venv with the locked dependencies (install uv first: https://docs.astral.sh/uv/)
 ```
 
 Before every commit:
 
 ```bash
-pylint iu        # must exit 0, CI fails on any message
-pytest --cov=iu  # once tests exist; CI requires 80% coverage
+uv run pylint iu        # must exit 0, CI fails on any message
+uv run pytest --cov=iu  # once tests exist; CI requires 80% coverage
 ```
+
+Changing a dependency: `uv add <package>` (or edit `pyproject.toml` and run `uv lock`), then commit
+both `pyproject.toml` and `uv.lock`. CI installs with `--frozen`, so it fails if they disagree.
+`uv lock --upgrade` moves everything to the newest allowed versions. The `playwright` version is
+pinned by hand: the Python package and the Chromium the image downloads are a matched pair, so after
+bumping it, build the image and check that a tournament bracket still renders.
 
 If you added or changed a slash command, update its section in the README too. If you added a
 database column, add it to `COLUMN_MIGRATIONS` in `iu/db/initialize.py` as well as the `.sql`
@@ -56,7 +61,7 @@ by itself, so load it into the shell first:
 
 ```bash
 set -a; source .env; set +a
-python iu/main.py
+uv run python iu/main.py
 ```
 
 > **Never run a local bot with the production token while the container is running.** Both would
@@ -104,18 +109,16 @@ make build-push
 ```
 
 This builds the image for `linux/amd64` (slower on an Apple-silicon Mac, since it runs under
-emulation), tags it `jonhayes37/iu-bot` (the `latest` tag) and pushes it. The `.dockerignore` keeps
-your `.env`, `credentials.json`, `token.json`, `.git` and `venv` out of the image.
+emulation) and pushes it twice: as `jonhayes37/iu-bot` (the `latest` tag) and as
+`jonhayes37/iu-bot:<commit>`, using the short hash of the commit you built from. The `.dockerignore`
+keeps your `.env`, `credentials.json`, `token.json`, `.git` and `.venv` out of the image.
 
-**Recommended: keep a tag you can roll back to.** The Makefile only pushes `latest`, so each push
-overwrites the previous version. Before pushing, also tag the build with the commit:
+The commit tag is what you roll back to, so note it down (it is printed at the end). See
+[Rolling back](#18-roll-back).
 
-```bash
-docker tag iu-bot jonhayes37/iu-bot:$(git rev-parse --short HEAD)
-docker push jonhayes37/iu-bot:$(git rev-parse --short HEAD)
-```
-
-Write the tag down (in the PR or a note) so you can go back to it. See [Rolling back](#18-roll-back).
+The image is built in two stages. The first installs exactly the versions in `uv.lock`, without the
+development tools (pylint, pytest); the second copies the result, adds Chromium, and runs the bot as
+a non-root user (see [the container's user](#the-containers-user)).
 
 ### 1.6 Update the container in Unraid
 
@@ -164,14 +167,17 @@ If a line is missing or you see errors, go to [Troubleshooting](#4-troubleshooti
 
 ### 1.8 Roll back
 
-If the new version misbehaves and you tagged the previous build (step 1.5):
+If the new version misbehaves, use the commit tag of the previous build (step 1.5 prints one for
+every push):
 
 1. In Unraid, click the container, choose **Edit**, and change the **Repository** from
    `jonhayes37/iu-bot` to `jonhayes37/iu-bot:<old tag>`.
 2. Click **Apply**. Unraid recreates the container from that tag.
 3. When you're ready to move forward again, change the repository back to `jonhayes37/iu-bot`.
 
-Without a saved tag, you must revert the change in git, rebuild and push again.
+If you didn't note the tag, look at the tags on Docker Hub or the commit history and pick the commit
+before the change. A build made before the tags were introduced can only be recovered by reverting
+the change in git, rebuilding and pushing again.
 
 Database changes are not undone by a rollback. New columns stay, which is harmless because older
 code ignores them.
@@ -195,6 +201,23 @@ to see every field. The settings that matter:
 - **Extra Parameters:** `--init --stop-timeout 30`. `--init` makes `docker stop` shut the bot down
   promptly, and the timeout gives it up to 30 seconds to finish.
 - **Autostart:** turn on so the bot returns after a reboot.
+
+### The container's user
+
+The bot does not run as `root`. It runs as user `99:100`, which is `nobody:users`, the account
+Unraid's shares use, so the data folder and every database the bot creates belong to the same owner
+Windows shares use. Two consequences:
+
+- **First deploy of a non-root image:** the existing files in the data folder are owned by `root`,
+  which the bot can no longer write to (it fails at start with `unable to open database file`).
+  Once, before updating, run in the Unraid terminal (adjust the path):
+
+  ```bash
+  chown -R 99:100 /mnt/user/appdata/iu-bot
+  ```
+
+- If you ever run the image with `--user` set to something else, that account must be able to write
+  to the data folder.
 
 ### Restarts and the Listen Game
 
@@ -242,7 +265,8 @@ Read the last lines of the log, which show why it exited.
 - `PrivilegedIntentsRequired`: in the Discord Developer Portal, open the bot's settings and turn
   on the **Message Content** and **Server Members** intents.
 - Errors mentioning `unable to open database file` or `Failed to initialize DB`: the data folder
-  is missing, not mapped, or not writable. Check the path mapping.
+  is missing, not mapped, or not writable by the bot's user. Check the path mapping, and that the
+  folder is owned by `99:100` (`chown -R 99:100 <folder>`, see [The container's user](#the-containers-user)).
 
 ### Slash commands are missing or out of date
 

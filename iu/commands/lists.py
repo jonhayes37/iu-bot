@@ -6,6 +6,7 @@ import re
 import discord
 from db.lists import create_new_event, close_event, get_all_submissions, get_event_details, set_event_message_id
 from ui.lists import SubmitListButton
+from utils.validation import admin_only
 
 logger = logging.getLogger('iu-bot')
 
@@ -13,7 +14,7 @@ logger = logging.getLogger('iu-bot')
 EVENT_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]{1,64}')
 
 @discord.app_commands.command(name='create-list-event', description="[Admin] Start a new list submission event.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def create_list_event(
     interaction: discord.Interaction,
     event_id: str,
@@ -45,7 +46,7 @@ async def create_list_event(
 
 @discord.app_commands.command(name='close-list-event',
                               description="[Admin] Close an active list event and disable its button.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def close_list_event(
     interaction: discord.Interaction,
     event_id: str
@@ -109,7 +110,7 @@ async def close_list_event(
 
 @discord.app_commands.command(name='export-lists',
               description="[Admin] Export all list submissions for a specific event to .txt files.")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def export_lists(interaction: discord.Interaction, event_id: str):
     """Fetches data, formats it via the helper, and uploads the files to Discord."""
     await interaction.response.defer(ephemeral=True)

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import discord
 from config import Channel
 from triggers.releases import store_new_releases
+from utils.validation import admin_only
 
 # Messages handled together, so their videos are looked up in shared YouTube requests
 BACKFILL_BATCH_SIZE = 50
@@ -13,7 +14,7 @@ logger = logging.getLogger('iu-bot')
 @discord.app_commands.command(name='backfill-new-releases',
                               description="[Admin] Backfills new releases from a specific date")
 @discord.app_commands.describe(start_date="The start date for the backfill in YYYY-MM-DD format (e.g., 2025-12-01)")
-@discord.app_commands.default_permissions(administrator=True)
+@admin_only
 async def backfill_releases(interaction: discord.Interaction, start_date: str):
     """Scans the channel history from a given YYYY-MM-DD date to now and processes releases."""
     channel = discord.utils.get(interaction.guild.text_channels, name=Channel.NEW_RELEASES)
