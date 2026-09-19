@@ -17,12 +17,8 @@ async def hall_of_fame_set_nominees(interaction: discord.Interaction, nominees_p
         await interaction.followup.send("❌ No valid nominees found. Check your formatting.")
         return
 
-    try:
-        year = set_hof_final_nominees(nominees)
-        formatted_list = "\n".join([f"• {name}" for name in nominees])
-        await interaction.followup.send(
-            f"✅ **Saved {len(nominees)} Hall of Fame nominees for {year}!**\n\n{formatted_list}"
-        )
-
-    except Exception as e:
-        await interaction.followup.send(f"❌ Database error: {e}")
+    year = set_hof_final_nominees(nominees)
+    formatted_list = "\n".join([f"• {name}" for name in nominees])
+    await interaction.followup.send(
+        f"✅ **Saved {len(nominees)} Hall of Fame nominees for {year}!**\n\n{formatted_list}"
+    )

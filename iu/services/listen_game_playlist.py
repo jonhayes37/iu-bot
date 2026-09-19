@@ -6,7 +6,7 @@ import logging
 
 import discord
 
-from db.listen_game import update_round_playlist_db
+from db.listen_game import Round, update_round_playlist_db
 from services.youtube import (
     QuotaExceededError, add_video_to_playlist, create_listen_game_playlist, remove_video_from_playlist
 )
@@ -34,7 +34,7 @@ def get_host_name(guild: discord.Guild, host_id: int) -> str:
 
 
 def put_song_in_round_playlist(
-    host_name: str, active_round: dict, video_id: str, previous_video_id: str | None = None
+    host_name: str, active_round: Round, video_id: str, previous_video_id: str | None = None
 ) -> tuple[PlaylistOutcome, str | None]:
     """
     Adds video_id to the round's playlist. The round's playlist is created first if it doesn't exist
@@ -43,7 +43,7 @@ def put_song_in_round_playlist(
     Blocking (YouTube API calls): run it with asyncio.to_thread. Returns the outcome and the
     playlist ID, which is None only if the playlist could not be created.
     """
-    playlist_id = active_round['playlist_id']
+    playlist_id = active_round.playlist_id
     try:
         if playlist_id and previous_video_id:
             if not remove_video_from_playlist(playlist_id, previous_video_id):
@@ -53,8 +53,8 @@ def put_song_in_round_playlist(
             playlist_id = create_listen_game_playlist(host_name)
             if not playlist_id:
                 return PlaylistOutcome.CREATE_FAILED, None
-            update_round_playlist_db(active_round['round_id'], playlist_id)
-            active_round['playlist_id'] = playlist_id
+            update_round_playlist_db(active_round.round_id, playlist_id)
+            active_round.playlist_id = playlist_id
 
         if not add_video_to_playlist(playlist_id, video_id):
             return PlaylistOutcome.ADD_FAILED, playlist_id

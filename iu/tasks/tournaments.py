@@ -139,16 +139,14 @@ async def _process_expired_matches(tournaments_channel, expired_matches):
                     winner_name = poll.answers[1].text
 
             # Advance the winner in the database
-            success = advance_winner(
+            advance_winner(
                 match_id=match['match_id'],
                 tournament_id=match['tournament_id'],
                 current_round=match['round_num'],
                 current_pos=match['match_position'],
                 winner_id=winner_id
             )
-
-            if success:
-                logger.info("Match %s resolved: %s won.", match['match_id'], winner_name)
+            logger.info("Match %s resolved: %s won.", match['match_id'], winner_name)
 
         except discord.NotFound:
             logger.error("Poll message %s was deleted by a user.", match['message_id'])

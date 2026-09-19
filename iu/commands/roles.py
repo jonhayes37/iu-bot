@@ -24,10 +24,7 @@ async def register_role(
     await interaction.response.defer(ephemeral=True)
 
     alias_list = [a.strip() for a in aliases.split(',')] if aliases else []
-    success = register_new_role(role.id, role.name, category, alias_list)
-    if not success:
-        await interaction.followup.send(f"Database error: Failed to register **{role.name}**.")
-        return
+    register_new_role(role.id, role.name, category, alias_list)
 
     # Trigger a UI sync
     roles_channel = discord.utils.get(interaction.guild.text_channels, name=Channel.ROLES)

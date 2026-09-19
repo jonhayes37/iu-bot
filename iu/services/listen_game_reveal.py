@@ -20,9 +20,10 @@ import discord
 
 from config import Role
 from db.listen_game import (
-    advance_game_turn_db, get_game_leaderboard_db, get_game_rounds_db, get_next_host_id_db,
-    get_round_results_db, get_round_reveal_state_db, set_reveal_step_db
+    RoundStatus, Standing, Submission, advance_game_turn_db, get_game_leaderboard_db, get_game_rounds_db,
+    get_next_host_id_db, get_round_db, get_round_results_db, set_reveal_step_db
 )
+from services.listen_game import playlist_link
 from utils.strings import generate_leaderboard_text, get_ordinal
 
 logger = logging.getLogger('iu-bot')
@@ -58,13 +59,13 @@ async def _run_reveal(channel: discord.TextChannel, round_id: int):
 
 
 async def _reveal(channel: discord.TextChannel, round_id: int):
-    state = get_round_reveal_state_db(round_id)
-    if not state or state['status'] != 'revealing':
+    listen_round = get_round_db(round_id)
+    if not listen_round or listen_round.status != RoundStatus.REVEALING:
         logger.info("Round %s is not waiting on a reveal; nothing to do.", round_id)
         return
 
-    game_id = state['game_id']
-    step = state['reveal_step']
+    game_id = listen_round.game_id
+    step = listen_round.reveal_step
     results = get_round_results_db(round_id)
     reveal_order = list(reversed(results))
     summary_step = len(reveal_order) + 2
@@ -73,7 +74,7 @@ async def _reveal(channel: discord.TextChannel, round_id: int):
     if step < 1:
         player_role = discord.utils.get(channel.guild.roles, name=Role.LISTEN_GAME_PLAYER)
         role_text = f"{player_role.mention}, " if player_role else ""
-        await channel.send(f"🎧 **{role_text}<@{state['host_id']}> has finished their rankings! "
+        await channel.send(f"🎧 **{role_text}<@{listen_round.host_id}> has finished their rankings! "
                            "Here are the results:**")
         step = 1
         set_reveal_step_db(round_id, step)
@@ -83,10 +84,8 @@ async def _reveal(channel: discord.TextChannel, round_id: int):
         if step >= index + 1:
             continue
 
-        url = f"https://youtu.be/{result['video_id']}"
-        await channel.send(
-            f"**{get_ordinal(result['rank'])}: [{result['raw_title']}](<{url}>)**\n{result['commentary']}"
-        )
+        url = f"https://youtu.be/{result.video_id}"
+        await channel.send(f"**{get_ordinal(result.rank)}: [{result.raw_title}](<{url}>)**\n{result.commentary}")
         step = index + 1
         set_reveal_step_db(round_id, step)
         await asyncio.sleep(REVEAL_DELAY_SECONDS)
@@ -107,18 +106,18 @@ async def _reveal(channel: discord.TextChannel, round_id: int):
         raise RuntimeError(f"Could not advance game {game_id} after round {round_id}")
 
 
-def _build_round_summary(results: list[dict], leaderboard: list[dict], next_host_id: int | None) -> str:
+def _build_round_summary(results: list[Submission], leaderboard: list[Standing], next_host_id: int | None) -> str:
     summary_lines = ["**Last Round's Results**"]
     for result in results:
         summary_lines.append(
-            f"{get_ordinal(result['rank'])}: <@{result['user_id']}> - **{result['raw_title']}** "
-            f"({result['points']} pts)"
+            f"{get_ordinal(result.rank)}: <@{result.user_id}> - **{result.raw_title}** "
+            f"({result.points_awarded} pts)"
         )
 
     ranking_lines = ["**Current Ranking**"]
     if leaderboard:
         for index, entry in enumerate(leaderboard, start=1):
-            ranking_lines.append(f"{get_ordinal(index)} - <@{entry['user_id']}> ({entry['score']} pts)")
+            ranking_lines.append(f"{get_ordinal(index)} - <@{entry.user_id}> ({entry.score} pts)")
     else:
         ranking_lines.append("*Error fetching leaderboard.*")
 
@@ -138,11 +137,8 @@ async def _post_game_over(channel: discord.TextChannel, game_id: int):
 
     playlist_lines = ["🎶 **Here's all of the playlists from this game:**"]
     for index, round_data in enumerate(rounds, start=1):
-        if round_data['playlist_id']:
-            playlist_url = f"https://www.youtube.com/playlist?list={round_data['playlist_id']}"
-        else:
-            playlist_url = "*No playlist generated*"
-        playlist_lines.append(f"**Round {index}** (<@{round_data['host_id']}>): {playlist_url}")
+        playlist_url = playlist_link(round_data.playlist_id) if round_data.playlist_id else "*No playlist generated*"
+        playlist_lines.append(f"**Round {index}** (<@{round_data.host_id}>): {playlist_url}")
 
     # A short pause so this posts cleanly after the leaderboard
     await asyncio.sleep(2)

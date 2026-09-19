@@ -39,11 +39,7 @@ async def hma_nomination_export(interaction: discord.Interaction, year: int = No
     # Fallback to current year if the admin didn't specify one
     target_year = year or get_current_award_year()
 
-    try:
-        data = get_yearly_export_data(target_year)
-    except Exception as ex:
-        await interaction.response.send_message(f"❌ Database error: {ex}", ephemeral=True)
-        return
+    data = get_yearly_export_data(target_year)
 
     if not data:
         await interaction.response.send_message(
@@ -99,18 +95,14 @@ async def hma_set_nominees(interaction: discord.Interaction, category_id: str, n
         await interaction.followup.send("❌ No valid nominees found. Check your formatting.")
         return
 
-    try:
-        year = set_final_nominees(category_id, nominees)
+    year = set_final_nominees(category_id, nominees)
 
-        # Format the output for a clean visual confirmation
-        formatted_list = "\n".join([f"• {name}" for name in nominees])
+    # Format the output for a clean visual confirmation
+    formatted_list = "\n".join([f"• {name}" for name in nominees])
 
-        await interaction.followup.send(
-            f"✅ **Saved {len(nominees)} nominees for `{category_id}` ({year})!**\n\n{formatted_list}"
-        )
-
-    except Exception as e:
-        await interaction.followup.send(f"❌ Database error: {e}")
+    await interaction.followup.send(
+        f"✅ **Saved {len(nominees)} nominees for `{category_id}` ({year})!**\n\n{formatted_list}"
+    )
 
 @discord.app_commands.command(name='end-of-year-hma-suggestions',
                               description="[Admin] Start the HMA category suggestions")

@@ -1,6 +1,7 @@
 """Trigger logic for users typing in the roles channel"""
 
 import logging
+import sqlite3
 
 import discord
 from config import admin_user_id
@@ -25,7 +26,14 @@ async def handle_role_assignment(message: discord.Message):
         await message.channel.send("Invalid prefix! Must be either `add`, `+`, `remove`, or `-`.", delete_after=5.0)
         return
 
-    role_id = get_role_id(alias)
+    try:
+        role_id = get_role_id(alias)
+    except sqlite3.Error:
+        logger.exception("Could not look up the role for '%s'.", alias)
+        await message.channel.send("Something went wrong looking up that role. Please try again in a moment.",
+                                   delete_after=5.0)
+        return
+
     if not role_id:
         await message.channel.send(f"Could not find a role matching `{alias}`.", delete_after=5.0)
         return

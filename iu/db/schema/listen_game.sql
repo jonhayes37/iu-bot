@@ -48,3 +48,13 @@ CREATE TABLE IF NOT EXISTS listen_submissions (
     PRIMARY KEY (round_id, user_id),
     FOREIGN KEY (round_id) REFERENCES listen_rounds(round_id) ON DELETE CASCADE
 );
+
+-- The songs the listener has ranked so far, saved before they confirm so a restart doesn't lose them
+CREATE TABLE IF NOT EXISTS listen_round_rankings (
+    round_id INTEGER,
+    user_id INTEGER,
+    rank INTEGER NOT NULL,
+    commentary TEXT NOT NULL,
+    PRIMARY KEY (round_id, user_id),
+    FOREIGN KEY (round_id, user_id) REFERENCES listen_submissions(round_id, user_id) ON DELETE CASCADE
+);

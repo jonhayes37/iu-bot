@@ -42,11 +42,7 @@ async def add_merch(
         await interaction.response.send_message("Price cannot be free!", ephemeral=True)
         return
 
-    try:
-        upsert_merch_item(item_id, name, description, price, max_per_user)
-    except (ValueError, KeyError) as ex:
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
-        return
+    upsert_merch_item(item_id, name, description, price, max_per_user)
 
     # Format the confirmation
     limit_text = f"{max_per_user} per user" if max_per_user else "Unlimited"
@@ -71,12 +67,8 @@ async def view_merch(interaction: discord.Interaction):
     if restricted:
         return
 
-    try:
-        balance = get_user_balance(interaction.user.id)
-        items = get_user_merch_catalog(interaction.user.id)
-    except Exception as ex:
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
-        return
+    balance = get_user_balance(interaction.user.id)
+    items = get_user_merch_catalog(interaction.user.id)
 
     if not items:
         await interaction.response.send_message(
@@ -105,11 +97,7 @@ async def purchase(interaction: discord.Interaction, item_id: str):
         return
 
     # Execute the database logic
-    try:
-        success, message = process_purchase(interaction.user.id, item_id)
-    except Exception as ex:
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
-        return
+    success, message = process_purchase(interaction.user.id, item_id)
 
     # Format the response based on success or failure
     if success:
@@ -146,11 +134,7 @@ async def purchase_history(interaction: discord.Interaction):
         return
 
     # Fetch the data
-    try:
-        inventory = get_user_inventory(interaction.user.id)
-    except Exception as ex:
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
-        return
+    inventory = get_user_inventory(interaction.user.id)
 
     # Handle the empty state
     if not inventory:
@@ -226,33 +210,27 @@ async def draw_raffle(interaction: discord.Interaction):
     if restricted:
         return
 
-    try:
-        # Fetch all tickets
-        ticket_data = get_all_item_owners('RAFFLE')
-        if not ticket_data:
-            await interaction.response.send_message("Nobody has bought any raffle tickets yet!", ephemeral=True)
-            return
-
-        # Create parallel lists for weighted random selection
-        user_ids = [user_id for user_id, _ in ticket_data]
-        weights = [quantity for _, quantity in ticket_data]
-        total_tickets = sum(weights)
-
-        # Pick a winner
-        # The `k=1` parameter returns a list with one item, so we select it.
-        if not user_ids: # Should be caught by the ticket_data check, but for safety
-            await interaction.response.send_message("Raffle pool is empty.", ephemeral=True)
-            return
-        winner_id = random.choices(user_ids, weights=weights, k=1)[0]
-        logger.info("Raffle winner: %s", winner_id)
-
-        # Wipe the inventories for RAFFLE so everyone is back to 0
-        reset_item_inventory('RAFFLE')
-
-    except Exception as ex:
-        logger.error("Database error in draw_raffle: %s", ex)
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
+    # Fetch all tickets
+    ticket_data = get_all_item_owners('RAFFLE')
+    if not ticket_data:
+        await interaction.response.send_message("Nobody has bought any raffle tickets yet!", ephemeral=True)
         return
+
+    # Create parallel lists for weighted random selection
+    user_ids = [user_id for user_id, _ in ticket_data]
+    weights = [quantity for _, quantity in ticket_data]
+    total_tickets = sum(weights)
+
+    # Pick a winner
+    # The `k=1` parameter returns a list with one item, so we select it.
+    if not user_ids: # Should be caught by the ticket_data check, but for safety
+        await interaction.response.send_message("Raffle pool is empty.", ephemeral=True)
+        return
+    winner_id = random.choices(user_ids, weights=weights, k=1)[0]
+    logger.info("Raffle winner: %s", winner_id)
+
+    # Wipe the inventories for RAFFLE so everyone is back to 0
+    reset_item_inventory('RAFFLE')
 
     # Announce the winner
     embed = discord.Embed(

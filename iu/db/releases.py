@@ -14,7 +14,6 @@ class AddResult(enum.Enum):
     ADDED = "added"          # new release, still needs to go on the playlist
     PENDING = "pending"      # seen before but never made it onto the playlist, so try again
     DUPLICATE = "duplicate"  # already handled
-    ERROR = "error"
 
 def add_new_release(video_id: str, original_url: str, message_id: str, msg_time: datetime) -> AddResult:
     """
@@ -23,44 +22,32 @@ def add_new_release(video_id: str, original_url: str, message_id: str, msg_time:
     """
     try:
         with db_connection(Database.RELEASES) as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
+            conn.execute("""
                 INSERT INTO new_releases (video_id, original_url, message_id, timestamp)
                 VALUES (?, ?, ?, ?)
             """, (video_id, original_url, message_id, msg_time.isoformat()))
-
-            conn.commit()
             return AddResult.ADDED
 
     except sqlite3.IntegrityError:
-        # The UNIQUE constraint caught a duplicate video_id or message_id
+        # The UNIQUE constraint caught a duplicate video
         return _classify_existing_release(video_id)
-    except Exception as ex:
-        logger.error("CRITICAL: Database error inserting release %s: %s", video_id, ex)
-        return AddResult.ERROR
 
 def _classify_existing_release(video_id: str) -> AddResult:
     """For a video that is already recorded: has it reached the playlist yet?"""
-    try:
-        with db_connection(Database.RELEASES) as conn:
-            row = conn.execute("SELECT processed FROM new_releases WHERE video_id = ?", (video_id,)).fetchone()
-    except Exception as ex:
-        logger.error("Database error looking up release %s: %s", video_id, ex)
-        return AddResult.ERROR
+    with db_connection(Database.RELEASES) as conn:
+        row = conn.execute("SELECT processed FROM new_releases WHERE video_id = ?", (video_id,)).fetchone()
 
     if row is not None and not row[0]:
         logger.info("Release %s was recorded earlier but is not on the playlist yet; retrying.", video_id)
         return AddResult.PENDING
 
-    logger.debug("Duplicate video_id or message_id ignored: %s", video_id)
+    logger.debug("Duplicate video ignored: %s", video_id)
     return AddResult.DUPLICATE
 
 def mark_release_processed(video_id: str):
     """Marks a video as successfully added to YouTube so it isn't processed again."""
     with db_connection(Database.RELEASES) as conn:
         conn.execute("UPDATE new_releases SET processed = 1 WHERE video_id = ?", (video_id,))
-        conn.commit()
 
 def get_playlist_id_for_year(year: int) -> str | None:
     """Checks the database to see if a playlist for the target year already exists."""
@@ -77,4 +64,3 @@ def save_new_playlist(year: int, playlist_id: str):
             "INSERT INTO youtube_playlists (year, playlist_id) VALUES (?, ?)",
             (year, playlist_id)
         )
-        conn.commit()

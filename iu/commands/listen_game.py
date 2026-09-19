@@ -1,16 +1,14 @@
 """Commands for the listen game"""
 import asyncio
-import logging
 
 import discord
 from discord import app_commands
 from config import Channel, Role
 from db.listen_game import (
-    get_current_round_db, get_game_by_status_db,
-    get_registered_players_db, get_round_submissions_db,
-    is_round_complete_db, upsert_submission_db,
-    get_user_submission_db, get_active_gm_id, is_video_claimed_by_other_db
+    RoundStatus, get_active_gm_id, get_ranking_picks_db, get_round_submissions_db, get_user_submission_db,
+    is_round_complete_db, is_video_claimed_by_other_db, upsert_submission_db
 )
+from services.listen_game import RoundContext, playlist_link, require_active_round, send_dm, update_submission_tracker
 from services.listen_game_playlist import (
     SUBMISSION_LOCK, PlaylistOutcome, get_host_name, put_song_in_round_playlist
 )
@@ -18,8 +16,6 @@ from services.listen_game_reveal import start_reveal
 from services.youtube import get_video_title, extract_video_id
 from ui.listen_game import SetThemeModal, ListenGameRankingView
 from utils.validation import validate_channel
-
-logger = logging.getLogger('iu-bot')
 
 
 @app_commands.command(name="listen-game-post-ruleset",
@@ -30,44 +26,38 @@ async def listen_game_set_theme(interaction: discord.Interaction):
     if restricted:
         return
 
-    game = get_game_by_status_db('playing')
-    if not game:
-        await interaction.response.send_message("⚠️ There is no active game right now.", ephemeral=True)
+    ctx = await require_active_round(interaction, deferred=False)
+    if not ctx:
         return
+    active_round = ctx.round
 
-    active_round = get_current_round_db(game['game_id'])
-    if not active_round:
-        await interaction.response.send_message("⚠️ Could not find an active round.", ephemeral=True)
-        return
-
-    if interaction.user.id != active_round['host_id']:
-        host = interaction.guild.get_member(active_round['host_id'])
+    if interaction.user.id != active_round.host_id:
+        host = interaction.guild.get_member(active_round.host_id)
         host_name = host.mention if host else "the current listener"
         await interaction.response.send_message(
             f"❌ You are not the listener for this round! We are waiting on {host_name}.", ephemeral=True)
         return
 
     # Check if a ruleset already exists
-    existing_theme = active_round['theme']
-    if existing_theme:
-        if active_round['status'] != 'submitting' or is_round_complete_db(game['game_id'], active_round['round_id']):
+    if active_round.theme:
+        round_is_full = is_round_complete_db(ctx.game.game_id, active_round.round_id)
+        if active_round.status != RoundStatus.SUBMITTING or round_is_full:
             await interaction.response.send_message(
-                "❌ All players have already submitted their songs! You can no longer change the ruleset.", 
+                "❌ All players have already submitted their songs! You can no longer change the ruleset.",
                 ephemeral=True
             )
             return
-    else:
-        if active_round['status'] != 'setting_theme':
-            await interaction.response.send_message(
-                "⚠️ The game is not currently waiting for a ruleset.", ephemeral=True)
-            return
+    elif active_round.status != RoundStatus.SETTING_THEME:
+        await interaction.response.send_message(
+            "⚠️ The game is not currently waiting for a ruleset.", ephemeral=True)
+        return
 
     # Launch the modal, passing in the existing data (if any)
     modal = SetThemeModal(
-        game_id=game['game_id'],
-        round_id=active_round['round_id'],
-        existing_theme=existing_theme,
-        ruleset_msg_id=active_round['ruleset_message_id']
+        game_id=ctx.game.game_id,
+        round_id=active_round.round_id,
+        existing_theme=active_round.theme,
+        ruleset_msg_id=active_round.ruleset_message_id
     )
     await interaction.response.send_modal(modal)
 
@@ -83,26 +73,25 @@ async def submit_song(interaction: discord.Interaction, url: str):
 
     await interaction.response.defer(ephemeral=True)
 
+    # One submission at a time: the "already claimed" check, the playlist update and the save must
+    # not interleave between two players
     async with SUBMISSION_LOCK:
         await _process_submission(interaction, url)
 
 
 async def _process_submission(interaction: discord.Interaction, url: str):
-    game = get_game_by_status_db('playing')
-    if not game:
-        await interaction.followup.send("⚠️ There is no active game right now.")
+    ctx = await require_active_round(
+        interaction, deferred=True, statuses=(RoundStatus.SUBMITTING,),
+        wrong_status_message="⚠️ The round is not currently accepting submissions.")
+    if not ctx:
         return
+    active_round = ctx.round
+    user = interaction.user
 
-    active_round = get_current_round_db(game['game_id'])
-    if not active_round or active_round['status'] != 'submitting':
-        await interaction.followup.send("⚠️ The round is not currently accepting submissions.")
-        return
-
-    if interaction.user.id == active_round['host_id']:
+    if user.id == active_round.host_id:
         await interaction.followup.send("❌ You are the listener! You don't submit a song for your own round.")
         return
 
-    # Extract Data
     video_id = extract_video_id(url)
     if not video_id:
         await interaction.followup.send("❌ Invalid YouTube URL.")
@@ -113,23 +102,21 @@ async def _process_submission(interaction: discord.Interaction, url: str):
         await interaction.followup.send("❌ Could not fetch that video. It may be private or deleted.")
         return
 
-    if is_video_claimed_by_other_db(active_round['round_id'], interaction.user.id, video_id):
+    if is_video_claimed_by_other_db(active_round.round_id, user.id, video_id):
         await interaction.followup.send(
             "❌ **Song Already Claimed!** Someone else has already submitted this exact video for this round."
         )
         return
 
-    # Handle Previous Submissions & Duplicate Checking
-    user_previous_sub = get_user_submission_db(active_round['round_id'], interaction.user.id)
-    if user_previous_sub and user_previous_sub['video_id'] == video_id:
+    previous_submission = get_user_submission_db(active_round.round_id, user.id)
+    if previous_submission and previous_submission.video_id == video_id:
         await interaction.followup.send("⚠️ You have already submitted this exact video!")
         return
 
-    # Handle the YouTube Playlist Swap
     outcome, playlist_id = await asyncio.to_thread(
         put_song_in_round_playlist,
-        get_host_name(interaction.guild, active_round['host_id']), active_round, video_id,
-        user_previous_sub['video_id'] if user_previous_sub else None
+        get_host_name(interaction.guild, active_round.host_id), active_round, video_id,
+        previous_submission.video_id if previous_submission else None
     )
 
     if outcome is PlaylistOutcome.CREATE_FAILED:
@@ -140,97 +127,66 @@ async def _process_submission(interaction: discord.Interaction, url: str):
         await interaction.followup.send("❌ Failed to add video to the playlist. It may be blocked or private.")
         return
 
-    if outcome is PlaylistOutcome.QUOTA_EXCEEDED:
-        # Save to DB anyway, but notify the GM
-        upsert_submission_db(active_round['round_id'], interaction.user.id, video_id, video_title)
+    upsert_submission_db(active_round.round_id, user.id, video_id, video_title)
 
+    if outcome is PlaylistOutcome.QUOTA_EXCEEDED:
+        # The song is saved anyway; the GM catches the playlist up later
         await interaction.followup.send(
             f"✅ **Success!** Your song `{video_title}` has been accepted into the database.\n\n"
             "⚠️ *Note: YouTube API limits have been reached for today, so it is not in the "
             "playlist yet. The GM has been notified to sync it tomorrow.*"
         )
-
-        active_gm_id = get_active_gm_id(game, active_round)
-        gm_user = interaction.client.get_user(active_gm_id) or await interaction.client.fetch_user(active_gm_id)
-        if gm_user:
-            try:
-                await gm_user.send(
-                    "🚨 **Listen Game Alert: YouTube Quota Exceeded!**\n"
-                    "A player submitted a song, but the bot could not add it to the playlist due to "
-                    "YouTube API limits. The song is safely stored in the database.\n\n"
-                    "**Please run `/listen-game-gm-sync-playlist` tomorrow** when the quota "
-                    "resets to catch the playlist up!"
-                )
-            except discord.Forbidden:
-                logger.warning("Could not DM GM about quota limits.")
+        await send_dm(
+            interaction.client, get_active_gm_id(ctx.game, active_round),
+            "🚨 **Listen Game Alert: YouTube Quota Exceeded!**\n"
+            "A player submitted a song, but the bot could not add it to the playlist due to "
+            "YouTube API limits. The song is safely stored in the database.\n\n"
+            "**Please run `/listen-game-gm-sync-playlist` tomorrow** when the quota "
+            "resets to catch the playlist up!"
+        )
         return
 
-    # Save and Announce (Happy Path)
-    upsert_submission_db(active_round['round_id'], interaction.user.id, video_id, video_title)
-    if user_previous_sub:
+    if previous_submission:
         await interaction.followup.send(f"🔄 **Updated!** Your submission has been swapped to `{video_title}`.")
     else:
         await interaction.followup.send(f"✅ **Success!** Your song `{video_title}` has been accepted.")
 
-    # DM the GM about the submission
-    active_gm_id = get_active_gm_id(game, active_round)
-    gm_user = interaction.client.get_user(active_gm_id) or await interaction.client.fetch_user(active_gm_id)
-    if gm_user:
-        try:
-            await gm_user.send(
-                f"🎵 **New Listen Game Submission!**\n\n"
-                f"**Player:** {interaction.user.display_name}\n"
-                f"**Song:** `{video_title}`\n"
-                f"**URL:** {url}\n\n"
-                "You can review this round's playlist or use `/listen-game-gm-reject-song` if this is a duplicate."
-            )
-        except discord.Forbidden:
-            logger.warning("Could not DM GM %s about new submission.", active_gm_id)
+    await send_dm(
+        interaction.client, get_active_gm_id(ctx.game, active_round),
+        f"🎵 **New Listen Game Submission!**\n\n"
+        f"**Player:** {user.display_name}\n"
+        f"**Song:** `{video_title}`\n"
+        f"**URL:** {url}\n\n"
+        "You can review this round's playlist or use `/listen-game-gm-reject-song` if this is a duplicate."
+    )
 
-    # Update the tracker message
-    all_players = get_registered_players_db(game['game_id'])
-    total_needed = len(all_players) - 1
-    current_submissions = get_round_submissions_db(active_round['round_id'])
-    current_count = len(current_submissions)
-    is_complete = is_round_complete_db(game['game_id'], active_round['round_id'])
-    if active_round.get('status_message_id'):
-        try:
-            tracker_msg = await interaction.channel.fetch_message(active_round['status_message_id'])
-            tracker_text = f"🎧 **Round Status:** We are at `{current_count}/{total_needed}` submissions for the round."
-            await tracker_msg.edit(content=tracker_text)
-        except Exception as e:
-            logger.warning("Failed to update status message: %s", e)
+    await update_submission_tracker(interaction.channel, ctx)
 
-    # Completion Check - Route to GM instead of closing the round
-    if not user_previous_sub and is_complete:
-        active_gm_id = get_active_gm_id(game, active_round)
-        gm_user = interaction.client.get_user(active_gm_id) or await interaction.client.fetch_user(active_gm_id)
+    # When the last song comes in, route to the GM instead of closing the round
+    if not previous_submission and is_round_complete_db(ctx.game.game_id, active_round.round_id):
+        await _notify_gm_all_submitted(interaction, ctx, playlist_id)
 
-        if gm_user:
-            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
 
-            all_subs = get_round_submissions_db(active_round['round_id'])
-            summary_lines = []
-            for sub in all_subs:
-                member = interaction.guild.get_member(sub['user_id'])
-                name = member.display_name if member else f"User ID {sub['user_id']}"
-                summary_lines.append(f"• **{name}**: `{sub['raw_title']}`")
-            summary_text = "\n".join(summary_lines)
+async def _notify_gm_all_submitted(interaction: discord.Interaction, ctx: RoundContext, playlist_id: str | None):
+    """DMs the GM the ledger of everything submitted so they can review it and approve the round."""
+    summary_lines = []
+    for submission in get_round_submissions_db(ctx.round.round_id):
+        member = interaction.guild.get_member(submission.user_id)
+        name = member.display_name if member else f"User ID {submission.user_id}"
+        summary_lines.append(f"• **{name}**: `{submission.raw_title}`")
 
-            try:
-                await gm_user.send(
-                    "**Listen Game: All Submissions Are In!**\n\n"
-                    f"Here is the playlist: {playlist_url}\n\n"
-                    "**Submission Ledger (For Review):**\n"
-                    f"{summary_text}\n\n"
-                    "Please review the submissions for duplicates. "
-                    "If you need to reject a song, use "
-                    "`/listen-game-gm-reject-song @player [reason]`.\n"
-                    "If everything looks good, run `/listen-game-gm-approve-playlist` "
-                    f"in {interaction.channel.mention} to publish it to the channel and notify the listener!"
-                )
-            except discord.Forbidden:
-                logger.warning("Could not DM GM about round completion.")
+    await send_dm(
+        interaction.client, get_active_gm_id(ctx.game, ctx.round),
+        "**Listen Game: All Submissions Are In!**\n\n"
+        f"Here is the playlist: {playlist_link(playlist_id)}\n\n"
+        "**Submission Ledger (For Review):**\n"
+        + "\n".join(summary_lines) + "\n\n"
+        "Please review the submissions for duplicates. "
+        "If you need to reject a song, use "
+        "`/listen-game-gm-reject-song @player [reason]`.\n"
+        "If everything looks good, run `/listen-game-gm-approve-playlist` "
+        f"in {interaction.channel.mention} to publish it to the channel and notify the listener!"
+    )
 
 
 @app_commands.command(name="listen-game-submit-ranking",
@@ -241,24 +197,19 @@ async def listen_game_submit_ranking(interaction: discord.Interaction):
     if restricted:
         return
 
-    game = get_game_by_status_db('playing')
-    if not game:
-        await interaction.response.send_message("⚠️ There is no active game right now.", ephemeral=True)
+    ctx = await require_active_round(interaction, deferred=False)
+    if not ctx:
         return
-
-    active_round = get_current_round_db(game['game_id'])
-    if not active_round:
-        await interaction.response.send_message("⚠️ Could not find an active round.", ephemeral=True)
-        return
+    active_round = ctx.round
 
     # Results are already saved; this is a reveal that was interrupted (e.g. by a restart), so resume it
-    if active_round['status'] == 'revealing':
-        if interaction.user.id not in (active_round['host_id'], get_active_gm_id(game, active_round)):
+    if active_round.status == RoundStatus.REVEALING:
+        if interaction.user.id not in (active_round.host_id, get_active_gm_id(ctx.game, active_round)):
             await interaction.response.send_message(
                 "❌ Only the listener or the GM can resume the reveal.", ephemeral=True)
             return
 
-        if start_reveal(interaction.channel, active_round['round_id']):
+        if start_reveal(interaction.channel, active_round.round_id):
             message = "▶️ Resuming the reveal in this channel."
         else:
             message = "⏳ The reveal is already in progress."
@@ -266,28 +217,23 @@ async def listen_game_submit_ranking(interaction: discord.Interaction):
         return
 
     # Ensure the round has actually been closed/timed out
-    if active_round['status'] != 'ranking':
+    if active_round.status != RoundStatus.RANKING:
         await interaction.response.send_message(
             "⚠️ Submissions are still open! Wait for the deadline or ask the GM to close the round.", ephemeral=True)
         return
 
-    if interaction.user.id != active_round['host_id']:
+    if interaction.user.id != active_round.host_id:
         await interaction.response.send_message(
             "❌ Only the listener of the current round can submit the rankings.", ephemeral=True)
         return
 
     # Fetch all submissions to populate the dropdown
-    submissions = get_round_submissions_db(active_round['round_id'])
+    submissions = get_round_submissions_db(active_round.round_id)
     if not submissions:
         await interaction.response.send_message("❌ No submissions found for this round.", ephemeral=True)
         return
 
-    view = ListenGameRankingView(submissions, game['game_id'], active_round['round_id'], interaction.channel.id)
-    embed = discord.Embed(
-        title="Listen Game Rankings",
-        description="Select your #1 pick from the dropdown below. "
-            "You will be prompted to enter your commentary for each song.",
-        color=0x3498db
-    )
-
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    # Anything the listener had already ranked before a restart or a dismissed message is picked back up
+    view = ListenGameRankingView(submissions, get_ranking_picks_db(active_round.round_id),
+                                 ctx.game.game_id, active_round.round_id, interaction.channel.id)
+    await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)

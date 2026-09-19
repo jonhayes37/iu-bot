@@ -87,10 +87,10 @@ async def handle_reaction_add(payload, client):
         _remember(_reaction_totals, payload.message_id, total_reactions)
 
     if total_reactions >= MILESTONE_REACTIONS:
-        await _check_milestone(payload, message or await _fetch_message(client, payload), jump_url, dispatch_channel)
+        await _check_milestone(message or await _fetch_message(client, payload), jump_url, dispatch_channel)
 
 
-async def _check_milestone(payload, message: discord.Message | None, jump_url: str, dispatch_channel):
+async def _check_milestone(message: discord.Message | None, jump_url: str, dispatch_channel):
     if not message:
         return
 

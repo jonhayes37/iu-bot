@@ -73,7 +73,7 @@ def _process_release_url(url: str, video_id: str, message_id: str, msg_time: dat
 
         # Save to database initially as unprocessed (processed=0)
         added = add_new_release(video_id=video_id, original_url=url, message_id=message_id, msg_time=msg_time)
-        if added in (AddResult.DUPLICATE, AddResult.ERROR):
+        if added is AddResult.DUPLICATE:
             return False
 
         # Check for existing playlist for this specific year

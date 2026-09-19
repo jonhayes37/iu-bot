@@ -10,7 +10,6 @@ from db.bot import get_active_bot_status_db
 from tasks.listen_game import check_listen_game_reminders
 from tasks.scheduled_events import check_upcoming_events
 from tasks.tournaments import tournament_resolution_loop
-from triggers.interactions import handle_interaction
 from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
@@ -18,11 +17,12 @@ from triggers.polls import handle_poll_vote, handle_poll_vote_remove
 from triggers.releases import store_new_release
 from triggers.roles import handle_role_assignment
 from triggers.scheduled_events import process_event
-from ui.eoy_nominations import EOYNominationsHub
-from ui.eoy_voting import EOYVotingHub
-from ui.hma_suggestions import HMASuggestionsHub
+from ui.base import report_interaction_error
+from ui.eoy_nominations import HallOfFameNominationButton, Top25Button
+from ui.eoy_voting import HallOfFameVoteButton, HMAVoteButton
+from ui.hma_suggestions import HMASuggestButton
 from ui.listen_game import JoinGameView
-from utils.end_of_year import get_current_award_year
+from ui.lists import SubmitListButton
 
 logger = logging.getLogger('iu-bot')
 
@@ -36,13 +36,8 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
             ephemeral=True
         )
     else:
-        logger.error("Global App Command Error: %s", error)
-        # Check if the interaction was already deferred or responded to prevent crashes
-        if not interaction.response.is_done():
-            await interaction.response.send_message(
-                "❌ An unexpected error occurred while running this command.",
-                ephemeral=True
-            )
+        # Logs the traceback and tells the user (database failures get their own message)
+        await report_interaction_error(interaction, error)
 
 
 class IUBot(discord.Client):
@@ -67,16 +62,17 @@ class IUBot(discord.Client):
         await self._sync_commands()
 
     def _register_persistent_views(self):
-        """Re-attaches the buttons on old messages so they keep working after a restart."""
-        try:
-            current_year = get_current_award_year()
-            self.add_view(EOYNominationsHub(current_year))
-            self.add_view(EOYVotingHub(current_year))
-            self.add_view(HMASuggestionsHub(current_year))
-            self.add_view(JoinGameView())
-            logger.info("Persistent views successfully restored.")
-        except Exception as e:
-            logger.error("Failed to restore persistent views: %s", e)
+        """
+        Re-attaches the buttons on old messages so they keep working after a restart. The buttons
+        that carry a year or an event in their ID are dynamic items: registering the class once covers
+        every year and every event, including messages posted before this restart.
+        """
+        self.add_dynamic_items(
+            SubmitListButton, Top25Button, HallOfFameNominationButton,
+            HallOfFameVoteButton, HMAVoteButton, HMASuggestButton
+        )
+        self.add_view(JoinGameView())
+        logger.info("Persistent buttons registered.")
 
     async def _sync_commands(self):
         # A failed sync shouldn't stop the bot from starting; it just keeps the previous command list
@@ -163,6 +159,3 @@ class IUBot(discord.Client):
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         await handle_reaction_add(payload, self)
-
-    async def on_interaction(self, interaction: discord.Interaction):
-        await handle_interaction(interaction)

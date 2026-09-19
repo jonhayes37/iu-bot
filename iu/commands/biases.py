@@ -116,7 +116,7 @@ async def create_ultimate_bias(
         )
     else:
         await interaction.response.send_message(
-            f"Failed to create entry. {member.mention} likely already has an Ultimate Bias "
+            f"Nothing was created: {member.mention} already has an Ultimate Bias "
             "recorded. Use `/update-ultimate-bias` instead.",
             ephemeral=True)
 
@@ -241,7 +241,7 @@ async def create_bias_group(
                                                 ephemeral=True)
     else:
         await interaction.response.send_message(
-            f"Failed. {member.mention} likely already has an entry. Use `/update-bias-group`.",
+            f"Nothing was created: {member.mention} already has an entry. Use `/update-bias-group`.",
             ephemeral=True)
 
 @app_commands.command(name="update-bias-group",

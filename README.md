@@ -111,8 +111,10 @@ All Listen Game commands work in `#listen-game`.
    or bad picks, then run `/listen-game-gm-approve-playlist` to close the round. The listener
    receives the playlist by DM.
 6. **Ranking.** The listener runs `/listen-game-submit-ranking`. They choose songs one at a time,
-   starting from last place and working up to first, writing commentary for each. When the list
-   is complete they press **Confirm & Publish Results**.
+   starting from last place and working up to first, writing commentary for each. Each pick is
+   saved as it's made, so if the bot restarts (or the message is dismissed) the listener can run the
+   command again and carry on, or press **Start over**. When the list is complete they press
+   **Confirm & Publish Results**.
 7. **Reveal.** IU counts the results down in the channel, one song every 15 seconds with the
    listener's commentary, then posts the round's points and the current standings, and announces
    the next listener. If the bot is restarted mid-reveal it picks up where it left off.
@@ -169,7 +171,7 @@ Listening To Bonus Pick** perk (`WAYLT`) from the Merch Booth, which is used up 
 
 | Command | Who | Description |
 | --- | --- | --- |
-| `/create-list-event event_id event_name [expected_count] [placeholder]` | Admin | Posts the announcement with a **Submit Your List** button in the current channel |
+| `/create-list-event event_id event_name [expected_count] [placeholder]` | Admin | Posts the announcement with a **Submit Your List** button in the current channel. The event ID can use letters, numbers, `-` and `_` |
 | `/close-list-event event_id` | Admin | Closes the event and disables its button |
 | `/export-lists event_id` | Admin | Uploads two text files: the cleaned lists, and a reference sheet of every entry's link with its start time |
 

@@ -3,6 +3,12 @@
 Step-by-step procedures for changing, deploying and troubleshooting the bot. For what the bot
 does, see the [README](../README.md). For code conventions, see [CLAUDE.md](../CLAUDE.md).
 
+Other guides:
+
+- [Setup guide](setup.md): the Discord application, the server layout, and every setting.
+- [YouTube credentials and quota](youtube.md).
+- [Databases](databases.md): inspecting, permissions, backups and adding a new one.
+
 > **A note on the Unraid steps.** The commands and the repo details below were checked against the
 > project. The Unraid menu names and paths are written from general Unraid knowledge and may differ
 > slightly on your version. The first time you follow a step, confirm it matches what you see, and
@@ -143,7 +149,7 @@ near the top of a healthy start:
 ```text
 Initializing databases...
 All databases initialized successfully.
-Persistent views successfully restored.
+Persistent buttons registered.
 Command tree synced to guild <your guild id>
 <bot name> has connected to Discord!
 Event notifier task started.
@@ -179,8 +185,8 @@ to see every field. The settings that matter:
 
 - **Repository:** `jonhayes37/iu-bot`.
 - **Environment variables you must set:** `DISCORD_TOKEN` (the bot token) and `DISCORD_GUILD`
-  (the server's ID). The image already provides defaults for `TOKEN_DIR`, `HALLYU_ID`, `DATA_DIR`
-  and every `DB_PATH_*` variable, so only override those on purpose.
+  (the server's ID). The image provides defaults for everything else; what each variable does is
+  in the [setup guide](setup.md#3-settings-on-the-container).
 - **Path mapping:** container path `/app/data` to a folder on the NAS (for example
   `/mnt/user/appdata/iu-bot`). Everything the bot remembers lives there. **If this mapping is
   missing or wrong, the bot loses its data every time the container is recreated.**
@@ -262,12 +268,9 @@ That is expected: several commands are limited to certain channels (`#merch-boot
 - `YouTube API Quota exceeded`: the daily quota is used up. It resets at midnight Pacific time.
   Songs are still saved; a Listen Game GM catches the playlist up the next day with
   `/listen-game-gm-sync-playlist`.
-- `invalid_grant` or other authentication errors: the token has expired or been revoked. On your own
-  computer with `credentials.json` in the repo folder, run `python iu/scripts/generate_token.py`,
-  sign in when the browser opens, copy the new `token.json` into the data folder on the NAS, and
-  restart the container. If this keeps happening within a week, check in the Google Cloud Console
-  that the OAuth consent screen is published rather than in "Testing" (Google expires
-  Testing-mode tokens after 7 days).
+- `invalid_grant` or other authentication errors: the token has expired or been revoked. Renew it
+  by following [YouTube credentials and quota](youtube.md#renewing-the-token). If it keeps dying
+  after a week, the Google consent screen is probably still in "Testing" (see that guide).
 
 ### A tournament bracket image did not appear
 
@@ -280,82 +283,14 @@ Restart the container and use `/force-close-round` or wait for the next check to
 Check the log for `Resuming the reveal for round`. If it isn't there, have the listener run
 `/listen-game-submit-ranking`, or a GM run it, which resumes the reveal.
 
-### Look inside the databases from the container
+To look inside a database from the container's console, see [Databases](databases.md#look-inside-the-databases).
 
-Open the container's **Console** (Docker tab, container icon, Console). The image has no `sqlite3`
-program, but Python is there:
+## 5. Databases
 
-```bash
-python - <<'EOF'
-import sqlite3
-db = sqlite3.connect('/app/data/listen_game.db')
-for row in db.execute("SELECT round_id, host_id, status, reveal_step FROM listen_rounds ORDER BY round_id DESC LIMIT 5"):
-    print(row)
-EOF
-```
+Everything about the database files is in [Databases](databases.md):
 
-Only read (`SELECT`) in the console while the bot is running. To change data, stop the container
-first and take a backup (see below).
-
-## 5. View the databases in a Windows app
-
-The `.db` files are created by the bot, which runs as `root` inside the container, so they usually
-end up owned by `root` with permissions that let other users read but not write, or that block
-your Windows login altogether. The usual symptom is that a viewer such as **DB Browser for
-SQLite** can't see or open the files, or opens them read-only or with an error.
-
-### Fix the permissions once
-
-In the Unraid terminal (adjust the path to your data folder):
-
-```bash
-cd /mnt/user/appdata/iu-bot
-ls -l                                   # look at the owner and permissions
-chown -R nobody:users .                 # the account Unraid's SMB shares use
-chmod -R u+rwX,g+rwX,o+rX .             # owner and group read/write, others read
-```
-
-(Unraid also has a built-in **Tools → New Permissions** page that resets ownership and permissions
-on shares. It does the same job for the whole share; stop the Docker service or the container
-first.) *(check)*
-
-Make sure the `appdata` share is visible to Windows (**Shares → appdata → SMB**). For a private
-share, use a Windows login that has read/write access to it.
-
-**New databases need this again.** When you add a new database, the bot creates the file the next
-time it starts, as `root`, so repeat the two commands above afterwards.
-
-> **Don't run the container as a different user with `--user`.** It looks like a permanent fix, but
-> the image installs its headless browser (used for tournament brackets) under `/root`, so a
-> non-root user can't launch it and bracket images would break. A better permanent fix is a small
-> code change so the bot creates its files with open permissions (setting a umask at startup);
-> ask for that if the manual step becomes a chore.
-
-### Open them safely
-
-- **Prefer a copy.** In Windows, copy the `.db` file off the share (or copy it on the NAS) and open
-  the copy. That way you can't lock or corrupt the live file, and the bot is never held up.
-- If you must open the file on the share, open it **read-only** (in DB Browser for SQLite:
-  File → Open Database Read Only) and close it when you're done.
-- **Don't edit a live database from Windows.** Editing over the network while the bot is running
-  risks locks and corruption. To change data, stop the container, edit a backed-up file, then
-  start the container again.
-- Only the `.db` file matters. If you see a `-journal` file next to it, that is SQLite working;
-  leave it alone.
-
-### Back up before changing anything
-
-Stop the container, then copy the whole data folder, or copy a database while it's running using
-SQLite's own backup, which is safe:
-
-```bash
-python - <<'EOF'
-import sqlite3
-src = sqlite3.connect('/app/data/merch.db')
-dst = sqlite3.connect('/app/data/merch-backup.db')
-src.backup(dst)
-EOF
-```
-
-The databases hold the hearts economy, listen game, lists and awards data, so it's worth copying
-the data folder somewhere off the NAS from time to time.
+- [Looking inside them](databases.md#look-inside-the-databases), from Windows or the container.
+- [Fixing their file permissions](databases.md#fix-the-file-permissions) so Windows can open them.
+- [Backing up and restoring](databases.md#back-up-and-restore).
+- [Adding a new database](databases.md#adding-a-new-database) and
+  [changing an existing one](databases.md#changing-an-existing-database).

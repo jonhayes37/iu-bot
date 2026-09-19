@@ -5,8 +5,12 @@ import logging
 import re
 import discord
 from db.lists import create_new_event, close_event, get_all_submissions, get_event_details, set_event_message_id
+from ui.lists import SubmitListButton
 
 logger = logging.getLogger('iu-bot')
+
+# The event ID is part of the button's ID, which Discord limits to 100 characters
+EVENT_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]{1,64}')
 
 @discord.app_commands.command(name='create-list-event', description="[Admin] Start a new list submission event.")
 @discord.app_commands.default_permissions(administrator=True)
@@ -20,20 +24,17 @@ async def create_list_event(
     """Creates the event in the DB and posts a clean button."""
     await interaction.response.defer(ephemeral=True)
 
-    success = create_new_event(event_id, event_name, expected_count, placeholder)
-    if not success:
-        await interaction.followup.send(f"Failed to create event. Does the ID `{event_id}` already exist?")
+    if not EVENT_ID_PATTERN.fullmatch(event_id):
+        await interaction.followup.send(
+            "The event ID can only use letters, numbers, `-` and `_` (up to 64 characters), for example `mid_2026`.")
         return
 
-    # Build the Button
+    if not create_new_event(event_id, event_name, expected_count, placeholder):
+        await interaction.followup.send(f"An event with the ID `{event_id}` already exists.")
+        return
+
     view = discord.ui.View(timeout=None)
-    button = discord.ui.Button(
-        label="Submit Your List",
-        style=discord.ButtonStyle.primary,
-        custom_id=f"submit_list:{event_id}",
-        emoji="📥"
-    )
-    view.add_item(button)
+    view.add_item(SubmitListButton(event_id))
 
     # Post it to the channel with a minimal anchor text
     msg_content = f"**{event_name}**\nClick below to submit your list!"
@@ -94,14 +95,7 @@ async def close_list_event(
     try:
         message = await channel.fetch_message(int(message_id))
         view = discord.ui.View(timeout=None)
-        button = discord.ui.Button(
-            label="Submissions Closed",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"submit_list:{event_id}_closed",
-            disabled=True,
-            emoji="🔒"
-        )
-        view.add_item(button)
+        view.add_item(SubmitListButton(event_id, closed=True))
 
         await message.edit(view=view)
         await interaction.followup.send(f"Event `{event_id}` closed!", ephemeral=True)

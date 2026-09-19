@@ -18,12 +18,7 @@ async def check_balance(interaction: discord.Interaction):
         return
 
     # Fetch the balance
-    try:
-        balance = get_user_balance(interaction.user.id)
-    except Exception as ex:
-        logger.error("Database error occurred: %s", ex)
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
-        return
+    balance = get_user_balance(interaction.user.id)
 
     # Format the response
     embed = discord.Embed(
@@ -54,12 +49,7 @@ async def modify_balance(interaction: discord.Interaction, member: discord.Membe
         return
 
     # Run the command
-    try:
-        modify_db_balance(interaction.user.id, member.id, amount, reason)
-    except (ValueError, KeyError) as ex:
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
-        logger.error("Database error occurred while modifying balance: %s", ex)
-        return
+    modify_db_balance(interaction.user.id, member.id, amount, reason)
 
     # Format the response
     action = "Awarded" if amount >= 0 else "Deducted"
@@ -107,11 +97,7 @@ async def random_award(interaction: discord.Interaction, users: str, amount: int
     unique_ids = list(set(raw_ids))
     winner_id = int(random.choice(unique_ids))
 
-    try:
-        modify_db_balance(interaction.user.id, winner_id, amount, f"Random Award: {reason}")
-    except (ValueError, KeyError) as ex:
-        await interaction.response.send_message(f"Database error: {ex}", ephemeral=True)
-        return
+    modify_db_balance(interaction.user.id, winner_id, amount, f"Random Award: {reason}")
 
     embed = discord.Embed(
         title="Random Award Winner!",

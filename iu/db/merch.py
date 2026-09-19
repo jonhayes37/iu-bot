@@ -5,18 +5,37 @@ import sqlite3
 from config import Database
 from db.connection import db_connection
 
-def ensure_users_exist(cursor: sqlite3.Cursor, *user_ids):
+def ensure_users_exist(cursor: sqlite3.Cursor, *user_ids, schema: str = ""):
     """
     Takes an active database cursor and an arbitrary number of user IDs.
     Ensures each user exists in the users table with a default balance of 0.
+
+    schema is the prefix to use when the merch database is attached to another one (e.g. "merch.").
     """
     for user_id in user_ids:
         # Only insert actual Discord IDs (integers), ignoring 'SYSTEM' or 'MERCH'
         if isinstance(user_id, int):
             cursor.execute(
-                "INSERT OR IGNORE INTO users (user_id, balance) VALUES (?, 0)", 
+                f"INSERT OR IGNORE INTO {schema}users (user_id, balance) VALUES (?, 0)",
                 (user_id,)
             )
+
+
+def credit_hearts(conn: sqlite3.Connection, admin_id: int | str, target_id: int, amount: int, reason: str,
+                  schema: str = "") -> None:
+    """
+    Adds hearts to a user and records the transaction, inside a transaction the caller already has
+    open, so it can be combined with other changes (see cast_vote... in db/tournaments.py).
+
+    schema is the prefix to use when the merch database is attached to another one (e.g. "merch.").
+    """
+    cursor = conn.cursor()
+    ensure_users_exist(cursor, target_id, schema=schema)
+    cursor.execute(f"UPDATE {schema}users SET balance = balance + ? WHERE user_id = ?", (amount, target_id))
+    cursor.execute(f"""
+        INSERT INTO {schema}transactions (sender_id, receiver_id, amount, reason, message_url)
+        VALUES (?, ?, ?, ?, NULL)
+    """, (f"ADMIN:{admin_id}", target_id, amount, reason))
 
 # Process a daily heart gift from sender_id to receiver_id,
 # with an optional message URL for logging.
@@ -55,7 +74,6 @@ def process_daily_heart(sender_id: int, receiver_id: int, message_url: str) -> b
             VALUES (?, ?, 1, 'Daily cheer given', ?)
         """, (str(sender_id), receiver_id, message_url))
 
-        conn.commit()
         return True
 
 # Processes a message with 5 or more unique people reacting
@@ -86,7 +104,6 @@ def process_milestone_award(message_id: int, author_id: int, message_url: str) -
             VALUES ('SYSTEM', ?, 3, 'Milestone: 5 reactions', ?)
         """, (author_id, message_url))
 
-        conn.commit()
         return True
 
 
@@ -97,48 +114,10 @@ def is_milestone_paid(message_id: int) -> bool:
         return row is not None
 
 
-def modify_db_balance(admin_id: int, target_id: int, amount: int, reason: str):
+def modify_db_balance(admin_id: int | str, target_id: int, amount: int, reason: str) -> None:
     """Executes the SQLite transaction to modify a user's balance."""
     with db_connection(Database.MERCH) as conn:
-        cursor = conn.cursor()
-
-        # Ensure the target user is in the database
-        ensure_users_exist(cursor, target_id)
-
-        # Update their balance
-        cursor.execute(
-            "UPDATE users SET balance = balance + ? WHERE user_id = ?", 
-            (amount, target_id)
-        )
-
-        # Log the admin transaction
-        cursor.execute("""
-            INSERT INTO transactions (sender_id, receiver_id, amount, reason, message_url)
-            VALUES (?, ?, ?, ?, NULL)
-        """, (f"ADMIN:{admin_id}", target_id, amount, reason))
-
-        conn.commit()
-
-def award_once(marker: str, admin_id: str, target_id: int, amount: int, reason: str) -> bool:
-    """
-    Pays an award unless one carrying this marker was already paid. The marker is added to the
-    reason so the payment can be recognised later. Returns True if it was paid now, False if it had
-    been paid before. Raises on DB errors.
-    """
-    with db_connection(Database.MERCH) as conn:
-        # Take the write lock before checking, so two callers can't both pass the check
-        conn.execute("BEGIN IMMEDIATE")
-        if conn.execute("SELECT 1 FROM transactions WHERE instr(reason, ?) > 0", (marker,)).fetchone():
-            return False
-
-        cursor = conn.cursor()
-        ensure_users_exist(cursor, target_id)
-        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_id))
-        cursor.execute("""
-            INSERT INTO transactions (sender_id, receiver_id, amount, reason, message_url)
-            VALUES (?, ?, ?, ?, NULL)
-        """, (f"ADMIN:{admin_id}", target_id, amount, f"{reason} {marker}"))
-        return True
+        credit_hearts(conn, admin_id, target_id, amount, reason)
 
 
 def get_award_recipient(marker: str) -> int | None:
@@ -168,7 +147,6 @@ def upsert_merch_item(item_id: str, name: str, description: str, price: int, max
                 price=excluded.price,
                 max_per_user=excluded.max_per_user
         """, (item_id.upper(), name, description, price, max_per_user))
-        conn.commit()
 
 
 def get_user_balance(user_id: int) -> int:
@@ -251,7 +229,6 @@ def process_purchase(user_id: int, item_id: str) -> tuple[bool, str]:
             VALUES ('SHOP', ?, ?, ?, NULL)
         """, (user_id, -price, f"Purchased {name} ({clean_item_id})"))
 
-        conn.commit()
         return True, f"Successfully purchased **{name}** for {price} hearts!"
 
 
@@ -281,7 +258,6 @@ def reset_item_inventory(item_id: str) -> int:
         cursor.execute("DELETE FROM user_inventory WHERE item_id = ?", (clean_item_id,))
         rows_affected = cursor.rowcount
 
-        conn.commit()
         return rows_affected
 
 def get_all_item_owners(item_id: str) -> list[tuple[int, int]]:
@@ -308,31 +284,25 @@ def check_user_owns_item(user_id: int, item_id: str) -> bool:
         row = cursor.fetchone()
         return row is not None and row[0] > 0
 
-def consume_item(user_id: int, item_id: str) -> bool:
-    """Deducts one from the user's inventory for the given item. Returns True on success."""
+
+def use_up_item(conn: sqlite3.Connection, user_id: int, item_id: str, schema: str = "") -> bool:
+    """
+    Uses up one of the user's item inside a transaction the caller already has open, so it can be
+    combined with other changes. Returns False, changing nothing, if they don't have one.
+
+    schema is the prefix to use when the merch database is attached to another one (e.g. "merch.").
+    """
     clean_item_id = item_id.upper()
-    with db_connection(Database.MERCH) as conn:
-        cursor = conn.cursor()
 
-        # Verify they actually have it before trying to subtract
-        cursor.execute("""
-            SELECT quantity_owned FROM user_inventory 
-            WHERE user_id = ? AND item_id = ?
-        """, (user_id, clean_item_id))
-        row = cursor.fetchone()
+    # One statement both checks and deducts, so two requests at once can't both use the last one
+    used = conn.execute(f"""
+        UPDATE {schema}user_inventory SET quantity_owned = quantity_owned - 1
+        WHERE user_id = ? AND item_id = ? AND quantity_owned > 0
+    """, (user_id, clean_item_id)).rowcount
+    if used == 0:
+        return False
 
-        if not row or row[0] <= 0:
-            return False
-
-        # Deduct the item
-        cursor.execute("""
-            UPDATE user_inventory 
-            SET quantity_owned = quantity_owned - 1 
-            WHERE user_id = ? AND item_id = ?
-        """, (user_id, clean_item_id))
-
-        # Clean up zero-quantity records to keep the DB lean
-        cursor.execute("DELETE FROM user_inventory WHERE quantity_owned <= 0")
-        conn.commit()
-
-        return True
+    # Clean up zero-quantity records to keep the DB lean
+    conn.execute(f"DELETE FROM {schema}user_inventory WHERE user_id = ? AND item_id = ? AND quantity_owned <= 0",
+                 (user_id, clean_item_id))
+    return True

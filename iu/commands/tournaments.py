@@ -63,13 +63,7 @@ async def new_tournament(interaction: discord.Interaction, title: str, descripti
 
     # Create the Database State (inserts the full entrant + match tree in one call,
     # so it runs off the event loop)
-    success, t_id, error_msg = await asyncio.to_thread(
-        create_tournament, title, description, entrants, days_per_round
-    )
-
-    if not success:
-        await interaction.followup.send(f"Database error while creating the tournament: {error_msg}")
-        return
+    t_id = await asyncio.to_thread(create_tournament, title, description, entrants, days_per_round)
 
     # Generate the bracket image and post it to the #tournaments channel
     image_buffer = await generate_bracket_image(t_id)

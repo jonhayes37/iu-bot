@@ -1,7 +1,10 @@
 """
 Script to generate a token.json for YouTube API access.
-Run this once and place the resulting token.json in the
-directory specified by TOKEN_DIR in your .env file.
+
+Run it from the repo root on your own computer, with the OAuth client downloaded from Google Cloud
+saved there as credentials.json. A browser opens for you to sign in, and token.json is written to
+the current folder. Copy it to the path in TOKEN_DIR (/app/data/token.json in the container).
+See docs/youtube.md for the full steps.
 """
 
 import os

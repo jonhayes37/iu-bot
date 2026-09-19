@@ -2,6 +2,7 @@
 import logging
 
 import discord
+from ui.base import SafeView, reports_errors
 from db.hall_of_fame import get_official_hof_nominees, save_hof_vote, get_user_hof_vote
 from db.hmas import (
     get_all_hma_categories, get_hma_final_nominees, save_hma_vote, get_user_hma_votes
@@ -11,29 +12,26 @@ logger = logging.getLogger('iu-bot')
 
 
 
-class EOYVotingHub(discord.ui.View):
-    """The persistent end of Year 2 Voting Hub."""
+class HallOfFameVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_vote_hof_(?P<year>\d+)"):
+    """Opens the Hall of Fame ballot. The year is part of the button's ID."""
+
     def __init__(self, year: int):
-        super().__init__(timeout=None)
+        super().__init__(discord.ui.Button(
+            label=f"{year} HallyU Hall of Fame", style=discord.ButtonStyle.success,
+            custom_id=f"btn_vote_hof_{year}", emoji="🏛️"))
         self.year = year
 
-        # Dynamically inject the year
-        for child in self.children:
-            if getattr(child, "custom_id", None) == "btn_vote_hof":
-                child.label = f"{self.year} HallyU Hall of Fame"
-                child.custom_id = f"btn_vote_hof_{self.year}"
-            if getattr(child, "custom_id", None) == "btn_vote_hma":
-                child.label = f"{self.year} HallyU Music Awards"
-                child.custom_id = f"btn_vote_hma_{self.year}"
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Item, match, /):
+        return cls(int(match["year"]))
 
-    @discord.ui.button(label="Vote Hall of Fame", style=discord.ButtonStyle.success,
-                       custom_id="btn_vote_hof", emoji="🏛️")
-    async def btn_hof(self, interaction: discord.Interaction, _: discord.ui.Button):
+    @reports_errors
+    async def callback(self, interaction: discord.Interaction):
         nominees = get_official_hof_nominees()
 
         if not nominees or len(nominees) < 3:
             await interaction.response.send_message(
-                "❌ Voting hasn't started yet! The nominees are still being populated.", 
+                "❌ Voting hasn't started yet! The nominees are still being populated.",
                 ephemeral=True
             )
             return
@@ -44,14 +42,40 @@ class EOYVotingHub(discord.ui.View):
         msg = f"**{self.year} HallyU Hall of Fame Ballot**\nSelect your top 3 choices below:"
         await interaction.response.send_message(content=msg, view=view, ephemeral=True)
 
-    @discord.ui.button(label="Vote HMAs", style=discord.ButtonStyle.primary, custom_id="btn_vote_hma", emoji="🏆")
-    async def btn_hma(self, interaction: discord.Interaction, _: discord.ui.Button):
+
+class HMAVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_vote_hma_(?P<year>\d+)"):
+    """Opens the HallyU Music Awards ballot."""
+
+    def __init__(self, year: int):
+        super().__init__(discord.ui.Button(
+            label=f"{year} HallyU Music Awards", style=discord.ButtonStyle.primary,
+            custom_id=f"btn_vote_hma_{year}", emoji="🏆"))
+        self.year = year
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Item, match, /):
+        return cls(int(match["year"]))
+
+    @reports_errors
+    async def callback(self, interaction: discord.Interaction):
         view = HMACategorySelectView(self.year, interaction.user.id)
         msg = "**HallyU Music Awards Ballot**\nCategories marked with ⏰ need your vote. ✅ are completed!"
         await interaction.response.send_message(content=msg, view=view, ephemeral=True)
 
 
-class HoFVotingView(discord.ui.View):
+class EOYVotingHub(discord.ui.View):
+    """
+    The end of year voting message. Its buttons are dynamic items that read the year from their own
+    ID, so hubs from any year keep working across restarts.
+    """
+
+    def __init__(self, year: int):
+        super().__init__(timeout=None)
+        self.add_item(HallOfFameVoteButton(year))
+        self.add_item(HMAVoteButton(year))
+
+
+class HoFVotingView(SafeView):
     """The interactive ranked voting ballot for the Hall of Fame."""
     def __init__(self, year: int, nominees: list[str], existing_vote: dict = None):
         super().__init__(timeout=900) # 15 min timeout
@@ -114,25 +138,20 @@ class HoFVotingView(discord.ui.View):
             return
 
         # Save to database
-        try:
-            save_hof_vote(interaction.user.id, v1, v2, v3)
-            embed = discord.Embed(
-                title=f"🏛️ {self.year} Hall of Fame Ballot Secured!",
-                description="Your ranked votes have been successfully recorded.",
-                color=discord.Color.gold()
-            )
-            embed.add_field(name="🥇 1st Choice", value=v1, inline=False)
-            embed.add_field(name="🥈 2nd Choice", value=v2, inline=False)
-            embed.add_field(name="🥉 3rd Choice", value=v3, inline=False)
+        save_hof_vote(interaction.user.id, v1, v2, v3)
+        embed = discord.Embed(
+            title=f"🏛️ {self.year} Hall of Fame Ballot Secured!",
+            description="Your ranked votes have been successfully recorded.",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="🥇 1st Choice", value=v1, inline=False)
+        embed.add_field(name="🥈 2nd Choice", value=v2, inline=False)
+        embed.add_field(name="🥉 3rd Choice", value=v3, inline=False)
 
-            await interaction.response.edit_message(embed=embed, view=None)
-
-        except Exception as e:
-            logger.error("Database error saving HoF vote: %s", e)
-            await interaction.response.send_message("❌ Database error. Please ping an admin.", ephemeral=True)
+        await interaction.response.edit_message(embed=embed, view=None)
 
 
-class HMABallotView(discord.ui.View):
+class HMABallotView(SafeView):
     """The interactive ranked ballot for a single HMA category."""
     def __init__(self, year: int, user_id: int, category_id: str, category_name: str,
                  nominees: list[str], existing_vote: dict = None):
@@ -184,16 +203,12 @@ class HMABallotView(discord.ui.View):
                 ephemeral=True)
             return
 
-        try:
-            # Save the vote and immediately return them to the category selector!
-            save_hma_vote(interaction.user.id, self.category_id, v1, v2, v3)
-            view = HMACategorySelectView(self.year, self.user_id)
-            msg = f"✅ Saved vote for **{self.category_name}**!\n\n**HallyU Music Awards Ballot**\n" \
-                "Select your next category:"
-            await interaction.response.edit_message(content=msg, view=view)
-        except Exception as e:
-            logger.error("Error saving HMA vote: %s", e)
-            await interaction.response.send_message("❌ Database error.", ephemeral=True)
+        # Save the vote and immediately return them to the category selector!
+        save_hma_vote(interaction.user.id, self.category_id, v1, v2, v3)
+        view = HMACategorySelectView(self.year, self.user_id)
+        msg = f"✅ Saved vote for **{self.category_name}**!\n\n**HallyU Music Awards Ballot**\n" \
+            "Select your next category:"
+        await interaction.response.edit_message(content=msg, view=view)
 
     @discord.ui.button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=3)
     async def btn_back(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -230,7 +245,7 @@ class HMACategoryDropdown(discord.ui.Select):
         await interaction.response.edit_message(content=f"**{category_name}**\nSelect your top 3 choices:", view=view)
 
 
-class HMACategorySelectView(discord.ui.View):
+class HMACategorySelectView(SafeView):
     """The dynamic router view that sorts ⏰ and ✅ categories and handles pagination."""
     def __init__(self, year: int, user_id: int):
         super().__init__(timeout=900)

@@ -3,14 +3,15 @@
 import logging
 import discord
 from config import admin_user_id
-from db.lists import get_event_details, save_submission, get_user_submission
-from db.merch import check_user_owns_item, consume_item
+from db.lists import SaveOutcome, get_event_details, save_submission, get_user_submission
+from db.merch import check_user_owns_item
+from ui.base import SafeModal, report_interaction_error, reports_errors
 from utils.discord_files import text_file
 from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
 
-class DynamicListModal(discord.ui.Modal):
+class DynamicListModal(SafeModal):
     """
     A dynamic modal for list submissions that adjusts its placeholder
     and expected line count based on the event configuration.
@@ -90,57 +91,73 @@ class DynamicListModal(discord.ui.Modal):
         user_id = interaction.user.id
         username = interaction.user.display_name
 
-        # Save first and use up the item afterwards, so a failed save can never cost the user their
-        # bonus pick. (If the process dies in between, they keep the pick, which is the safer mistake.)
-        success = save_submission(self.event_id, user_id, username, raw_list, clean_text, urls)
-
-        if success:
-            msg = (
-                "Your list has been submitted! You can click the button again anytime "
-                "before the event closes to edit it."
-            )
-            burn_failed = False
-            if needs_burn:
-                try:
-                    burn_failed = not consume_item(user_id, "WAYLT")
-                except Exception as ex:
-                    logger.error("Failed to consume WAYLT for user %s: %s", user_id, ex)
-                    burn_failed = True
-
-                if burn_failed:
-                    logger.warning("List for %s saved, but their WAYLT bonus pick could not be consumed.", user_id)
-                    msg = (
-                        "⚠️ Your list was saved, but I couldn't use up your WAYLT bonus pick. "
-                        f"An admin has been told and will sort it out.\n{msg}"
-                    )
-                else:
-                    msg = f"🎟️ **What Are You Listening To Bonus Pick Consumed!**\n{msg}"
-
-            await interaction.response.send_message(msg, ephemeral=True)
-
-            # Notify admin
-            try:
-                admin_user = interaction.client.get_user(admin_user_id()) or \
-                    await interaction.client.fetch_user(admin_user_id())
-                if admin_user:
-                    action = "updated" if previous_lines else "submitted"
-                    note = f"\n⚠️ Their WAYLT bonus pick could not be consumed (user ID {user_id}); please check." \
-                        if burn_failed else ""
-                    await admin_user.send(
-                        f"📥 **{username}** {action} their list for **{self.event_name}**!{note}"
-                    )
-            except discord.Forbidden:
-                logger.warning("Could not DM admin (ID: %s) about list submission. DMs might be closed.",
-                               admin_user_id())
-            except Exception as ex:
-                logger.error("Failed to send admin notification DM: %s", ex)
-
-        else:
-            logger.error("Database error when saving submission for user %s on event %s. Full submission:\n%s",
-                         user_id, self.event_id, raw_list)
+        # The list and the bonus pick are saved together: either both change or neither does
+        outcome = save_submission(self.event_id, user_id, username, raw_list, clean_text, urls,
+                                  use_item="WAYLT" if needs_burn else None)
+        if outcome is SaveOutcome.ITEM_MISSING:
             await interaction.response.send_message(
-                "Something went wrong saving your list to the database. Please ping an admin!",
-                ephemeral=True)
+                "❌ **Missing Item** ❌\nYour WAYLT bonus pick is no longer in your inventory, so nothing was saved. "
+                "Your list is attached as `your_list.txt`.",
+                file=text_file(raw_list, "your_list.txt"), ephemeral=True)
+            return
+
+        msg = (
+            "Your list has been submitted! You can click the button again anytime "
+            "before the event closes to edit it."
+        )
+        if needs_burn:
+            msg = f"🎟️ **What Are You Listening To Bonus Pick Consumed!**\n{msg}"
+
+        await interaction.response.send_message(msg, ephemeral=True)
+
+        # Notify admin
+        try:
+            admin_user = interaction.client.get_user(admin_user_id()) or \
+                await interaction.client.fetch_user(admin_user_id())
+            if admin_user:
+                action = "updated" if previous_lines else "submitted"
+                await admin_user.send(f"📥 **{username}** {action} their list for **{self.event_name}**!")
+        except discord.Forbidden:
+            logger.warning("Could not DM admin (ID: %s) about list submission. DMs might be closed.",
+                           admin_user_id())
+        except discord.HTTPException as ex:
+            logger.error("Failed to send admin notification DM: %s", ex)
+
+    # pylint: disable=arguments-differ
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        # Hand the text back so a failed save never costs the user their list
+        await report_interaction_error(interaction, error, keep_text={"your_list.txt": self.submission_text.value})
+
+class SubmitListButton(discord.ui.DynamicItem[discord.ui.Button],
+                       template=r"submit_list:(?P<event_id>[^:]+?)(?P<closed>_closed)?"):
+    """
+    The button on a list announcement. The event is part of the button's ID
+    (`submit_list:<event_id>`, with `_closed` added once the event is closed), so one class handles
+    every event's button, on messages posted before a restart or before this class existed.
+    """
+
+    def __init__(self, event_id: str, closed: bool = False):
+        super().__init__(discord.ui.Button(
+            label="Submissions Closed" if closed else "Submit Your List",
+            style=discord.ButtonStyle.secondary if closed else discord.ButtonStyle.primary,
+            custom_id=f"submit_list:{event_id}{'_closed' if closed else ''}",
+            disabled=closed,
+            emoji="🔒" if closed else "📥"
+        ))
+        self.event_id = event_id
+        self.closed = closed
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Item, match, /):
+        return cls(match["event_id"], closed=bool(match["closed"]))
+
+    @reports_errors
+    async def callback(self, interaction: discord.Interaction):
+        if self.closed:
+            await interaction.response.send_message("Submissions for this event are closed!", ephemeral=True)
+            return
+        await handle_list_button_click(interaction, self.event_id)
+
 
 async def handle_list_button_click(interaction: discord.Interaction, event_id: str):
     """Triggered when a user clicks the 'Submit' button on an announcement."""

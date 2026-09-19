@@ -1,20 +1,23 @@
 """UI elements for the listen game"""
 import logging
+from dataclasses import dataclass
 
 import discord
-from discord.ui import View, Select, Modal, TextInput, Button
+from discord.ui import Select, TextInput, Button
+from ui.base import SafeModal, SafeView
 from config import Role
 from db.listen_game import (
-    SaveResult, get_game_by_status_db, register_player_db, save_round_results_db,
-    unregister_player_db, get_registered_players_db, set_round_theme_db,
-    update_round_status_message_db, update_round_ruleset_message_db
+    Game, GameStatus, RankingPick, RoundResult, SaveResult, Submission, clear_ranking_picks_db,
+    get_game_by_status_db, get_registered_players_db, register_player_db, save_ranking_pick_db,
+    save_round_results_db, set_round_theme_db, unregister_player_db, update_round_ruleset_message_db,
+    update_round_status_message_db
 )
 from services.listen_game_reveal import start_reveal
 from utils.strings import get_ordinal
 
 logger = logging.getLogger('iu-bot')
 
-class JoinGameView(discord.ui.View):
+class JoinGameView(SafeView):
     """UI view for the join game button"""
 
     def __init__(self):
@@ -22,12 +25,12 @@ class JoinGameView(discord.ui.View):
 
     @discord.ui.button(label="Leave", style=discord.ButtonStyle.secondary, custom_id="leave_listen_game")
     async def leave_button(self, interaction: discord.Interaction, _: discord.ui.Button):
-        game = get_game_by_status_db('registration')
+        game = get_game_by_status_db(GameStatus.REGISTRATION)
         if not game:
             await interaction.response.send_message("⚠️ No registration session is active.", ephemeral=True)
             return
 
-        success = unregister_player_db(game['game_id'], interaction.user.id)
+        success = unregister_player_db(game.game_id, interaction.user.id)
         if not success:
             await interaction.response.send_message("You aren't registered for this game.", ephemeral=True)
             return
@@ -37,12 +40,12 @@ class JoinGameView(discord.ui.View):
 
     @discord.ui.button(label="Join Listen Game!", style=discord.ButtonStyle.primary, custom_id="join_listen_game")
     async def join_button(self, interaction: discord.Interaction, _: discord.ui.Button):
-        game = get_game_by_status_db('registration')
+        game = get_game_by_status_db(GameStatus.REGISTRATION)
         if not game:
             await interaction.response.send_message("⚠️ No registration session is active.", ephemeral=True)
             return
 
-        success = register_player_db(game['game_id'], interaction.user.id)
+        success = register_player_db(game.game_id, interaction.user.id)
         if not success:
             await interaction.response.send_message("You are already registered!", ephemeral=True)
             return
@@ -61,15 +64,15 @@ class JoinGameView(discord.ui.View):
         # Re-fetch state and overwrite the embed message layout
         await self._refresh_roster_embed(interaction, game)
 
-    async def _refresh_roster_embed(self, interaction: discord.Interaction, game: dict):
+    async def _refresh_roster_embed(self, interaction: discord.Interaction, game: Game):
         """Helper function to recalculate the roster and update the embed."""
-        players = get_registered_players_db(game['game_id'])
-        max_round_days = game.get('max_round_days')
+        players = get_registered_players_db(game.game_id)
+        max_round_days = game.max_round_days
         deadline_text = f"**Max Round Duration:** {max_round_days} Days" if max_round_days \
             else "**Max Round Duration:** None (GM Managed)"
 
         # Rebuild the base embed layout
-        gm_mention = f"<@{game['gm_id']}>"
+        gm_mention = f"<@{game.gm_id}>"
         embed = discord.Embed(
             title="🎵 A New Listen Game is Starting!",
             description=f"{gm_mention} has opened registration for a new game.\n\n{deadline_text}\n\n"
@@ -102,7 +105,7 @@ class JoinGameView(discord.ui.View):
         # Edit the parent message directly
         await interaction.response.edit_message(embed=embed, view=self)
 
-class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
+class SetThemeModal(SafeModal, title='Set Listen Game Ruleset'):
     """Modal for submitting or updating a theme for a listen game round"""
 
     theme_text = discord.ui.TextInput(
@@ -125,10 +128,9 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
-        success = set_round_theme_db(self.round_id, self.theme_text.value)
-        if not success:
+        if not set_round_theme_db(self.round_id, self.theme_text.value):
             await interaction.response.send_message(
-                "❌ Failed to save the ruleset. Please contact the GM.", ephemeral=True)
+                "⚠️ This round is no longer accepting a ruleset, so nothing was changed.", ephemeral=True)
             return
 
         # Build the broadcast embed
@@ -173,7 +175,7 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
             try:
                 ruleset_msg = await interaction.original_response()
                 update_round_ruleset_message_db(self.round_id, ruleset_msg.id)
-            except Exception as e:
+            except discord.HTTPException as e:
                 logger.warning("Failed to fetch and save ruleset message ID: %s", e)
 
             players = get_registered_players_db(self.game_id)
@@ -188,16 +190,24 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
             update_round_status_message_db(self.round_id, tracker_msg.id)
 
 
-class CommentaryModal(Modal):
+@dataclass
+class RankedSong:
+    """A song the listener has ranked, with their commentary."""
+    submission: Submission
+    rank: int
+    commentary: str
+
+
+class CommentaryModal(SafeModal):
     """UI modal for letting the play add commentary for a ranking"""
 
-    def __init__(self, view_instance: View, selected_song: dict, current_rank: int):
+    def __init__(self, view_instance: "ListenGameRankingView", selected_song: Submission, current_rank: int):
         super().__init__(title=f"{get_ordinal(current_rank)} Place Commentary")
         self.view_instance = view_instance
         self.selected_song = selected_song
 
         self.commentary = TextInput(
-            label=f"For {selected_song['raw_title'][:37]}",
+            label=f"For {selected_song.raw_title[:37]}",
             style=discord.TextStyle.paragraph,
             placeholder="Share your thoughts here!",
             required=True,
@@ -207,32 +217,18 @@ class CommentaryModal(Modal):
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
-        # Save the result to the View's state
-        self.view_instance.ranked_submissions.append({
-            "submission": self.selected_song,
-            "rank": self.view_instance.current_rank,
-            "commentary": self.commentary.value
-        })
-
-        # Remove from unranked list
-        self.view_instance.unranked_submissions = [
-            s for s in self.view_instance.unranked_submissions
-            if s['video_id'] != self.selected_song['video_id']
-        ]
-
-        self.view_instance.current_rank -= 1
-        await self.view_instance.update_ui(interaction)
+        await self.view_instance.rank_song(interaction, self.selected_song, self.commentary.value)
 
 
 class RankingSelect(Select):
     """UI for the selector to choose songs to rank"""
 
-    def __init__(self, unranked_submissions: list, current_rank: int):
+    def __init__(self, unranked_submissions: list[Submission], current_rank: int):
         options = []
         for sub in unranked_submissions:
             options.append(discord.SelectOption(
-                label=sub['raw_title'][:100],
-                value=sub['video_id']
+                label=sub.raw_title[:100],
+                value=sub.video_id
             ))
 
         super().__init__(
@@ -244,7 +240,7 @@ class RankingSelect(Select):
 
     async def callback(self, interaction: discord.Interaction):
         selected_video_id = self.values[0]
-        selected_song = next(s for s in self.view.unranked_submissions if s['video_id'] == selected_video_id)
+        selected_song = next(s for s in self.view.unranked_submissions if s.video_id == selected_video_id)
 
         # Launch the modal to get their commentary
         modal = CommentaryModal(self.view, selected_song, self.view.current_rank)
@@ -273,23 +269,21 @@ class ConfirmRankingButton(Button):
         await interaction.response.defer()
 
         total_submissions = len(self.view.ranked_submissions)
-        results_to_save = []
+        results_to_save = [
+            RoundResult(
+                user_id=item.submission.user_id,
+                rank=item.rank,
+                points=total_submissions - item.rank + 1,
+                commentary=item.commentary
+            )
+            for item in self.view.ranked_submissions
+        ]
 
-        for item in self.view.ranked_submissions:
-            results_to_save.append({
-                "user_id": item['submission']['user_id'],
-                "rank": item['rank'],
-                "points": total_submissions - item['rank'] + 1,
-                "commentary": item['commentary'],
-                "raw_title": item['submission']['raw_title'],
-                "video_id": item['submission']['video_id']
-            })
-
-        outcome = save_round_results_db(self.game_id, self.round_id, results_to_save)
-        if outcome is SaveResult.ERROR:
+        try:
+            outcome = save_round_results_db(self.game_id, self.round_id, results_to_save)
+        except Exception:
             self.view.results_confirmed = False  # allow a retry since nothing was actually saved
-            await interaction.followup.send("❌ Error saving results to the database. Aborting reveal.", ephemeral=True)
-            return
+            raise
 
         if outcome is SaveResult.SAVED:
             await interaction.followup.send("✅ Results locked in! The reveal is starting in the game channel.",
@@ -308,13 +302,28 @@ class ConfirmRankingButton(Button):
             logger.warning("Could not find channel %s to reveal round %s.", self.listen_channel_id, self.round_id)
 
 
-class ListenGameRankingView(View):
-    """Interactive view managing the draft-style ranking process."""
+class StartOverButton(Button):
+    """Throws away the rankings made so far, so the listener can begin again."""
 
-    def __init__(self, submissions: list, game_id: int, round_id: int, listen_channel_id: int):
+    def __init__(self):
+        super().__init__(label="Start over", style=discord.ButtonStyle.secondary, emoji="🔄", row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.view.start_over(interaction)
+
+
+class ListenGameRankingView(SafeView):
+    """
+    Interactive view managing the draft-style ranking process. Each pick is saved as it is made, so
+    if the bot restarts or the message is dismissed, running the command again carries on from there.
+    """
+
+    def __init__(self, submissions: list[Submission], saved_picks: list[RankingPick],
+                 game_id: int, round_id: int, listen_channel_id: int):
         super().__init__(timeout=None)
-        self.unranked_submissions = submissions
-        self.ranked_submissions = []
+        self.all_submissions = submissions
+        self.unranked_submissions = list(submissions)
+        self.ranked_submissions: list[RankedSong] = []
         self.current_rank = len(submissions)
 
         # Store the IDs in the View
@@ -323,9 +332,21 @@ class ListenGameRankingView(View):
         self.listen_channel_id = listen_channel_id
         self.results_confirmed = False
 
+        self._restore(saved_picks)
         self.setup_select_menu()
 
+    def _restore(self, saved_picks: list[RankingPick]):
+        """Puts back the picks saved by an earlier session (for songs that are still in the round)."""
+        by_user = {sub.user_id: sub for sub in self.unranked_submissions}
+        for pick in saved_picks:
+            submission = by_user.pop(pick.user_id, None)
+            if submission:
+                self.ranked_submissions.append(RankedSong(submission, pick.rank, pick.commentary))
+        self.unranked_submissions = [sub for sub in self.unranked_submissions if sub.user_id in by_user]
+        self.current_rank = len(self.all_submissions) - len(self.ranked_submissions)
+
     def setup_select_menu(self):
+        """Shows the control that fits how far along the listener is."""
         self.clear_items()
 
         # If there are multiple items, use the standard Select menu
@@ -338,17 +359,48 @@ class ListenGameRankingView(View):
         else:
             self.add_item(ConfirmRankingButton(self.game_id, self.round_id, self.listen_channel_id))
 
+        if self.ranked_submissions:
+            self.add_item(StartOverButton())
+
+    def build_embed(self) -> discord.Embed:
+        """The message shown above the controls."""
+        if not self.ranked_submissions:
+            return discord.Embed(
+                title="Listen Game Rankings",
+                description="Select the song you're ranking last from the dropdown below, and work your way up. "
+                    "You will be prompted to enter your commentary for each song.",
+                color=0x3498db
+            )
+        return build_rankings_embed(self.ranked_submissions, all_ranked=not self.unranked_submissions)
+
+    async def rank_song(self, interaction: discord.Interaction, song: Submission, commentary: str):
+        """Records the listener's pick for the current rank. It is saved before the message is updated."""
+        save_ranking_pick_db(self.round_id, song.user_id, self.current_rank, commentary)
+
+        self.ranked_submissions.append(RankedSong(song, self.current_rank, commentary))
+        self.unranked_submissions = [s for s in self.unranked_submissions if s.video_id != song.video_id]
+        self.current_rank -= 1
+        await self.update_ui(interaction)
+
+    async def start_over(self, interaction: discord.Interaction):
+        """Forgets every pick so far and shows the full list again."""
+        clear_ranking_picks_db(self.round_id)
+        self.ranked_submissions = []
+        self.unranked_submissions = list(self.all_submissions)
+        self.current_rank = len(self.all_submissions)
+        await self.update_ui(interaction)
+
     async def update_ui(self, interaction: discord.Interaction):
+        """Redraws the message with the current picks."""
         self.setup_select_menu()
-        embed = build_rankings_embed(self.ranked_submissions, all_ranked=not self.unranked_submissions)
-        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
 # Discord rejects an embed whose text adds up to more than 6000 characters. Stay a little under it.
 EMBED_TEXT_BUDGET = 5800
 FIELD_VALUE_LIMIT = 1024
 MIN_PREVIEW_LENGTH = 60
 
-def build_rankings_embed(ranked_submissions: list[dict], all_ranked: bool) -> discord.Embed:
+def build_rankings_embed(ranked_songs: list[RankedSong], all_ranked: bool) -> discord.Embed:
     """
     The host's ranking summary. Long commentary is shortened in this preview so the embed always
     fits Discord's size limit; the full text is saved and published in the reveal.
@@ -357,16 +409,16 @@ def build_rankings_embed(ranked_submissions: list[dict], all_ranked: bool) -> di
     description = "✅ **All songs ranked!** Review your list and click Confirm to publish." if all_ranked \
         else "Here are your rankings so far:"
 
-    names = [f"#{item['rank']} - {item['submission']['raw_title']}"[:256] for item in ranked_submissions]
+    names = [f"#{item.rank} - {item.submission.raw_title}"[:256] for item in ranked_songs]
     overhead = len(title) + len(description) + sum(len(name) for name in names) + 100
     per_field = FIELD_VALUE_LIMIT
-    if ranked_submissions:
+    if ranked_songs:
         per_field = min(FIELD_VALUE_LIMIT, max(MIN_PREVIEW_LENGTH, (EMBED_TEXT_BUDGET - overhead) // len(names)))
 
     embed = discord.Embed(title=title, description=description, color=0x2ecc71 if all_ranked else 0x3498db)
     shortened = False
-    for name, item in zip(names, ranked_submissions):
-        commentary = item['commentary']
+    for name, item in zip(names, ranked_songs):
+        commentary = item.commentary
         if len(commentary) > per_field:
             commentary = commentary[:per_field - 1] + "…"
             shortened = True
@@ -379,9 +431,9 @@ def build_rankings_embed(ranked_submissions: list[dict], all_ranked: bool) -> di
 class RankSingleSongButton(Button):
     """Button fallback for when there is only one song left to rank."""
 
-    def __init__(self, submission: dict, current_rank: int):
+    def __init__(self, submission: Submission, current_rank: int):
         # Truncate the title to avoid hitting Discord's 80-character limit for button labels
-        label_text = f"Rank #{current_rank}: {submission['raw_title'][:60]}"
+        label_text = f"Rank #{current_rank}: {submission.raw_title[:60]}"
         super().__init__(label=label_text, style=discord.ButtonStyle.primary)
         self.submission = submission
         self.current_rank = current_rank

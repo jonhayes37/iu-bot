@@ -3,11 +3,12 @@
 import logging
 
 import discord
+from ui.base import SafeModal, report_interaction_error, reports_errors
 from db.hmas import save_category_suggestion, get_user_category_suggestion
 
 logger = logging.getLogger('iu-bot')
 
-class HMACategorySuggestionModal(discord.ui.Modal):
+class HMACategorySuggestionModal(SafeModal):
     """Modal for suggesting updates to HMA categories."""
 
     def __init__(self, year: int, existing_data: dict = None):
@@ -49,35 +50,46 @@ class HMACategorySuggestionModal(discord.ui.Modal):
             )
             return
 
-        try:
-            save_category_suggestion(
-                interaction.user.id,
-                interaction.user.display_name,
-                val_new,
-                val_drop
-            )
-            await interaction.response.send_message(
-                "✅ **Suggestions submitted!** These will be reviewed and voted on in polls soon.\n\n"
-                "You can click the button again anytime before the polls are open to update your ideas.", 
-                ephemeral=True
-            )
-        except Exception as e:
-            logger.error("Error saving HMA suggestion: %s", e)
-            await interaction.response.send_message("❌ Database error. Please ping an admin.", ephemeral=True)
+        save_category_suggestion(
+            interaction.user.id,
+            interaction.user.display_name,
+            val_new,
+            val_drop
+        )
+        await interaction.response.send_message(
+            "✅ **Suggestions submitted!** These will be reviewed and voted on in polls soon.\n\n"
+            "You can click the button again anytime before the polls are open to update your ideas.", 
+            ephemeral=True
+        )
+
+    # pylint: disable=arguments-differ
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        await report_interaction_error(interaction, error, keep_text={
+            "new_categories.txt": self.new_cats.value, "dropped_categories.txt": self.drop_cats.value})
+
+
+class HMASuggestButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_hma_suggest_(?P<year>\d+)"):
+    """Opens the category suggestions form. The year is part of the button's ID."""
+
+    def __init__(self, year: int):
+        super().__init__(discord.ui.Button(
+            label="Suggest Category Changes", style=discord.ButtonStyle.primary,
+            custom_id=f"btn_hma_suggest_{year}", emoji="💡"))
+        self.year = year
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Item, match, /):
+        return cls(int(match["year"]))
+
+    @reports_errors
+    async def callback(self, interaction: discord.Interaction):
+        existing_data = get_user_category_suggestion(interaction.user.id)
+        await interaction.response.send_modal(HMACategorySuggestionModal(self.year, existing_data))
 
 
 class HMASuggestionsHub(discord.ui.View):
-    """The persistent button for HMA suggestions."""
+    """The category suggestions message, with a button that reads the year from its own ID."""
+
     def __init__(self, year: int):
         super().__init__(timeout=None)
-        self.year = year
-
-        for child in self.children:
-            if getattr(child, "custom_id", None) == "btn_hma_suggest":
-                child.custom_id = f"btn_hma_suggest_{self.year}"
-
-    @discord.ui.button(label="Suggest Category Changes", style=discord.ButtonStyle.primary,
-                       custom_id="btn_hma_suggest", emoji="💡")
-    async def btn_suggest(self, interaction: discord.Interaction, _: discord.ui.Button):
-        existing_data = get_user_category_suggestion(interaction.user.id)
-        await interaction.response.send_modal(HMACategorySuggestionModal(self.year, existing_data))
+        self.add_item(HMASuggestButton(year))

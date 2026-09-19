@@ -20,10 +20,7 @@ async def set_iu_status(interaction: discord.Interaction, status_text: str, days
         return
 
     # Save to the database
-    success = save_bot_status_db(status_text, days)
-    if not success:
-        await interaction.response.send_message("❌ Database error: Could not save the status.", ephemeral=True)
-        return
+    save_bot_status_db(status_text, days)
 
     # Update the active presence
     if status_text == "":

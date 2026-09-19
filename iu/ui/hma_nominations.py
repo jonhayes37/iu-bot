@@ -1,10 +1,11 @@
 """UI view for HMA nominations"""
 
 import discord
-from db.hmas import add_nomination, get_family_choices
+from ui.base import SafeView
+from db.hmas import add_nominations, get_family_choices
 from services.youtube import contains_youtube_url
 
-class MultiNominationView(discord.ui.View):
+class MultiNominationView(SafeView):
     """View for multi-select for nominations"""
 
     def __init__(self, nominee: str):
@@ -93,13 +94,7 @@ class MultiNominationView(discord.ui.View):
                 return
 
         # Process the nominations
-        try:
-            award_year = None
-            for cat_id in selected_ids:
-                award_year = add_nomination(interaction.user.id, cat_id, self.nominee)
-        except Exception as ex:
-            await interaction.response.send_message(f"❌ Database error: {ex}", ephemeral=True)
-            return
+        award_year = add_nominations(interaction.user.id, selected_ids, self.nominee)
 
         # Format the confirmation message
         formatted_categories = "\n".join([f"• {name}" for name in selected_names])

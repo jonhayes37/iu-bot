@@ -12,6 +12,16 @@ Every connection uses the same settings:
 
 The WAL journal mode was tried and not adopted: each call opens and closes its own connection, and
 closing the last connection forces a checkpoint, so WAL saved no time here and added -wal/-shm files.
+Keep it that way: a transaction that touches several attached databases (see `attach` below) is only
+atomic in the default rollback-journal mode.
+
+ERROR CONTRACT for everything in db/: a function returns normally when it ran, and its result
+describes the outcome (None or [] for "nothing found", a bool for "did a row change", an enum when
+there are several outcomes). When the database can't be read or written it raises a sqlite3.Error
+(DatabaseNotConfiguredError is one too) instead of logging and returning a fallback, so a failure can
+never be mistaken for "no data". Expected constraint violations, such as "already registered", are
+caught inside the function and returned as an outcome. Errors are reported once, at the command layer
+(see ui/base.py), not in every function.
 """
 
 import contextlib
@@ -24,12 +34,13 @@ from config import Database
 BUSY_TIMEOUT_SECONDS = 10
 
 
-class DatabaseNotConfiguredError(Exception):
+class DatabaseNotConfiguredError(sqlite3.Error):
     """Raised when the DB_PATH_* environment variable for a database is unset."""
 
 
 @contextlib.contextmanager
-def db_connection(db: Database, row_factory: bool = False) -> Iterator[sqlite3.Connection]:
+def db_connection(db: Database, row_factory: bool = False,
+                  attach: tuple[Database, ...] = ()) -> Iterator[sqlite3.Connection]:
     """
     Opens a sqlite3 connection to the given database, as a drop-in replacement for
     `with sqlite3.connect(path) as conn:`.
@@ -37,8 +48,11 @@ def db_connection(db: Database, row_factory: bool = False) -> Iterator[sqlite3.C
     Commits on a clean exit and rolls back on an exception, exactly like the plain
     `with sqlite3.connect(...)` pattern this replaces.
 
-    Raises DatabaseNotConfiguredError if the database's path isn't set, so callers can fold that
-    into the same try/except Exception block they already use for every other database error.
+    Databases listed in `attach` are opened in the same connection under their short name
+    (`db.value`), so one transaction can change several of them and either all of it happens or none
+    of it does. Query them with the name in front of the table, e.g. `merch.users`.
+
+    Raises DatabaseNotConfiguredError if a database's path isn't set.
     """
     db_path = db.path
     if not db_path:
@@ -48,6 +62,12 @@ def db_connection(db: Database, row_factory: bool = False) -> Iterator[sqlite3.C
     try:
         with conn:  # commits on a clean exit, rolls back on an exception
             conn.execute("PRAGMA foreign_keys = ON")
+            for other in attach:
+                if not other.path:
+                    raise DatabaseNotConfiguredError(f"{other.env_var} is not set, so the {other.value} database "
+                                                     "can't be opened.")
+                # The schema name can't be a bound parameter; it comes from the Database enum, not user input
+                conn.execute(f"ATTACH DATABASE ? AS {other.value}", (other.path,))
             if row_factory:
                 conn.row_factory = sqlite3.Row
             yield conn

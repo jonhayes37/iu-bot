@@ -2,6 +2,7 @@
 import logging
 
 import discord
+from ui.base import SafeModal, report_interaction_error, reports_errors
 from db.hall_of_fame import save_hof_nomination, get_hof_nomination
 from db.top_songs import save_top_songs, get_user_top_songs
 from utils.discord_files import text_file
@@ -9,7 +10,7 @@ from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
 
-class Top25Modal(discord.ui.Modal):
+class Top25Modal(SafeModal):
     """Modal for submitting top songs of the year and honourable mentions"""
     def __init__(self, year: int, existing_t25: str = None, existing_hms: str = None):
         # Set the modal title dynamically
@@ -70,30 +71,31 @@ class Top25Modal(discord.ui.Modal):
             return
 
         # Save to Database
-        try:
-            user_id = interaction.user.id
-            username = interaction.user.display_name
+        user_id = interaction.user.id
+        username = interaction.user.display_name
 
-            save_top_songs(
-                user_id, username,
-                raw_t25, clean_t25, urls_t25,
-                raw_hms, clean_hms, urls_hms
-            )
+        save_top_songs(
+            user_id, username,
+            raw_t25, clean_t25, urls_t25,
+            raw_hms, clean_hms, urls_hms
+        )
 
-            embed = discord.Embed(
-                title=f"🎵 {self.year} Top 25 Submitted!",
-                description=f"Your **Top 25 Songs of {self.year}** has been submitted!\n\n"
-                    "Need to make a change? Just click the button again to edit your submission!",
-                color=discord.Color.green()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+        embed = discord.Embed(
+            title=f"🎵 {self.year} Top 25 Submitted!",
+            description=f"Your **Top 25 Songs of {self.year}** has been submitted!\n\n"
+                "Need to make a change? Just click the button again to edit your submission!",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        except Exception as e:
-            logger.error("Error saving Top 25 to the database: %s", e)
-            await interaction.response.send_message("❌ Error saving to the database. Please ping an admin!",
-                                                    ephemeral=True)
+    # pylint: disable=arguments-differ
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        # Hand the lists back so a failed save never costs the user what they typed
+        await report_interaction_error(interaction, error, keep_text={
+            "top_25.txt": self.top_25.value, "honourable_mentions.txt": self.hms.value})
 
-class HoFModal(discord.ui.Modal):
+
+class HoFModal(SafeModal):
     """Modal for submitting Hall of Fame nominations"""
     def __init__(self, year: int, existing_text: str = None):
         super().__init__(title=f'{year} Hall of Fame Nominations')
@@ -111,46 +113,39 @@ class HoFModal(discord.ui.Modal):
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
-        try:
-            award_year = save_hof_nomination(
-                interaction.user.id,
-                interaction.user.display_name,
-                self.hof_text.value
-            )
-            embed = discord.Embed(
-                title="🏛️ HallyU Hall of Fame Nominations Submitted!",
-                description=f"Your nominees for the **{award_year} HallyU Hall of Fame** have been recorded.\n\n"
-                            "Need to make a change? Just click the button again to edit your submission!",
-                color=discord.Color.gold()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+        award_year = save_hof_nomination(
+            interaction.user.id,
+            interaction.user.display_name,
+            self.hof_text.value
+        )
+        embed = discord.Embed(
+            title="🏛️ HallyU Hall of Fame Nominations Submitted!",
+            description=f"Your nominees for the **{award_year} HallyU Hall of Fame** have been recorded.\n\n"
+                        "Need to make a change? Just click the button again to edit your submission!",
+            color=discord.Color.gold()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        except Exception as ex:
-            logger.error("Error saving to the database: %s", ex)
-            await interaction.response.send_message("❌ Error saving to the database.", ephemeral=True)
+    # pylint: disable=arguments-differ
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        await report_interaction_error(interaction, error, keep_text={"hall_of_fame.txt": self.hof_text.value})
 
 
-class EOYNominationsHub(discord.ui.View):
-    """Hub message with buttons for end of year nominations."""
+class Top25Button(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_top25_(?P<year>\d+)"):
+    """Opens the Top 25 form. The year is part of the button's ID, so it works on any year's hub."""
 
     def __init__(self, year: int):
-        super().__init__(timeout=None) # Persistent view
+        super().__init__(discord.ui.Button(
+            label=f"Submit {year} Top 25 Songs", style=discord.ButtonStyle.primary,
+            custom_id=f"btn_top25_{year}", emoji="🎵"))
         self.year = year
 
-        # Dynamically overwrite the button labels after they are created by the decorators
-        for child in self.children:
-            if getattr(child, "custom_id", None) == "btn_top25":
-                child.label = f"Submit {self.year} Top 25 Songs"
-                child.custom_id = f"btn_top25_{self.year}"
-            elif getattr(child, "custom_id", None) == "btn_nom_hof":
-                child.label = f"{self.year} HallyU Hall of Fame"
-                child.custom_id = f"btn_nom_hof_{self.year}"
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Item, match, /):
+        return cls(int(match["year"]))
 
-    @discord.ui.button(label="Top 25 Songs",
-                       style=discord.ButtonStyle.primary,
-                       custom_id="btn_top25",
-                       emoji="🎵")
-    async def btn_top_25(self, interaction: discord.Interaction, _: discord.ui.Button):
+    @reports_errors
+    async def callback(self, interaction: discord.Interaction):
         existing_data = get_user_top_songs(interaction.user.id)
         t25_text = existing_data['top_25_raw'] if existing_data else None
         hms_text = existing_data['hms_raw'] if existing_data else None
@@ -158,11 +153,34 @@ class EOYNominationsHub(discord.ui.View):
             Top25Modal(year=self.year, existing_t25=t25_text, existing_hms=hms_text)
         )
 
-    @discord.ui.button(label="HallyU Hall of Fame",
-                       style=discord.ButtonStyle.success,
-                       custom_id="btn_nom_hof",
-                       emoji="🏛️")
-    async def btn_hof(self, interaction: discord.Interaction, _: discord.ui.Button):
+
+class HallOfFameNominationButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_nom_hof_(?P<year>\d+)"):
+    """Opens the Hall of Fame nominations form."""
+
+    def __init__(self, year: int):
+        super().__init__(discord.ui.Button(
+            label=f"{year} HallyU Hall of Fame", style=discord.ButtonStyle.success,
+            custom_id=f"btn_nom_hof_{year}", emoji="🏛️"))
+        self.year = year
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Item, match, /):
+        return cls(int(match["year"]))
+
+    @reports_errors
+    async def callback(self, interaction: discord.Interaction):
         existing_text = get_hof_nomination(interaction.user.id)
         # Pass the year into the Modal
         await interaction.response.send_modal(HoFModal(year=self.year, existing_text=existing_text))
+
+
+class EOYNominationsHub(discord.ui.View):
+    """
+    The end of year nominations message. Its buttons are dynamic items (registered once when the bot
+    starts) that read the year from their own ID, so hubs from any year keep working across restarts.
+    """
+
+    def __init__(self, year: int):
+        super().__init__(timeout=None)
+        self.add_item(Top25Button(year))
+        self.add_item(HallOfFameNominationButton(year))

@@ -6,8 +6,7 @@ import logging
 import discord
 
 from config import Channel
-from db.merch import award_once
-from db.tournaments import mark_reward_claimed, process_user_vote, remove_user_vote
+from db.tournaments import process_user_vote, remove_user_vote
 
 logger = logging.getLogger('iu-bot')
 
@@ -28,41 +27,18 @@ async def handle_poll_vote(client: discord.Client, payload: discord.RawPollVoteA
     if _is_other_channel(client, payload.channel_id):
         return
 
-    # Save the vote and check the ledger. This fires on every poll click, so the
-    # blocking sqlite work runs in a thread rather than stalling the event loop.
-    reward_data = await asyncio.to_thread(
+    # This fires on every poll click, so the blocking sqlite work runs in a thread rather than
+    # stalling the event loop. The vote is saved first; the reward is a separate all-or-nothing
+    # payment, so if it fails the vote is kept and the next vote tries the payment again.
+    reward = await asyncio.to_thread(
         process_user_vote,
         message_id=payload.message_id,
         user_id=payload.user_id,
         answer_id=payload.answer_id
     )
 
-    # If reward_data exists, they successfully completed the round and haven't been paid for it yet
-    if not reward_data:
-        return
-
-    t_name = reward_data['tournament_name']
-    r_num = reward_data['round_num']
-
-    # Pay the heart, then record that it was paid. The payment carries a marker so it can never be
-    # paid twice, and if it fails nothing is recorded, so the user's next vote tries again.
-    try:
-        newly_paid = await asyncio.to_thread(
-            award_once,
-            f"[vote:{reward_data['tournament_id']}:{r_num}:{payload.user_id}]",
-            "IU bot",
-            payload.user_id,
-            1,
-            f"Voted in every matchup for round {r_num} of **{t_name}**"
-        )
-        await asyncio.to_thread(mark_reward_claimed, reward_data['tournament_id'], r_num, payload.user_id)
-    except Exception:
-        logger.exception("Could not pay the round %s voting reward to %s; it will retry on their next vote.",
-                         r_num, payload.user_id)
-        return
-
-    if newly_paid:
-        await _announce_reward(client, payload, r_num, t_name)
+    if reward:
+        await _announce_reward(client, payload, reward.round_num, reward.tournament_name)
 
 
 async def _announce_reward(client: discord.Client, payload: discord.RawPollVoteActionEvent, r_num: int, t_name: str):
