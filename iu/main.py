@@ -359,15 +359,22 @@ def initialize_databases():
         except Exception as e:
             logger.error("Failed to initialize DB at %s: %s", db_path, e)
 
-    # One-off migration: tournaments.db predates the `description` column that
-    # create_tournament() writes to. CREATE TABLE IF NOT EXISTS above won't add a column
-    # to an already-existing table, so patch it in directly if it's missing. Safe to run
-    # on every startup -- a no-op once the column is there.
-    if DB_PATH_TOURNAMENTS:
+    # Column migrations: CREATE TABLE IF NOT EXISTS above won't add a column to a table that
+    # already exists, so patch missing columns in directly. Safe to run on every startup --
+    # each is a no-op once the column is there.
+    column_migrations = [
+        # tournaments.db predates the `description` column that create_tournament() writes to.
+        (DB_PATH_TOURNAMENTS, "tournaments", "description", "TEXT"),
+        # Tracks how far an interrupted listen game reveal got, so it can resume.
+        (DB_PATH_LISTEN_GAME, "listen_rounds", "reveal_step", "INTEGER NOT NULL DEFAULT 0"),
+    ]
+    for db_path, table, column, column_type in column_migrations:
+        if not db_path:
+            continue
         try:
-            ensure_column(DB_PATH_TOURNAMENTS, "tournaments", "description", "TEXT")
+            ensure_column(db_path, table, column, column_type)
         except Exception as e:
-            logger.error("Failed to migrate tournaments.db: %s", e)
+            logger.error("Failed to add %s.%s to %s: %s", table, column, db_path, e)
 
     logger.info("All databases initialized successfully.")
 

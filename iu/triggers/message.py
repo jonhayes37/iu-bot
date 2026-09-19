@@ -170,7 +170,7 @@ def find_unique_triggers(text):
                       if trigger in text and not is_subword(text, trigger)]
     unique_filenames = set()
     unique_triggers = set()
-    
+
     for f_t in found_triggers:
         cur_filenames = [opt.get('filename') for opt in TRIGGER_LIST.get(f_t)]
         if all(fname not in unique_filenames for fname in cur_filenames):

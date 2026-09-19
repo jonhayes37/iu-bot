@@ -4,6 +4,7 @@ import logging
 import discord
 from db.hall_of_fame import save_hof_nomination, get_hof_nomination
 from db.top_songs import save_top_songs, get_user_top_songs
+from utils.discord_files import text_file
 from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
@@ -57,17 +58,15 @@ class Top25Modal(discord.ui.Modal):
             error_intro = (
                 "❌ **Submission Failed** ❌\n"
                 + "\n".join(error_details) + "\n\n"
-                "Don't panic! Your lists are safe. Copy them from the messages below, "
+                "Don't panic! Your lists are safe and attached below as text files. Copy them from there, "
                 "fix the line counts, and try clicking the submit button again."
             )
 
-            # Defer sending the long text to avoid Discord's 2000 character limit per message
-            await interaction.response.send_message(error_intro, ephemeral=True)
-
-            # Truncate slightly if they somehow maxed out the 4000 char limit to avoid a Discord API crash
-            safe_t25 = raw_t25[:1900] + "..." if len(raw_t25) > 1900 else raw_t25
-            await interaction.followup.send(f"**Your Top 25:**\n```{safe_t25}```", ephemeral=True)
-            await interaction.followup.send(f"**Your HMs:**\n```{raw_hms}```", ephemeral=True)
+            # Attach the lists instead of pasting them: Discord limits messages to 2000 characters
+            files = [text_file(raw_t25, "top_25.txt")]
+            if raw_hms.strip():
+                files.append(text_file(raw_hms, "honourable_mentions.txt"))
+            await interaction.response.send_message(error_intro, files=files, ephemeral=True)
             return
 
         # Save to Database

@@ -7,8 +7,9 @@ from discord.ext import tasks
 
 from db.listen_game import (
     get_missing_players_for_reminders_db, update_last_reminded_db, get_expired_rounds_db,
-    close_round_db
+    close_round_db, get_revealing_round_ids_db
 )
+from services.listen_game_reveal import start_reveal
 
 logger = logging.getLogger('iu-bot')
 
@@ -28,6 +29,13 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
     if not channel:
         logger.error("Could not find #listen-game channel.")
         return
+
+    # ---------------------------------------------------------
+    # Phase 0: Resume any reveal that was interrupted (e.g. by a bot restart)
+    # ---------------------------------------------------------
+    for revealing_round_id in get_revealing_round_ids_db():
+        if start_reveal(channel, revealing_round_id):
+            logger.info("Resuming the reveal for round %s.", revealing_round_id)
 
     # ---------------------------------------------------------
     # Phase 1: Check for Timeouts

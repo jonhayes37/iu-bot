@@ -1,4 +1,5 @@
 """Database logic for the listen game"""
+import enum
 import os
 import sqlite3
 import random
@@ -9,6 +10,12 @@ from db.connection import db_connection
 logger = logging.getLogger('iu-bot')
 
 DB_PATH_LISTEN_GAME = os.getenv('DB_PATH_LISTEN_GAME')
+
+class SaveResult(enum.Enum):
+    """Outcome of saving a round's rankings."""
+    SAVED = "saved"
+    NOT_IN_RANKING = "not_in_ranking"
+    ERROR = "error"
 
 def create_game_db(gm_id: int, sub_gm_id: int, max_round_days: int | None) -> int | None:
     """Creates a new game instance in the registration state."""
@@ -301,18 +308,30 @@ def close_round_db(round_id: int) -> bool:
             cursor.execute("""
                 UPDATE listen_rounds 
                 SET status = 'ranking'
-                WHERE round_id = ?
+                WHERE round_id = ? AND status = 'submitting'
             """, (round_id,))
             return cursor.rowcount > 0
     except Exception as ex:
         logger.error("Error closing round: %s", ex)
         return False
 
-def save_round_results_db(game_id: int, round_id: int, results: list[dict]) -> bool:
-    """Saves rankings/commentary and applies points to player scores in one transaction."""
+def save_round_results_db(game_id: int, round_id: int, results: list[dict]) -> SaveResult:
+    """
+    Saves rankings/commentary, applies points to player scores, and moves the round from
+    'ranking' to 'revealing', all in one transaction. Because the status change is part of the
+    transaction, the points can only ever be applied once per round.
+    """
     try:
         with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
+
+            cursor.execute("""
+                UPDATE listen_rounds
+                SET status = 'revealing', reveal_step = 0
+                WHERE round_id = ? AND status = 'ranking'
+            """, (round_id,))
+            if cursor.rowcount == 0:
+                return SaveResult.NOT_IN_RANKING
 
             for res in results:
                 # Update the submission row with the rank and commentary
@@ -329,60 +348,110 @@ def save_round_results_db(game_id: int, round_id: int, results: list[dict]) -> b
                     WHERE game_id = ? AND user_id = ?
                 """, (res['points'], game_id, res['user_id']))
 
-            return True
+            return SaveResult.SAVED
     except Exception as ex:
         logger.error("Error saving round results: %s", ex)
-        return False
+        return SaveResult.ERROR
 
-def advance_game_turn_db(game_id: int, round_id: int) -> int | None:
-    """
-    Marks current round completed, finds next host,
-    and creates the next round. Returns new host_id or 
-    None if game over.
-    """
+def get_revealing_round_ids_db() -> list[int]:
+    """Fetches the IDs of rounds whose results are saved but whose reveal has not finished."""
+    try:
+        with db_connection(DB_PATH_LISTEN_GAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT round_id FROM listen_rounds WHERE status = 'revealing' ORDER BY round_id")
+            return [row[0] for row in cursor.fetchall()]
+    except Exception as ex:
+        logger.error("Error fetching revealing rounds: %s", ex)
+        return []
 
+def get_round_reveal_state_db(round_id: int) -> dict | None:
+    """Fetches the round's status, game, host and how many reveal steps have been posted. Raises on DB errors."""
+    with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT round_id, game_id, host_id, status, reveal_step FROM listen_rounds WHERE round_id = ?",
+            (round_id,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def set_reveal_step_db(round_id: int, step: int) -> None:
+    """Records how many reveal messages have been posted so an interrupted reveal can resume. Raises on DB errors."""
+    with db_connection(DB_PATH_LISTEN_GAME) as conn:
+        conn.execute("UPDATE listen_rounds SET reveal_step = ? WHERE round_id = ?", (step, round_id))
+
+def get_round_results_db(round_id: int) -> list[dict]:
+    """Fetches the saved rankings for a round, best rank first. Raises on DB errors."""
+    with db_connection(DB_PATH_LISTEN_GAME, row_factory=True) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id, rank, points_awarded AS points, commentary, raw_title, video_id
+            FROM listen_submissions
+            WHERE round_id = ? AND rank IS NOT NULL
+            ORDER BY rank ASC
+        """, (round_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def _find_next_host_id(cursor: sqlite3.Cursor, game_id: int, round_id: int) -> int | None:
+    """Returns the host of the round after this one, or None if this was the last turn."""
+    cursor.execute("""
+        SELECT p.turn_order
+        FROM listen_rounds r
+        JOIN listen_players p ON r.host_id = p.user_id AND r.game_id = p.game_id
+        WHERE r.round_id = ?
+    """, (round_id,))
+    host_row = cursor.fetchone()
+    if not host_row:
+        raise ValueError(f"The host of round {round_id} is not a player in game {game_id}")
+
+    cursor.execute("""
+        SELECT user_id
+        FROM listen_players
+        WHERE game_id = ? AND turn_order > ?
+        ORDER BY turn_order ASC LIMIT 1
+    """, (game_id, host_row[0]))
+    next_row = cursor.fetchone()
+    return next_row[0] if next_row else None
+
+def get_next_host_id_db(game_id: int, round_id: int) -> int | None:
+    """
+    Returns the next round's host without changing anything, or None if this is the last turn.
+    Raises on DB errors, so None always means "game over".
+    """
+    with db_connection(DB_PATH_LISTEN_GAME) as conn:
+        return _find_next_host_id(conn.cursor(), game_id, round_id)
+
+def advance_game_turn_db(game_id: int, round_id: int) -> bool:
+    """
+    Marks a revealed round completed and creates the next round, or finishes the game after the
+    last turn. Safe to call again after it succeeded. Returns True if the round is completed.
+    """
     try:
         with db_connection(DB_PATH_LISTEN_GAME) as conn:
             cursor = conn.cursor()
 
-            # Close current round
-            cursor.execute("UPDATE listen_rounds SET status = 'completed' WHERE round_id = ?", (round_id,))
-
-            # Get current host's turn order
             cursor.execute("""
-                SELECT p.turn_order 
-                FROM listen_rounds r
-                JOIN listen_players p ON r.host_id = p.user_id AND r.game_id = p.game_id
-                WHERE r.round_id = ?
+                UPDATE listen_rounds SET status = 'completed'
+                WHERE round_id = ? AND status = 'revealing'
             """, (round_id,))
-            current_turn_order = cursor.fetchone()[0]
+            if cursor.rowcount == 0:
+                cursor.execute("SELECT status FROM listen_rounds WHERE round_id = ?", (round_id,))
+                row = cursor.fetchone()
+                return bool(row) and row[0] == 'completed'
 
-            # Find the next player in the turn order
-            cursor.execute("""
-                SELECT user_id 
-                FROM listen_players 
-                WHERE game_id = ? AND turn_order > ? 
-                ORDER BY turn_order ASC LIMIT 1
-            """, (game_id, current_turn_order))
-
-            next_player_row = cursor.fetchone()
-
-            # If there is a next player, create the new round
-            if next_player_row:
-                next_host_id = next_player_row[0]
+            next_host_id = _find_next_host_id(cursor, game_id, round_id)
+            if next_host_id:
                 cursor.execute("""
                     INSERT INTO listen_rounds (game_id, host_id, status)
                     VALUES (?, ?, 'setting_theme')
                 """, (game_id, next_host_id))
-                return next_host_id
-
-            # If no next player, mark game as finished
-            cursor.execute("UPDATE listen_games SET status = 'finished' WHERE game_id = ?", (game_id,))
-            return None
+            else:
+                cursor.execute("UPDATE listen_games SET status = 'finished' WHERE game_id = ?", (game_id,))
+            return True
 
     except Exception as ex:
         logger.error("Error advancing game turn: %s", ex)
-        return None
+        return False
 
 def get_game_leaderboard_db(game_id: int) -> list[dict]:
     """Fetches the final scores for all players in a game, sorted highest to lowest."""

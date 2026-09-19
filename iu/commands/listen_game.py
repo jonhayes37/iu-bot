@@ -1,4 +1,5 @@
 """Commands for the listen game"""
+import asyncio
 import logging
 
 import discord
@@ -6,13 +7,14 @@ from discord import app_commands
 from db.listen_game import (
     get_current_round_db, get_game_by_status_db,
     get_registered_players_db, get_round_submissions_db,
-    update_round_playlist_db, is_round_complete_db, upsert_submission_db,
+    is_round_complete_db, upsert_submission_db,
     get_user_submission_db, get_active_gm_id, is_video_claimed_by_other_db
 )
-from services.youtube import (
-    get_video_title, create_listen_game_playlist, add_video_to_playlist,
-    remove_video_from_playlist, extract_video_id, QuotaExceededError
+from services.listen_game_playlist import (
+    SUBMISSION_LOCK, PlaylistOutcome, get_host_name, put_song_in_round_playlist
 )
+from services.listen_game_reveal import start_reveal
+from services.youtube import get_video_title, extract_video_id
 from ui.listen_game import SetThemeModal, ListenGameRankingView
 from utils.validation import validate_channel
 
@@ -80,6 +82,11 @@ async def submit_song(interaction: discord.Interaction, url: str):
 
     await interaction.response.defer(ephemeral=True)
 
+    async with SUBMISSION_LOCK:
+        await _process_submission(interaction, url)
+
+
+async def _process_submission(interaction: discord.Interaction, url: str):
     game = get_game_by_status_db('playing')
     if not game:
         await interaction.followup.send("⚠️ There is no active game right now.")
@@ -100,7 +107,7 @@ async def submit_song(interaction: discord.Interaction, url: str):
         await interaction.followup.send("❌ Invalid YouTube URL.")
         return
 
-    video_title = get_video_title(video_id)
+    video_title = await asyncio.to_thread(get_video_title, video_id)
     if not video_title:
         await interaction.followup.send("❌ Could not fetch that video. It may be private or deleted.")
         return
@@ -118,30 +125,21 @@ async def submit_song(interaction: discord.Interaction, url: str):
         return
 
     # Handle the YouTube Playlist Swap
-    playlist_id = active_round['playlist_id']
-    try:
-        if playlist_id and user_previous_sub:
-            removed = remove_video_from_playlist(playlist_id, user_previous_sub['video_id'])
-            if not removed:
-                logger.warning("Failed to remove old video %s during swap.", user_previous_sub['video_id'])
+    outcome, playlist_id = await asyncio.to_thread(
+        put_song_in_round_playlist,
+        get_host_name(interaction.guild, active_round['host_id']), active_round, video_id,
+        user_previous_sub['video_id'] if user_previous_sub else None
+    )
 
-        if not playlist_id:
-            host_member = interaction.guild.get_member(active_round['host_id'])
-            host_name = host_member.display_name if host_member else "Unknown"
-            playlist_id = create_listen_game_playlist(host_name)
-            if playlist_id:
-                update_round_playlist_db(active_round['round_id'], playlist_id)
-                active_round['playlist_id'] = playlist_id
-            else:
-                await interaction.followup.send("❌ Internal Error: Could not create YouTube playlist. Contact the GM.")
-                return
+    if outcome is PlaylistOutcome.CREATE_FAILED:
+        await interaction.followup.send("❌ Internal Error: Could not create YouTube playlist. Contact the GM.")
+        return
 
-        added = add_video_to_playlist(playlist_id, video_id)
-        if not added:
-            await interaction.followup.send("❌ Failed to add video to the playlist. It may be blocked or private.")
-            return
+    if outcome is PlaylistOutcome.ADD_FAILED:
+        await interaction.followup.send("❌ Failed to add video to the playlist. It may be blocked or private.")
+        return
 
-    except QuotaExceededError:
+    if outcome is PlaylistOutcome.QUOTA_EXCEEDED:
         # Save to DB anyway, but notify the GM
         upsert_submission_db(active_round['round_id'], interaction.user.id, video_id, video_title)
 
@@ -250,6 +248,20 @@ async def listen_game_submit_ranking(interaction: discord.Interaction):
     active_round = get_current_round_db(game['game_id'])
     if not active_round:
         await interaction.response.send_message("⚠️ Could not find an active round.", ephemeral=True)
+        return
+
+    # Results are already saved; this is a reveal that was interrupted (e.g. by a restart), so resume it
+    if active_round['status'] == 'revealing':
+        if interaction.user.id not in (active_round['host_id'], get_active_gm_id(game, active_round)):
+            await interaction.response.send_message(
+                "❌ Only the listener or the GM can resume the reveal.", ephemeral=True)
+            return
+
+        if start_reveal(interaction.channel, active_round['round_id']):
+            message = "▶️ Resuming the reveal in this channel."
+        else:
+            message = "⏳ The reveal is already in progress."
+        await interaction.response.send_message(message, ephemeral=True)
         return
 
     # Ensure the round has actually been closed/timed out

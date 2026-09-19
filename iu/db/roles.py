@@ -99,7 +99,7 @@ def register_new_role(role_id: int, role_name: str, category_name: str, aliases:
             """, (role_id, category_id, role_name))
 
             # Add aliases (Always include the exact lowercased role name as a free alias)
-            all_aliases = set([a.strip().lower() for a in aliases if a.strip()])
+            all_aliases = {a.strip().lower() for a in aliases if a.strip()}
             all_aliases.add(role_name.lower())
 
             for alias in all_aliases:

@@ -1,16 +1,15 @@
 """UI elements for the listen game"""
 import logging
 
-import asyncio
 import discord
 from discord.ui import View, Select, Modal, TextInput, Button
 from db.listen_game import (
-    get_game_by_status_db, register_player_db, save_round_results_db,
-    advance_game_turn_db, unregister_player_db, get_registered_players_db,
-    set_round_theme_db, get_game_leaderboard_db, update_round_status_message_db,
-    update_round_ruleset_message_db, get_game_rounds_db
+    SaveResult, get_game_by_status_db, register_player_db, save_round_results_db,
+    unregister_player_db, get_registered_players_db, set_round_theme_db,
+    update_round_status_message_db, update_round_ruleset_message_db
 )
-from utils.strings import get_ordinal, generate_leaderboard_text
+from services.listen_game_reveal import start_reveal
+from utils.strings import get_ordinal
 
 logger = logging.getLogger('iu-bot')
 
@@ -261,9 +260,8 @@ class ConfirmRankingButton(Button):
         self.listen_channel_id = listen_channel_id
 
     async def callback(self, interaction: discord.Interaction):
-        # Guard against a double-click re-triggering the whole publish flow (double-awarded
-        # points, duplicate reveal messages, an extra round) -- set before any await so a
-        # near-simultaneous second click can never slip through.
+        # Cheap guard against a double-click on this view. The real protection is in the database:
+        # save_round_results_db only accepts a round that is still in the 'ranking' status.
         if self.view.results_confirmed:
             await interaction.response.send_message(
                 "Results are already being published for this round.", ephemeral=True
@@ -286,94 +284,27 @@ class ConfirmRankingButton(Button):
                 "video_id": item['submission']['video_id']
             })
 
-        success = save_round_results_db(self.game_id, self.round_id, results_to_save)
-        if not success:
+        outcome = save_round_results_db(self.game_id, self.round_id, results_to_save)
+        if outcome is SaveResult.ERROR:
             self.view.results_confirmed = False  # allow a retry since nothing was actually saved
             await interaction.followup.send("❌ Error saving results to the database. Aborting reveal.", ephemeral=True)
             return
 
-        await interaction.followup.send("✅ Results locked in! The reveal is starting in the game channel.",
-                                        ephemeral=True)
-
-        channel = interaction.client.get_channel(self.listen_channel_id)
-        if not channel:
-            return
-
-        player_role = discord.utils.get(interaction.guild.roles, name='Listen Game Player')
-        await channel.send(
-            f"🎧 **{player_role.mention}, {interaction.user.mention} has finished their rankings! "
-            "Here are the results:**")
-        await asyncio.sleep(15)
-
-        reversed_reveals = sorted(results_to_save, key=lambda x: x['rank'], reverse=True)
-        for result in reversed_reveals:
-            rank_str = get_ordinal(result['rank'])
-            title = result['raw_title']
-            url = f"https://youtu.be/{result['video_id']}"
-            commentary = result['commentary']
-
-            msg = f"**{rank_str}: [{title}](<{url}>)**\n{commentary}"
-            await channel.send(msg)
-            await asyncio.sleep(15)
-
-        next_host_id = advance_game_turn_db(self.game_id, self.round_id)
-
-        # Build Last Round's Results
-        sorted_round = sorted(results_to_save, key=lambda x: x['rank'])
-        summary_lines = ["**Last Round's Results**"]
-        for result in sorted_round:
-            rank_str = get_ordinal(result['rank'])
-            user_mention = f"<@{result['user_id']}>"
-            title = result['raw_title']
-            pts = result['points']
-            summary_lines.append(f"{rank_str}: {user_mention} - **{title}** ({pts} pts)")
-
-        # Build Current Ranking
-        leaderboard = get_game_leaderboard_db(self.game_id)
-        ranking_lines = ["**Current Ranking**"]
-
-        if leaderboard:
-            for idx, entry in enumerate(leaderboard):
-                rank_str = get_ordinal(idx + 1)
-                u_id = entry.get('user_id', entry.get('id'))
-                score = entry.get('total_points', entry.get('score', entry.get('points', 0)))
-
-                ranking_lines.append(f"{rank_str} - <@{u_id}> ({score} pts)")
+        if outcome is SaveResult.SAVED:
+            await interaction.followup.send("✅ Results locked in! The reveal is starting in the game channel.",
+                                            ephemeral=True)
         else:
-            ranking_lines.append("*Error fetching leaderboard.*")
+            await interaction.followup.send(
+                "ℹ️ The results for this round were already saved, so nothing was changed. "
+                "Making sure the reveal is running.", ephemeral=True)
 
-        # Combine and Send
-        summary_text = "\n".join(summary_lines)
-        ranking_text = "\n".join(ranking_lines)
-        message_str = f"🎉 **Round complete!**\n\n{summary_text}\n\n{ranking_text}\n\n"
-        if next_host_id:
-            message_str += f"The next listener is <@{next_host_id}>! Use `/listen-game-post-ruleset` " \
-                "when you are ready to begin."
-
-        # Send last round's results
-        await channel.send(message_str)
-
-        # The game is over
-        if not next_host_id:
-            await channel.send(generate_leaderboard_text(leaderboard))
-
-            # Send the compilation of all playlists
-            rounds = get_game_rounds_db(self.game_id)
-            if rounds:
-                playlist_lines = ["🎶 **Here's all of the playlists from this game:**"]
-                for i, r_data in enumerate(rounds, start=1):
-                    host_mention = f"<@{r_data['host_id']}>"
-
-                    if r_data['playlist_id']:
-                        playlist_url = f"https://www.youtube.com/playlist?list={r_data['playlist_id']}"
-                    else:
-                        playlist_url = "*No playlist generated*"
-
-                    playlist_lines.append(f"**Round {i}** ({host_mention}): {playlist_url}")
-
-                # Add a slight delay so it posts cleanly after the leaderboard
-                await asyncio.sleep(2)
-                await channel.send("\n".join(playlist_lines))
+        # The reveal is resumable, so if the channel can't be found now the hourly listen game
+        # check will start it.
+        channel = interaction.client.get_channel(self.listen_channel_id)
+        if channel:
+            start_reveal(channel, self.round_id)
+        else:
+            logger.warning("Could not find channel %s to reveal round %s.", self.listen_channel_id, self.round_id)
 
 
 class ListenGameRankingView(View):

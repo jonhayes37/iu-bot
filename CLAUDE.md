@@ -25,7 +25,9 @@ make build-push                                        # docker build (linux/amd
 python iu/main.py                                      # run locally (needs env vars below)
 ```
 
-CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: pylint, pytest with coverage, and `coverage report --fail-under=80` (which runs even if the tests fail). Keep `pylint iu` clean.
+CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: pylint, pytest with coverage, and `coverage report --fail-under=80` (which runs even if the tests fail).
+
+**After finishing any set of code changes, run `pylint iu` and fix everything it reports before calling the work done** (it must exit 0, since CI fails on any message). Don't silence a finding with `# pylint: disable` or by editing `.pylintrc` unless the user agrees; fix the code instead. The size/complexity checks (`too-many-*`) and `duplicate-code` are disabled in `.pylintrc` because existing handlers exceed them, so new code shouldn't rely on that as a reason to write sprawling functions.
 
 ## Environment
 
@@ -34,11 +36,14 @@ Read via `os.getenv`: `DISCORD_TOKEN`, `DISCORD_GUILD`, `HALLYU_ID`, `TOKEN_DIR`
 ## Conventions and gotchas
 
 - **Blocking work must not run on the event loop.** sqlite and YouTube calls are synchronous; from async code wrap them in `asyncio.to_thread(...)` (see `triggers/releases.py`, `commands/listen_game_gm.py`). Don't call `time.sleep` or blocking I/O directly in a command or task.
-- **DB error handling is inconsistent.** Most `db/` functions use `try: with db_connection(DB_PATH_X) as conn: ... except Exception: logger.error(...); return False/None/[]`, but `db/merch.py` and parts of `db/releases.py` / `db/hmas.py` let exceptions propagate. Check the function before assuming either. `db_connection()` commits on clean exit, rolls back on exception, and raises `DatabaseNotConfiguredError` when the path is unset. Returning `None` can mean "error" or "no result" (e.g. `advance_game_turn_db`).
+- **DB error handling is inconsistent.** Most `db/` functions use `try: with db_connection(DB_PATH_X) as conn: ... except Exception: logger.error(...); return False/None/[]`, but `db/merch.py` and parts of `db/releases.py` / `db/hmas.py` let exceptions propagate. Check the function before assuming either. `db_connection()` commits on clean exit, rolls back on exception, and raises `DatabaseNotConfiguredError` when the path is unset. Returning `None` can mean "error" or "no result" (e.g. `skip_game_turn_db`).
 - **DB path constants are read at import time** (`DB_PATH_X = os.getenv(...)` at module level). Changing the env var afterwards has no effect.
 - **Schema changes:** `CREATE TABLE IF NOT EXISTS` won't alter existing tables. Add new columns via `ensure_column()` in `initialize_databases()` (see the `tournaments.description` example) in addition to editing the `.sql`. New indexes can just be `CREATE INDEX IF NOT EXISTS` in the schema.
 - **Channel-restricted commands** use `restricted = await validate_channel(interaction, 'name'); if restricted: return`. It returns `True` when it already sent the rejection.
 - **Persistent views** (buttons that must survive a restart) need explicit `custom_id`s and a `client.add_view(...)` in `on_ready`. Only `JoinGameView`, the EOY/HMA hubs are registered. `ListenGameRankingView` is intentionally not; its in-progress state is in memory and lost on restart (host re-runs `/listen-game-submit-ranking`).
+- **Listen game round statuses:** `setting_theme` -> `submitting` -> `ranking` -> `revealing` -> `completed` (or `skipped`). Confirming rankings atomically saves points and moves the round to `revealing` (`save_round_results_db`), so points can only be applied once. `services/listen_game_reveal.py` then posts the reveal in the background and records progress in `listen_rounds.reveal_step`; if the bot restarts mid-reveal, the hourly `check_listen_game_reminders` task (or the listener/GM re-running `/listen-game-submit-ranking`) resumes it. Keep new round-status changes guarded with `WHERE status = ?`.
+- `services/listen_game_playlist.py` is the one place that adds a submission to a round's YouTube playlist (used by both `submit_song` and GM `force-submit`). Its YouTube calls run via `asyncio.to_thread`, so both commands hold `SUBMISSION_LOCK` for the whole check-claimed / update-playlist / save sequence; keep any new code that writes submissions inside that lock.
+- When a user's text may be long (list echoes, exports), attach it with `utils.discord_files.text_file` rather than pasting it into a message (2000 character limit).
 - `ui/bracket_renderer.py` keeps one shared Chromium instance for the process lifetime; the Docker image needs Playwright's Chromium installed.
 - `ui/test_render.py` is a manual script that builds `preview.html` from the Jinja template. It is **not** a pytest test.
 
@@ -59,7 +64,7 @@ Still to do when adding the first tests:
 
 Tests live in a top-level `tests/` directory that **mirrors `iu/`**, not next to the source (unlike Go's `foo_test.go`):
 
-```
+```text
 iu/db/lists.py          ->  tests/db/test_lists.py
 iu/commands/merch.py    ->  tests/commands/test_merch.py
 iu/utils/validation.py  ->  tests/utils/test_validation.py

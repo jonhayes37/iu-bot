@@ -56,9 +56,9 @@ def get_active_bot_status_db() -> str | None:
 
             if now <= expiration_date:
                 return row['status_text']
-            else:
-                # The latest status has expired
-                return None
+
+            # The latest status has expired
+            return None
 
     except Exception as ex:
         logger.error("Failed to fetch active bot status: %s", ex)

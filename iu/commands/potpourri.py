@@ -1,4 +1,5 @@
 """Commands for Potpourri"""
+import asyncio
 import csv
 import io
 import logging
@@ -78,7 +79,7 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
                     active_users.remove(user)
 
         # Create the Playlist
-        playlist_id = create_playlist(playlist_title, "K-Potpourri Playlist")
+        playlist_id = await asyncio.to_thread(create_playlist, playlist_title, "K-Potpourri Playlist")
         if not playlist_id:
             await interaction.followup.send(
                 "❌ Failed to create the YouTube playlist. Check your API Quota and bot logs.")
@@ -89,7 +90,7 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
         failed_urls = []
         for item in ordered_videos:
             try:
-                success = add_video_to_playlist(playlist_id, item["id"])
+                success = await asyncio.to_thread(add_video_to_playlist, playlist_id, item["id"])
                 if success:
                     added_count += 1
                 else:

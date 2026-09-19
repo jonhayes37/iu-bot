@@ -426,7 +426,18 @@ disable=raw-checker-failed,
         deprecated-pragma,
         use-symbolic-message-instead,
         missing-function-docstring,
-        too-many-positional-arguments
+        too-many-positional-arguments,
+        # Size/complexity and duplication checks: Discord slash commands take many parameters and
+        # the command handlers are long by nature, so these produced ~45 findings on existing code.
+        # Re-enable once the large handlers (e.g. submit_song) are split up.
+        too-many-arguments,
+        too-many-locals,
+        too-many-branches,
+        too-many-statements,
+        too-many-return-statements,
+        too-many-nested-blocks,
+        too-many-instance-attributes,
+        duplicate-code
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

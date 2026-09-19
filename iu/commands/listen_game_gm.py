@@ -17,6 +17,9 @@ from db.listen_game import (
     swap_player_orders_db, get_active_gm_id, update_game_start_message_db,
     get_ordered_players_db
 )
+from services.listen_game_playlist import (
+    SUBMISSION_LOCK, PlaylistOutcome, get_host_name, put_song_in_round_playlist
+)
 from services.youtube import (
     get_playlist_video_ids, add_video_to_playlist, remove_video_from_playlist,
     extract_video_id, get_video_title, QuotaExceededError
@@ -249,7 +252,7 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
     # Delete from YouTube
     playlist_id = active_round.get('playlist_id')
     if playlist_id:
-        yt_removed = remove_video_from_playlist(playlist_id, submission['video_id'])
+        yt_removed = await asyncio.to_thread(remove_video_from_playlist, playlist_id, submission['video_id'])
         if not yt_removed:
             logger.warning("Failed to remove video %s from YT playlist during GM rejection.", submission['video_id'])
 
@@ -297,6 +300,13 @@ async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: dis
         host_name = current_host.display_name if current_host else "Unknown"
         await interaction.followup.send(
             f"❌ {player.display_name} is not the current listener. The current listener is {host_name}.")
+        return
+
+    # Points are already saved once the reveal starts, so skipping now would leave it half-finished
+    if active_round['status'] == 'revealing':
+        await interaction.followup.send(
+            f"❌ {player.display_name}'s results are already being revealed. Let the reveal finish "
+            "(the listener or GM can run `/listen-game-submit-ranking` to resume it if it stopped).")
         return
 
     # 1. Execute the skip
@@ -541,6 +551,11 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
 
     await interaction.response.defer(ephemeral=True)
 
+    async with SUBMISSION_LOCK:
+        await _process_forced_submission(interaction, player, url)
+
+
+async def _process_forced_submission(interaction: discord.Interaction, player: discord.Member, url: str):
     game = get_game_by_status_db('playing')
     if not game:
         await interaction.followup.send("⚠️ There is no active game right now.")
@@ -561,28 +576,29 @@ async def listen_game_gm_force_submit(interaction: discord.Interaction, player: 
         await interaction.followup.send("❌ Invalid YouTube URL.")
         return
 
-    video_title = get_video_title(video_id)
+    video_title = await asyncio.to_thread(get_video_title, video_id)
     if not video_title:
         await interaction.followup.send("❌ Could not fetch that video. It may be private or deleted.")
         return
 
-    # Handle YouTube Playlist Swap & Addition
+    # Handle YouTube Playlist Swap & Addition. A first-time submission has no previous song to
+    # remove, and the playlist is created if this is the round's first song.
     user_previous_sub = get_user_submission_db(active_round['round_id'], player.id)
-    playlist_id = active_round.get('playlist_id')
+    outcome, playlist_id = await asyncio.to_thread(
+        put_song_in_round_playlist,
+        get_host_name(interaction.guild, active_round['host_id']), active_round, video_id,
+        user_previous_sub['video_id'] if user_previous_sub else None
+    )
 
-    try:
-        if playlist_id and user_previous_sub:
-            remove_video_from_playlist(playlist_id, user_previous_sub['video_id'])
-        else:
-            await interaction.followup.send("❌ Could not find the playlist or previous submission.")
-            return
+    if outcome is PlaylistOutcome.CREATE_FAILED:
+        await interaction.followup.send("❌ Could not create the YouTube playlist for this round. Check the logs.")
+        return
 
-        added = add_video_to_playlist(playlist_id, video_id)
-        if not added:
-            await interaction.followup.send("❌ Failed to add video to the playlist. It may be blocked or private.")
-            return
+    if outcome is PlaylistOutcome.ADD_FAILED:
+        await interaction.followup.send("❌ Failed to add video to the playlist. It may be blocked or private.")
+        return
 
-    except QuotaExceededError:
+    if outcome is PlaylistOutcome.QUOTA_EXCEEDED:
         # Handle YouTube Quota limits gracefully
         upsert_submission_db(active_round['round_id'], player.id, video_id, video_title)
 

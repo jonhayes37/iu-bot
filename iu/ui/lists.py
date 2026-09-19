@@ -4,6 +4,7 @@ import logging
 import discord
 from db.lists import get_event_details, save_submission, get_user_submission
 from db.merch import check_user_owns_item, consume_item
+from utils.discord_files import text_file
 from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
@@ -67,10 +68,10 @@ class DynamicListModal(discord.ui.Modal):
                         f"You submitted {self.expected_count + 1} items, but this event only allows "
                         f"{self.expected_count}.\n\nTo unlock an extra slot, you need to purchase "
                         "the **What Are You Listening To Bonus Pick** (`WAYLT`) item from the Merch Booth! "
-                        "Don't worry, your list isn't lost. Copy your text below:\n"
-                        f"```{raw_list}```"
+                        "Don't worry, your list isn't lost. It's attached as `your_list.txt`."
                     )
-                    await interaction.response.send_message(fail_msg, ephemeral=True)
+                    await interaction.response.send_message(
+                        fail_msg, file=text_file(raw_list, "your_list.txt"), ephemeral=True)
                     return
 
         # Validation with the dynamically adjusted target_count
@@ -79,12 +80,12 @@ class DynamicListModal(discord.ui.Modal):
             # Echo their submission so they don't lose it
             fail_msg = (
                 f"❌ **Submission Failed** ❌\n{error_msg}\n\n"
-                "Don't worry, your list isn't lost! Copy your text from the box below, "
-                "make sure you have the correct number of items, "
-                "and click the submit button again!\n"
-                f"```{raw_list}```"
+                "Don't worry, your list isn't lost! It's attached as `your_list.txt`. "
+                "Copy your text from it, make sure you have the correct number of items, "
+                "and click the submit button again!"
             )
-            await interaction.response.send_message(fail_msg, ephemeral=True)
+            await interaction.response.send_message(
+                fail_msg, file=text_file(raw_list, "your_list.txt"), ephemeral=True)
             return
 
         # Consume the item if necessary
