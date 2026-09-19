@@ -3,7 +3,10 @@ import logging
 from datetime import datetime, timezone
 import discord
 from config import Channel
-from triggers.releases import store_new_release
+from triggers.releases import store_new_releases
+
+# Messages handled together, so their videos are looked up in shared YouTube requests
+BACKFILL_BATCH_SIZE = 50
 
 logger = logging.getLogger('iu-bot')
 
@@ -31,10 +34,17 @@ async def backfill_releases(interaction: discord.Interaction, start_date: str):
 
     logger.info("Starting backfill for %s since %s", channel.name, start_date)
     messages_scanned = 0
+    batch = []
     try:
         async for message in channel.history(limit=None, oldest_first=True, after=start_date):
             messages_scanned += 1
-            await store_new_release(message)
+            batch.append(message)
+            if len(batch) >= BACKFILL_BATCH_SIZE:
+                await store_new_releases(batch)
+                batch = []
+
+        if batch:
+            await store_new_releases(batch)
 
         await interaction.followup.send(
             f"✅ **Backfill complete!** Scanned {messages_scanned} messages since {start_date}."

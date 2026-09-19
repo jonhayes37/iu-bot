@@ -268,7 +268,8 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
         if playlist_id:
             yt_removed = await asyncio.to_thread(remove_video_from_playlist, playlist_id, submission['video_id'])
             if not yt_removed:
-                logger.warning("Failed to remove video %s from YT playlist during GM rejection.", submission['video_id'])
+                logger.warning("Failed to remove video %s from YT playlist during GM rejection.",
+                               submission['video_id'])
 
     # DM the player
     try:

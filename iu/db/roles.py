@@ -91,9 +91,12 @@ def register_new_role(role_id: int, role_name: str, category_name: str, aliases:
                 category_id = cursor.lastrowid
 
             # Add the role
+            # An upsert, not INSERT OR REPLACE: replacing the row would delete it first, and with
+            # foreign keys on that would also delete all of the role's existing aliases.
             cursor.execute("""
-                INSERT OR REPLACE INTO assignable_roles (role_id, category_id, role_name)
+                INSERT INTO assignable_roles (role_id, category_id, role_name)
                 VALUES (?, ?, ?)
+                ON CONFLICT(role_id) DO UPDATE SET category_id = excluded.category_id, role_name = excluded.role_name
             """, (role_id, category_id, role_name))
 
             # Add aliases (Always include the exact lowercased role name as a free alias)

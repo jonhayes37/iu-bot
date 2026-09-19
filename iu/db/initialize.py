@@ -49,6 +49,7 @@ def initialize_databases():
             with sqlite3.connect(db_path) as conn:
                 conn.executescript(schema_script)
                 conn.commit()
+                _check_foreign_keys(conn, db)
         except FileNotFoundError:
             logger.critical("Error: Could not find schema file at %s", db.schema_path)
         except Exception as e:
@@ -70,6 +71,14 @@ def initialize_databases():
             logger.error("Failed to update the new_releases table: %s", e)
 
     logger.info("All databases initialized successfully.")
+
+
+def _check_foreign_keys(conn: sqlite3.Connection, db: Database):
+    """Reports rows that break the schema's foreign keys, which are now enforced on every write."""
+    violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        logger.warning("The %s database has %d rows that reference rows that don't exist (first: %s).",
+                       db.value, len(violations), tuple(violations[0]))
 
 
 def _has_unique_index(conn: sqlite3.Connection, table: str, columns: list[str]) -> bool:

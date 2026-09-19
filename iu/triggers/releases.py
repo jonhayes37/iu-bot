@@ -9,46 +9,61 @@ from datetime import datetime
 import discord
 from config import EMOJI_IU
 from db.releases import AddResult, add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
-from services.youtube import create_releases_playlist, add_video_to_playlist, get_video_publish_date, extract_video_id
+from services.youtube import (
+    add_video_to_playlist, create_releases_playlist, extract_video_id, get_video_snippets, parse_publish_date
+)
 
 logger = logging.getLogger('iu-bot')
 
 
 async def store_new_release(message: discord.Message):
     """Parses a message, stores the release, and automatically syncs it to YouTube."""
-    raw_urls = re.findall(r'(https?://[^\s]+)', message.content)
-    if not raw_urls:
+    await store_new_releases([message])
+
+async def store_new_releases(messages: list[discord.Message]):
+    """
+    Handles the YouTube links in several messages at once. Their videos are looked up together
+    (up to 50 per YouTube request), which matters for a backfill over many messages.
+    """
+    links = []  # (message, url, video_id)
+    for message in messages:
+        for url in re.findall(r'(https?://[^\s]+)', message.content):
+            video_id = extract_video_id(url)
+            if video_id:
+                links.append((message, url, video_id))
+
+    if not links:
         return
 
-    videos_processed = 0
-    award_year = get_eligible_year(message.created_at)
-    for url in raw_urls:
-        video_id = extract_video_id(url)
-        if not video_id:
+    # The video lookup, playlist creation, and playlist insert are all blocking YouTube API /
+    # sqlite calls. Running them in threads keeps a slow response from stalling the bot's event
+    # loop for every other user while a link is being processed.
+    snippets = await asyncio.to_thread(get_video_snippets, [video_id for _, _, video_id in links])
+    if snippets is None:
+        logger.warning("No YouTube client available; skipping %d release links.", len(links))
+        return
+
+    reacted_messages = {}
+    for message, url, video_id in links:
+        snippet = snippets.get(video_id)
+        if not snippet:
+            logger.warning("Could not fetch publish date for %s. Skipping.", video_id)
             continue
 
-        # The publish-date lookup, playlist creation, and playlist insert below are all
-        # blocking YouTube API / sqlite calls. Running them in a thread keeps a slow
-        # response from stalling the bot's event loop for every other user while one
-        # link is being processed.
         processed = await asyncio.to_thread(
-            _process_release_url, url, video_id, str(message.id), message.created_at, award_year
+            _process_release_url, url, video_id, str(message.id), message.created_at,
+            get_eligible_year(message.created_at), parse_publish_date(snippet)
         )
         if processed:
-            videos_processed += 1
+            reacted_messages[message.id] = message
 
-    if videos_processed > 0:
+    for message in reacted_messages.values():
         await message.add_reaction(EMOJI_IU)
 
-def _process_release_url(url: str, video_id: str, message_id: str, msg_time: datetime, award_year: int) -> bool:
+def _process_release_url(url: str, video_id: str, message_id: str, msg_time: datetime,
+                         award_year: int, publish_date: datetime) -> bool:
     """Synchronous worker: validates, stores, and syncs a single release URL to YouTube."""
     try:
-        # Check the video publish date to ensure it's eligible for the current award year
-        publish_date = get_video_publish_date(video_id)
-        if not publish_date:
-            logger.warning("Could not fetch publish date for %s. Skipping.", video_id)
-            return False
-
         # If the video isn't from the current year, ignore it
         video_award_year = get_eligible_year(publish_date)
         if video_award_year != award_year:

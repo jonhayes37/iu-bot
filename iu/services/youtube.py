@@ -97,50 +97,45 @@ def create_listen_game_playlist(host_name: str) -> str | None:
     description = "Automated playlist for the server Listen Game."
     return create_playlist(title, description)
 
-def get_video_publish_date(video_id: str) -> datetime | None:
-    """Fetches the publish date of a video and returns a datetime object."""
+# videos.list accepts up to 50 ids per request and costs 1 quota unit per request either way
+VIDEOS_PER_REQUEST = 50
+
+def get_video_snippets(video_ids: list[str]) -> dict[str, dict] | None:
+    """
+    Looks up the title, publish date and other details of many videos at once, 50 per request.
+
+    Returns {video_id: snippet}. Videos that are private or deleted are missing from the result, and
+    so are the videos of a request that failed (it is logged). Returns None if there is no YouTube
+    client, e.g. because token.json is missing.
+    """
     youtube = get_yt_service()
     if not youtube:
-        return False
-
-    try:
-        # Cost: 1 Quota Unit
-        request = youtube.videos().list(  # pylint: disable=no-member
-            part="snippet",
-            id=video_id
-        )
-        response = request.execute()
-
-        items = response.get("items", [])
-        if not items:
-            return None # Video might be deleted or private
-
-        # YouTube returns ISO 8601 format: "2026-03-17T15:00:00Z"
-        raw_date_str = items[0]["snippet"]["publishedAt"]
-        clean_date_str = raw_date_str.replace("Z", "+00:00")
-        publish_date = datetime.fromisoformat(clean_date_str)
-        return publish_date
-
-    except Exception as ex:
-        logger.error("YouTube API error fetching date for %s: %s", video_id, ex)
         return None
+
+    unique_ids = list(dict.fromkeys(video_ids))
+    snippets = {}
+    for start in range(0, len(unique_ids), VIDEOS_PER_REQUEST):
+        batch = unique_ids[start:start + VIDEOS_PER_REQUEST]
+        try:
+            # Cost: 1 Quota Unit for the whole batch
+            response = youtube.videos().list(part="snippet", id=",".join(batch)).execute() # pylint: disable=no-member
+        except Exception as ex:
+            logger.error("YouTube API error fetching details for %d videos: %s", len(batch), ex)
+            continue
+
+        for item in response.get("items", []):
+            snippets[item["id"]] = item["snippet"]
+
+    return snippets
+
+def parse_publish_date(snippet: dict) -> datetime:
+    """The publish date from a video snippet. YouTube sends ISO 8601 like "2026-03-17T15:00:00Z"."""
+    return datetime.fromisoformat(snippet["publishedAt"].replace("Z", "+00:00"))
 
 def get_video_title(video_id: str) -> str | None:
     """Fetches the title of a YouTube video for fuzzy matching."""
-    youtube = get_yt_service()
-    if not youtube:
-        return None
-
-    try:
-        request = youtube.videos().list(part="snippet", id=video_id) # pylint: disable=no-member
-        response = request.execute()
-        items = response.get("items", [])
-        if not items:
-            return None
-        return items[0]["snippet"]["title"]
-    except Exception as ex:
-        logger.error("YouTube API error fetching title for %s: %s", video_id, ex)
-        return None
+    snippet = (get_video_snippets([video_id]) or {}).get(video_id)
+    return snippet["title"] if snippet else None
 
 def remove_video_from_playlist(playlist_id: str, video_id: str) -> bool:
     """Finds and removes a specific video from a playlist."""

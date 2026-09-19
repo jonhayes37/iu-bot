@@ -24,8 +24,6 @@ def add_nomination(user_id: int, category_id: str, text: str) -> int:
     award_year = get_current_award_year()
 
     with db_connection(Database.HMAS) as conn:
-        # Crucial: Enable foreign keys so SQLite enforces the category_id check
-        conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO hma_nominations (award_year, category_id, user_id, nomination_text)

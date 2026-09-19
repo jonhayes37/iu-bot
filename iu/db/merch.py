@@ -30,6 +30,8 @@ def process_daily_heart(sender_id: int, receiver_id: int, message_url: str) -> b
     current_date_str = str(datetime.now(est_zone).date())
 
     with db_connection(Database.MERCH) as conn:
+        # Take the write lock before checking, so two reactions at once can't both pass the cooldown check
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.cursor()
 
         # Check if the sender has already given a heart today
@@ -60,6 +62,8 @@ def process_daily_heart(sender_id: int, receiver_id: int, message_url: str) -> b
 def process_milestone_award(message_id: int, author_id: int, message_url: str) -> bool:
     """Checks the state table and awards 3 hearts if not already paid."""
     with db_connection(Database.MERCH) as conn:
+        # Take the write lock before checking, so the payout can only happen once
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.cursor()
 
         # Check idempotency table to prevent duplicate payouts
@@ -84,6 +88,13 @@ def process_milestone_award(message_id: int, author_id: int, message_url: str) -
 
         conn.commit()
         return True
+
+
+def is_milestone_paid(message_id: int) -> bool:
+    """True if the 5-reaction bonus for this message has already been paid."""
+    with db_connection(Database.MERCH) as conn:
+        row = conn.execute("SELECT 1 FROM milestone_messages WHERE message_id = ?", (message_id,)).fetchone()
+        return row is not None
 
 
 def modify_db_balance(admin_id: int, target_id: int, amount: int, reason: str):
