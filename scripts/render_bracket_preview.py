@@ -1,11 +1,18 @@
-"""Local test script to compile the Jinja template into a static HTML file."""
+"""
+Manual helper (not a pytest test): compiles the bracket Jinja template with sample data into
+preview.html so the design can be checked in a browser. Run from the repo root:
+
+    uv run python scripts/render_bracket_preview.py
+"""
 
 import os
+from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / 'iu' / 'ui'
+
 def build_preview():
-    # Set up Jinja to look in the current directory
-    env = Environment(loader=FileSystemLoader('.'))
+    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
     template = env.get_template('bracket_template.html.j2')
 
     # This is the mock data your bot's database helper will eventually provide
@@ -77,7 +84,7 @@ def build_preview():
     # Render the HTML string
     rendered_html = template.render(mock_data)
 
-    # Save it to a file you can open in your browser
+    # Save it to a file you can open in your browser (git-ignored)
     output_path = 'preview.html'
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(rendered_html)

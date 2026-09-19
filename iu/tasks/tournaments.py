@@ -56,7 +56,7 @@ async def post_round_polls(channel: discord.TextChannel, tournament_id: str, rou
 @tasks.loop(minutes=5)
 async def tournament_resolution_loop(client: discord.Client, guild_id: int):
     """Wakes up every 5 minutes to resolve expired tournament polls."""
-    logger.info("Running tournament resolution loop...")
+    logger.debug("Running tournament resolution loop...")
     guild = client.get_guild(guild_id)
     if not guild:
         logger.error("Could not find guild with ID: %s", guild_id)
@@ -79,7 +79,7 @@ async def tournament_resolution_loop(client: discord.Client, guild_id: int):
         else:
             t_id = get_active_tournament_id()
             if not t_id:
-                logger.info("No active tournament found, skipping round completion check.")
+                logger.debug("No active tournament found, skipping round completion check.")
                 return
 
         await check_round_completion(tournaments_channel, t_id, get_tournament_days(t_id))
@@ -222,7 +222,7 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
     unpolled_matches = get_unpolled_matches(tournament_id, current_round)
     if not unpolled_matches:
         # No new polls to post. This means the round is currently ongoing and we're just waiting.
-        logger.info("Tournament %s round %s is ongoing.", tournament_id, current_round)
+        logger.debug("Tournament %s round %s is ongoing.", tournament_id, current_round)
         return
 
     # If some of this round's polls are already up, the rest failed to post earlier: post just those

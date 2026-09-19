@@ -23,7 +23,7 @@ REMINDER_EVERY = timedelta(hours=24)
 @tasks.loop(hours=1)
 @keep_running
 async def check_listen_game_reminders(client: discord.Client, guild_id:int):
-    logger.info("Running listen game background checks...")
+    logger.debug("Running listen game background checks...")
     if not guild_id:
         logger.error("guild_id is not set.")
         return

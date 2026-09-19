@@ -94,6 +94,12 @@ def discord_token() -> str | None:
     return os.getenv('DISCORD_TOKEN')
 
 
+def log_level() -> str:
+    """The logging level (LOG_LEVEL, default INFO). Set it to DEBUG to see the routine background-loop lines."""
+    level = os.getenv('LOG_LEVEL', 'INFO').strip().upper()
+    return level if level in ('DEBUG', 'INFO', 'WARNING', 'ERROR') else 'INFO'
+
+
 def guild_id() -> int | None:
     """The server the bot runs in (DISCORD_GUILD), or None to sync commands globally."""
     value = os.getenv('DISCORD_GUILD')

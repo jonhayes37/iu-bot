@@ -1,6 +1,7 @@
 """Utility module for rendering HTML/CSS templates into images using Playwright."""
 
 import asyncio
+import contextlib
 import io
 import logging
 import os
@@ -12,31 +13,70 @@ logger = logging.getLogger('iu-bot')
 
 TEMPLATE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-class _BrowserCache:
-    """Lazily launches and caches a single shared Chromium instance for reuse across renders.
+# How long Chromium may sit unused before it is shut down (it holds a few hundred MB of memory)
+BROWSER_IDLE_SECONDS = 300
 
-    A fresh headless Chromium launch costs 1-3 seconds. Renders happen several times per
-    tournament (creation, every round advance, the finale), so one browser is launched
-    lazily and reused for every render instead of relaunching each time.
+class _BrowserCache:
+    """Launches Chromium on demand, shares it between overlapping renders, and closes it when idle.
+
+    A fresh headless Chromium launch costs 1-3 seconds, but renders come in bursts (creation,
+    a round advance, the finale) and then nothing for days. So the browser is kept for
+    BROWSER_IDLE_SECONDS after the last render and shut down after that.
     """
 
     def __init__(self):
         self._playwright = None
         self._browser = None
         self._lock = asyncio.Lock()
+        self._in_use = 0
+        self._idle_timer = None
+        self._close_task = None
 
-    async def get_browser(self):
-        """Returns the shared Chromium instance, launching (or relaunching, if it crashed) it as needed."""
+    @contextlib.asynccontextmanager
+    async def browser(self):
+        """Yields the shared Chromium instance (launching, or relaunching after a crash, as needed)."""
         async with self._lock:
+            if self._idle_timer:
+                self._idle_timer.cancel()
+                self._idle_timer = None
             if self._browser is None or not self._browser.is_connected():
-                if self._playwright is None:
-                    self._playwright = await async_playwright().start()
+                await self._shutdown()
+                self._playwright = await async_playwright().start()
                 self._browser = await self._playwright.chromium.launch(
                     headless=True,
                     args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
                 )
-                logger.info("Launched shared Chromium instance for bracket rendering.")
-        return self._browser
+                logger.info("Launched Chromium for bracket rendering.")
+            self._in_use += 1
+            browser = self._browser
+        try:
+            yield browser
+        finally:
+            self._in_use -= 1
+            if self._in_use == 0:
+                self._idle_timer = asyncio.get_running_loop().call_later(
+                    BROWSER_IDLE_SECONDS, self._start_close)
+
+    def _start_close(self):
+        # Keep a reference so the task isn't garbage collected before it finishes
+        self._close_task = asyncio.create_task(self._close_if_idle())
+
+    async def _close_if_idle(self):
+        async with self._lock:
+            if self._in_use == 0 and self._browser is not None:
+                await self._shutdown()
+                logger.info("Closed idle Chromium.")
+
+    async def _shutdown(self):
+        """Stops the browser and Playwright's driver process, ignoring errors from one that already died."""
+        browser, playwright = self._browser, self._playwright
+        self._browser = self._playwright = None
+        for closer in (browser and browser.close, playwright and playwright.stop):
+            if closer:
+                try:
+                    await closer()
+                except Exception:
+                    logger.debug("Error while shutting down Chromium", exc_info=True)
 
     def invalidate(self):
         """Forces a relaunch on the next render, e.g. after the browser crashed mid-render."""
@@ -71,7 +111,8 @@ async def generate_bracket_image(tournament_id: str) -> io.BytesIO | None:
         viewport_height = max(950, (r1_matches_per_side * 150) + 200)
 
         # Compile the Jinja2 template
-        env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+        # autoescape: entrant names are typed by admins and end up in a page Chromium executes
+        env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
         template = env.get_template('bracket_template.html.j2')
         rendered_html = template.render(context)
 
@@ -101,17 +142,17 @@ async def render_html_to_image(html_content: str, width: int = 2100, height: int
         An io.BytesIO object containing the raw PNG image data, or None if it fails.
     """
     try:
-        browser = await _browser_cache.get_browser()
-        page = await browser.new_page(viewport={"width": width, "height": height})
-        try:
-            # Load the HTML content directly into the browser
-            # wait_until="networkidle" ensures external fonts/images finish loading before the screenshot
-            await page.set_content(html_content, wait_until="networkidle")
+        async with _browser_cache.browser() as browser:
+            page = await browser.new_page(viewport={"width": width, "height": height})
+            try:
+                # Load the HTML content directly into the browser
+                # wait_until="networkidle" ensures external fonts/images finish loading before the screenshot
+                await page.set_content(html_content, wait_until="networkidle")
 
-            # Take the screenshot as a byte array
-            screenshot_bytes = await page.screenshot(type="png")
-        finally:
-            await page.close()
+                # Take the screenshot as a byte array
+                screenshot_bytes = await page.screenshot(type="png")
+            finally:
+                await page.close()
 
         # Wrap it in BytesIO so Discord can consume it directly as a discord.File
         image_buffer = io.BytesIO(screenshot_bytes)

@@ -123,7 +123,8 @@ class IUBot(discord.Client):
         if message.author == self.user:
             return
 
-        if self.user.mentioned_in(message):
+        # Other bots (and webhooks) never get a reply, so two bots can't set each other off
+        if self.user.mentioned_in(message) and not message.author.bot:
             await respond_to_ping(message)
 
         if message.guild:
@@ -141,7 +142,8 @@ class IUBot(discord.Client):
                 # dispatch-news is for bot announcements, so we don't want IU to reply to messages here
                 return
 
-        await check_message_for_replies(message)
+        if not message.author.bot:
+            await check_message_for_replies(message)
 
     async def on_member_join(self, member: discord.Member):
         await add_trainee_role(member)

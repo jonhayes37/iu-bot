@@ -146,7 +146,7 @@ def upsert_merch_item(item_id: str, name: str, description: str, price: int, max
                 description=excluded.description,
                 price=excluded.price,
                 max_per_user=excluded.max_per_user
-        """, (item_id.upper(), name, description, price, max_per_user))
+        """, (item_id.upper(), name, description, price, max_per_user if max_per_user and max_per_user > 0 else None))
 
 
 def get_user_balance(user_id: int) -> int:

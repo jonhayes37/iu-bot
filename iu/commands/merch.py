@@ -1,4 +1,4 @@
-"""Docstring for iu.commands.merch_user"""
+"""Merch Booth commands: browsing, buying, and the admin tools for items and the raffle."""
 import logging
 import random
 import typing
@@ -6,12 +6,11 @@ import typing
 import discord
 
 from config import Channel, EMOJI_WOOYEON_SHOCK, admin_user_id
-from commands.hearts import validate_channel
 from db.merch import (
     get_user_balance, get_user_inventory, get_user_merch_catalog,
     process_purchase, upsert_merch_item, get_all_item_owners, reset_item_inventory
 )
-from utils.validation import admin_only
+from utils.validation import admin_only, validate_channel
 
 logger = logging.getLogger('iu-bot')
 
@@ -42,6 +41,10 @@ async def add_merch(
     if price <= 0:
         await interaction.response.send_message("Price cannot be free!", ephemeral=True)
         return
+
+    # Zero (or less) means no limit, the same as leaving it empty
+    if max_per_user is not None and max_per_user <= 0:
+        max_per_user = None
 
     upsert_merch_item(item_id, name, description, price, max_per_user)
 

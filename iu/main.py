@@ -4,13 +4,13 @@ import logging
 import signal
 
 from bot import IUBot
-from config import discord_token
+from config import discord_token, log_level
 from db.initialize import initialize_databases
 
 
 def main():
     """Sets up the databases and runs the bot until it is stopped."""
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=log_level())
 
     # Graceful shutdown from docker stop
     signal.signal(signal.SIGTERM, lambda *_: signal.raise_signal(signal.SIGINT))

@@ -39,7 +39,7 @@ Deploying, Unraid and logs are covered in [docs/playbook.md](docs/playbook.md). 
 
 ## Environment
 
-Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `DISCORD_GUILD`, `HALLYU_ID` (the admin's user ID), `TOKEN_DIR` (path to the YouTube OAuth `token.json`), and one `DB_PATH_<NAME>` per `Database` member (BIASES, BOT, HALL_OF_FAME, HMAS, LISTEN_GAME, LISTS, MERCH, RELEASES, ROLES, TOP_SONGS, TOURNAMENTS). The Dockerfile sets the DB paths under `/app/data`. `.env`, `credentials.json`, and `token.json` are gitignored; never commit them. Nothing loads `.env` inside the container; the values come from the container's environment.
+Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `DISCORD_GUILD`, `HALLYU_ID` (the admin's user ID), `TOKEN_DIR` (path to the YouTube OAuth `token.json`), optional `LOG_LEVEL` (default INFO), and one `DB_PATH_<NAME>` per `Database` member (BIASES, BOT, HALL_OF_FAME, HMAS, LISTEN_GAME, LISTS, MERCH, RELEASES, ROLES, TOP_SONGS, TOURNAMENTS). The Dockerfile sets the DB paths under `/app/data`. `.env`, `credentials.json`, and `token.json` are gitignored; never commit them. Nothing loads `.env` inside the container; the values come from the container's environment.
 
 ## Conventions and gotchas
 
@@ -64,8 +64,10 @@ Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `D
 - Admin slash commands take `@admin_only` (from `utils/validation.py`) directly under `@app_commands.command`. It hides the command from non-admins **and** rejects them at run time; `default_permissions` alone is only a UI default that server admins can override in Integrations. GM and Player commands use `@app_commands.checks.has_role(Role.X)`.
 - `services/listen_game_playlist.py` is the one place that adds a submission to a round's YouTube playlist (used by both `submit_song` and GM `force-submit`). Its YouTube calls run via `asyncio.to_thread`, so both commands hold `SUBMISSION_LOCK` for the whole check-claimed / update-playlist / save sequence; keep any new code that writes submissions inside that lock.
 - When a user's text may be long (list echoes, exports), attach it with `utils.discord_files.text_file` rather than pasting it into a message (2000 character limit).
-- `ui/bracket_renderer.py` keeps one shared Chromium instance for the process lifetime; the Docker image needs Playwright's Chromium installed.
-- `ui/test_render.py` is a manual script that builds `preview.html` from the Jinja template. It is **not** a pytest test.
+- `ui/bracket_renderer.py` launches Chromium on demand, shares it between overlapping renders and closes it after 5 idle minutes (`BROWSER_IDLE_SECONDS`), so it uses no memory between tournament renders. The Docker image needs Playwright's Chromium installed.
+- **Logging:** routine per-tick lines in background loops are `DEBUG`; log at `INFO` only when something happens (a reminder sent, a match resolved). `LOG_LEVEL=DEBUG` on the container shows the routine lines again.
+- `scripts/render_bracket_preview.py` (outside the package, so it isn't linted, covered or shipped) builds a git-ignored `preview.html` from the bracket template for a look in a browser. It is **not** a pytest test.
+- **Validate what admins type.** Hex colours go through `utils.validation.parse_colour` (range-checked), and image file names must be plain names of files in `iu/media/images` (`commands/biases._check_style`); never join user text into a path. The bracket template is rendered with `autoescape=True`. Free-text slash command options that users can fill should have a length limit (`app_commands.Range[str, 1, N]`).
 
 ## Testing
 
@@ -77,7 +79,6 @@ Still to do when adding the first tests:
 
 - Create a `tests/` directory and add `testpaths = ["tests"]` to `[tool.pytest.ini_options]` (adding it before the directory exists only produces a warning).
 - Add `addopts = "--import-mode=importlib"` to `[tool.pytest.ini_options]` (see layout below).
-- Move `iu/ui/test_render.py` out of the package (e.g. `scripts/`): it is a manual script that pytest would try to collect.
 - CI currently fails by design: with no tests pytest exits non-zero (no tests ran) and coverage is far below the 80% gate.
 
 ### Test layout

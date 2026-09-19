@@ -118,6 +118,7 @@ the playbook).
 | `TOKEN_DIR` | Optional | `/app/data/token.json` | The full path of the YouTube token file (despite the name, it is a file path) |
 | `DB_PATH_<NAME>` | Optional | `/app/data/<name>.db` | Where each database lives (11 of them, listed in [databases.md](databases.md)). An unset one is skipped at startup and its features fail |
 | `DATA_DIR` | No | `/app/data` | Only used by the image to build the paths above |
+| `LOG_LEVEL` | Optional | `INFO` | `DEBUG` also shows the routine "checking..." lines the background loops write every minute, 5 minutes or hour. Use it only while investigating |
 | `PYTHONUNBUFFERED` | No | `1` | Makes log lines appear immediately |
 
 So in practice you set `DISCORD_TOKEN` and `DISCORD_GUILD`, and map a folder on the host to

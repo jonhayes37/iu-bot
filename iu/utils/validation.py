@@ -25,6 +25,18 @@ async def validate_channel(interaction: discord.Interaction, channel: str) -> bo
     return False
 
 
+_HEX_COLOUR = re.compile(r'(?:#|0x)?([0-9a-f]{1,6})', re.IGNORECASE)
+
+
+def parse_colour(text: str) -> int | None:
+    """
+    Turns "ff4980", "#ff4980" or "0xff4980" into an embed colour. Returns None if it isn't a hex colour
+    from 0 to ffffff (Discord rejects anything bigger when the embed is shown).
+    """
+    match = _HEX_COLOUR.fullmatch(text.strip())
+    return int(match.group(1), 16) if match else None
+
+
 def sanitize_list(raw_text: str, expected_count: int) -> tuple[bool, str, str, str]:
     """
     Parses the raw modal text for Top 25 and HMs.

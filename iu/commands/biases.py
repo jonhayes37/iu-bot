@@ -1,5 +1,6 @@
 """Commands for bias embeds"""
 import typing
+from pathlib import Path
 
 import discord
 from discord import app_commands
@@ -8,7 +9,45 @@ from db.biases import (
     create_artist_bias_db, create_ultimate_bias_db, get_artist_bias, get_ultimate_bias,
     update_artist_bias_db, update_ultimate_bias_db
 )
-from utils.validation import admin_only
+from utils.validation import admin_only, parse_colour
+
+IMAGES_DIR = MEDIA_DIR / "images"
+BAD_COLOUR_TEXT = "Invalid hex colour. Please use a format like `ff4980`, `#ff4980`, or `0xff4980`."
+
+
+def _image_exists(filename: str) -> bool:
+    """True if the name is a plain file name inside the images folder (no folders, no `..`)."""
+    return Path(filename).name == filename and (IMAGES_DIR / filename).is_file()
+
+
+def _image_file(filename: str) -> discord.File | None:
+    """The image as an attachment, or None if it is missing or isn't a plain file name."""
+    if not _image_exists(filename):
+        return None
+    return discord.File(IMAGES_DIR / filename, filename=filename)
+
+
+async def _check_style(interaction: discord.Interaction, colour_hex: str | None,
+                       image_filename: str | None) -> tuple[bool, int | None]:
+    """
+    Validates the optional colour and image name from a create/update command. Returns
+    (ok, colour); when not ok the error has already been sent to the admin.
+    """
+    colour = None
+    if colour_hex is not None:
+        colour = parse_colour(colour_hex)
+        if colour is None:
+            await interaction.response.send_message(BAD_COLOUR_TEXT, ephemeral=True)
+            return False, None
+
+    if image_filename is not None and not _image_exists(image_filename):
+        await interaction.response.send_message(
+            f"❌ There is no image called `{image_filename}` in the images folder. Use just the file name.",
+            ephemeral=True)
+        return False, None
+
+    return True, colour
+
 
 @app_commands.command(name='my-ultimate-bias', description="See who everyone's ultimate bias is!")
 @app_commands.describe(member='The member whose bias you want to see. Leave empty for your own.')
@@ -27,11 +66,9 @@ async def ultimate_bias(interaction: discord.Interaction, member: typing.Optiona
                 ephemeral=True)
         return
 
-    # Build the embed using the DB column names
     filename = bias_info['image_filename']
-    try:
-        bias_image = discord.File(MEDIA_DIR / "images" / filename, filename=filename)
-    except FileNotFoundError:
+    bias_image = _image_file(filename)
+    if bias_image is None:
         # Failsafe just in case the DB has a typo or the image was deleted from Unraid
         await interaction.response.send_message(f"Error: Could not find image file `{filename}` on the server.",
                                                 ephemeral=True)
@@ -85,15 +122,8 @@ async def create_ultimate_bias(
 ):
     """Creates a new ultimate bias entry directly from command arguments."""
 
-    # Parse the hex string into an integer for the embed color
-    try:
-        clean_hex = colour_hex.replace("#", "").replace("0x", "")
-        colour_int = int(clean_hex, 16)
-    except ValueError:
-        await interaction.response.send_message(
-            "Invalid hex colour. Please use a format like `ff4980`, `#ff4980`, or `0xff4980`.", 
-            ephemeral=True
-        )
+    ok, colour_int = await _check_style(interaction, colour_hex, image_filename)
+    if not ok:
         return
 
     # Write to the DB
@@ -162,17 +192,11 @@ async def update_ultimate_bias(
     }
     updates = {k: v for k, v in provided_args.items() if v is not None}
 
-    # Handle the hex color parsing if it was provided
-    if colour_hex is not None:
-        try:
-            clean_hex = colour_hex.replace("#", "").replace("0x", "")
-            updates['colour'] = int(clean_hex, 16)
-        except ValueError:
-            await interaction.response.send_message(
-                "Invalid hex colour. Please use a format like `ff4980`, `#ff4980`, or `0xff4980`.", 
-                ephemeral=True
-            )
-            return
+    ok, colour_int = await _check_style(interaction, colour_hex, image_filename)
+    if not ok:
+        return
+    if colour_int is not None:
+        updates['colour'] = colour_int
 
     if not updates:
         await interaction.response.send_message(
@@ -224,11 +248,8 @@ async def create_bias_group(
     image_filename: str,
     reason: str
 ):
-    try:
-        clean_hex = colour_hex.replace("#", "").replace("0x", "")
-        colour_int = int(clean_hex, 16)
-    except ValueError:
-        await interaction.response.send_message("❌ Invalid hex colour.", ephemeral=True)
+    ok, colour_int = await _check_style(interaction, colour_hex, image_filename)
+    if not ok:
         return
 
     success = create_artist_bias_db(
@@ -271,13 +292,11 @@ async def update_bias_group(
     }
     updates = {k: v for k, v in provided_args.items() if v is not None}
 
-    if colour_hex is not None:
-        try:
-            clean_hex = colour_hex.replace("#", "").replace("0x", "")
-            updates['colour'] = int(clean_hex, 16)
-        except ValueError:
-            await interaction.response.send_message("❌ Invalid hex colour.", ephemeral=True)
-            return
+    ok, colour_int = await _check_style(interaction, colour_hex, image_filename)
+    if not ok:
+        return
+    if colour_int is not None:
+        updates['colour'] = colour_int
 
     if not updates:
         await interaction.response.send_message("⚠️ You didn't provide any fields to update!", ephemeral=True)
@@ -310,12 +329,11 @@ async def bias_group(interaction: discord.Interaction, member: typing.Optional[d
         return
 
     filename = bias_info['image_filename']
-    try:
-        bias_image = discord.File(MEDIA_DIR / "images" / filename, filename=filename)
-    except FileNotFoundError:
-        await interaction.response.send_message(
-            f"Error: Could not find image file `{filename}` on the server.",
-            ephemeral=True)
+    bias_image = _image_file(filename)
+    if bias_image is None:
+        # Failsafe just in case the DB has a typo or the image was deleted from Unraid
+        await interaction.response.send_message(f"Error: Could not find image file `{filename}` on the server.",
+                                                ephemeral=True)
         return
 
     embed = discord.Embed(

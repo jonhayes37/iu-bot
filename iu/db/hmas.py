@@ -59,14 +59,18 @@ def get_yearly_export_data(award_year: int) -> dict[str, dict[str, list[tuple[in
         return results
 
 
-def set_final_nominees(category_id: str, nominees: list[str]) -> int:
+def set_final_nominees(category_id: str, nominees: list[str]) -> int | None:
     """
     Wipes any existing final nominees for the given category/year
-    and inserts the new vetted list.
+    and inserts the new vetted list. Returns the award year, or None if there is no such category.
     """
     award_year = get_current_award_year()
     with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
+
+        cursor.execute("SELECT 1 FROM hma_categories WHERE category_id = ?", (category_id,))
+        if cursor.fetchone() is None:
+            return None
 
         # Clear out the old list
         cursor.execute("""

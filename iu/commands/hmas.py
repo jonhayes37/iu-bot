@@ -11,6 +11,12 @@ from ui.hma_suggestions import HMASuggestionsHub
 from utils.end_of_year import get_current_award_year
 from utils.validation import admin_only
 
+# Long enough for a song title, artist and a YouTube link; the nominee is echoed in messages and embed fields
+MAX_NOMINEE_LENGTH = 300
+
+# A Discord select menu holds at most 25 options, and the voting menu lists every nominee
+MAX_NOMINEES_PER_CATEGORY = 25
+
 
 def build_dropdown(family_id: str) -> list[discord.app_commands.Choice[str]]:
     """Helper function to fetch DB rows and convert them to Discord Choices."""
@@ -23,7 +29,8 @@ def build_dropdown(family_id: str) -> list[discord.app_commands.Choice[str]]:
 @discord.app_commands.describe(
     nominee="Who or what are you nominating? (e.g., 'IVE - HEYA', a YouTube link)"
 )
-async def hma_nomination(interaction: discord.Interaction, nominee: str):
+async def hma_nomination(interaction: discord.Interaction,
+                         nominee: discord.app_commands.Range[str, 1, MAX_NOMINEE_LENGTH]):
     """The Discord command logic for multi-category HMA nominations."""
 
     view = MultiNominationView(nominee)
@@ -96,7 +103,22 @@ async def hma_set_nominees(interaction: discord.Interaction, category_id: str, n
         await interaction.followup.send("❌ No valid nominees found. Check your formatting.")
         return
 
+    if len(nominees) > MAX_NOMINEES_PER_CATEGORY:
+        await interaction.followup.send(
+            f"❌ You gave {len(nominees)} nominees, but a voting menu holds at most "
+            f"{MAX_NOMINEES_PER_CATEGORY}. Shorten the list and try again.")
+        return
+
+    if len(set(nominees)) != len(nominees):
+        await interaction.followup.send("❌ The list has the same nominee more than once.")
+        return
+
     year = set_final_nominees(category_id, nominees)
+    if year is None:
+        await interaction.followup.send(
+            f"❌ There is no category called `{category_id}`. Category IDs are listed in the "
+            "`hma_categories` table.")
+        return
 
     # Format the output for a clean visual confirmation
     formatted_list = "\n".join([f"• {name}" for name in nominees])

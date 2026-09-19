@@ -23,7 +23,7 @@ async def end_of_year_nominations(interaction: discord.Interaction):
             "It's that time of year again! Use the buttons below to submit your ballots at your own pace.\n\n"
             "**1. Top 25 Songs:** Submit your ranked list and 3 honourable mentions.\n"
             "**2. HallyU Hall of Fame:** Nominate the K-Pop legends who deserve to be in our "
-            "2026 class of inductees!\n\n"
+            f"{year} class of inductees!\n\n"
             "*You can click these buttons as many times as you want to edit your submissions before the deadline!*"
         ),
         color=discord.Color.gold()

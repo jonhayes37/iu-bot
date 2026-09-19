@@ -102,7 +102,7 @@ async def listen_game_start(interaction: discord.Interaction):
     players = get_registered_players_db(game.game_id)
     if len(players) < 2:
         await interaction.response.send_message(
-            f"❌ You need at least 3 players to start! Currently have {len(players)}.", ephemeral=True)
+            f"❌ You need at least 2 players to start! Currently have {len(players)}.", ephemeral=True)
         return
 
     # Now returns the full shuffled list of IDs
