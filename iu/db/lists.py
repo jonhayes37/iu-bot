@@ -1,18 +1,16 @@
 """Database logic for list events and submissions."""
 
 import logging
-import os
 import sqlite3
+from config import Database
 from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
-DB_PATH_LISTS = os.getenv('DB_PATH_LISTS')
-
 def create_new_event(event_id: str, event_name: str, expected_count: int, placeholder: str) -> bool:
     """Inserts a new list event into the database."""
     try:
-        with db_connection(DB_PATH_LISTS) as conn:
+        with db_connection(Database.LISTS) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO list_events (event_id, event_name, expected_count, placeholder_text, is_active)
@@ -29,7 +27,7 @@ def create_new_event(event_id: str, event_name: str, expected_count: int, placeh
 def get_event_details(event_id: str) -> dict | None:
     """Fetches the configuration for a specific event."""
     try:
-        with db_connection(DB_PATH_LISTS, row_factory=True) as conn:
+        with db_connection(Database.LISTS, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM list_events WHERE event_id = ?", (event_id,))
             row = cursor.fetchone()
@@ -41,7 +39,7 @@ def get_event_details(event_id: str) -> dict | None:
 def close_event(event_id: str) -> bool:
     """Marks an event as inactive so no more submissions are accepted."""
     try:
-        with db_connection(DB_PATH_LISTS) as conn:
+        with db_connection(Database.LISTS) as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE list_events SET is_active = 0 WHERE event_id = ?", (event_id,))
             return cursor.rowcount > 0
@@ -52,7 +50,7 @@ def close_event(event_id: str) -> bool:
 def save_submission(event_id: str, user_id: int, username: str, raw_text: str, cleaned_text: str, urls: str) -> bool:
     """Saves or updates a user's list submission."""
     try:
-        with db_connection(DB_PATH_LISTS) as conn:
+        with db_connection(Database.LISTS) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO list_submissions
@@ -67,7 +65,7 @@ def save_submission(event_id: str, user_id: int, username: str, raw_text: str, c
 def get_all_submissions(event_id: str) -> list[dict]:
     """Fetches all submissions for an event to be exported."""
     try:
-        with db_connection(DB_PATH_LISTS, row_factory=True) as conn:
+        with db_connection(Database.LISTS, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM list_submissions WHERE event_id = ?", (event_id,))
             return [dict(row) for row in cursor.fetchall()]
@@ -78,7 +76,7 @@ def get_all_submissions(event_id: str) -> list[dict]:
 def set_event_message_id(event_id: str, message_id: str) -> bool:
     """Links the Discord message ID to the event for easy closing later."""
     try:
-        with db_connection(DB_PATH_LISTS) as conn:
+        with db_connection(Database.LISTS) as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE list_events SET message_id = ? WHERE event_id = ?", (message_id, event_id))
             return cursor.rowcount > 0
@@ -89,7 +87,7 @@ def set_event_message_id(event_id: str, message_id: str) -> bool:
 def get_user_submission(event_id: str, user_id: int) -> str | None:
     """Fetches a user's previous raw submission text if it exists."""
     try:
-        with db_connection(DB_PATH_LISTS) as conn:
+        with db_connection(Database.LISTS) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT raw_text FROM list_submissions WHERE event_id = ? AND user_id = ?",
                            (event_id, user_id))

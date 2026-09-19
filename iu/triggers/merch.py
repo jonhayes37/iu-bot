@@ -1,13 +1,10 @@
 """
 Docstring for iu.triggers.merch
 """
-import os
-import sqlite3
-
 import discord
+from config import Channel, Database, HEART_EMOJI_NAMES
+from db.connection import db_connection
 from db.merch import process_daily_heart, process_milestone_award
-
-DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
 
 
 # Handle emoji reactions
@@ -24,12 +21,12 @@ async def handle_reaction_add(payload, client):
     except discord.NotFound:
         return
 
-    dispatch_channel = discord.utils.get(message.guild.text_channels, name='dispatch-news')
+    dispatch_channel = discord.utils.get(message.guild.text_channels, name=Channel.DISPATCH_NEWS)
 
     # =================
     # Daily Heart Award
     # =================
-    if payload.emoji.name in ("aGiveHeart", "giveHeart"):
+    if payload.emoji.name in HEART_EMOJI_NAMES:
         sender_id = payload.user_id
         receiver_id = message.author.id
 
@@ -45,7 +42,7 @@ async def handle_reaction_add(payload, client):
     total_reactions = sum(r.count for r in message.reactions)
     if total_reactions >= 5:
         # Check if already paid
-        with sqlite3.connect(DB_PATH_MERCH) as conn:
+        with db_connection(Database.MERCH) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT paid_out FROM milestone_messages WHERE message_id = ?", (message.id,))
             if cursor.fetchone():

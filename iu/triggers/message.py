@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import discord
+from config import EMOJI_BLACKPINK, EMOJI_IU_PRAY, MEDIA_DIR, UHM_JUNG_HWA_FAN_USER_ID
 
 TRIGGER_LIST = {
     '2am': [{ 'content': 'Me most nights at 2am', 'filename': 'drunk.gif' }],
@@ -21,9 +22,9 @@ TRIGGER_LIST = {
     'flute': [{ 'filename': 'nctSticker.gif' }],
     'genie': [{ 'content': 'Tell me your wish!',
               'filename': 'genie.gif'}],
-    'in my area': [{ 'content': '<:blackpink:795873701177589761> in your area!',
+    'in my area': [{ 'content': f'{EMOJI_BLACKPINK} in your area!',
                    'filename': 'blackpink.gif'}],
-    'in your area': [{ 'content': '<:blackpink:795873701177589761> in your area!',
+    'in your area': [{ 'content': f'{EMOJI_BLACKPINK} in your area!',
                      'filename': 'blackpink.gif'}],
     'just right': [{ 'content': 'Sorry not sorry.',
                    'filename': 'cream.gif' }],
@@ -61,8 +62,8 @@ TRIGGER_LIST = {
                    'filename': 'veryNice.gif' }],
     '아주 nice': [{ 'content': '아주 nice!',
                   'filename': 'veryNice.gif' }],
-    'uhm jung hwa': [{ 'content': '엄정화 detected - paging <@330890965881585665>!' }],
-    '엄정화': [{ 'content': '엄정화 detected - paging <@330890965881585665>!' }],
+    'uhm jung hwa': [{ 'content': f'엄정화 detected - paging <@{UHM_JUNG_HWA_FAN_USER_ID}>!' }],
+    '엄정화': [{ 'content': f'엄정화 detected - paging <@{UHM_JUNG_HWA_FAN_USER_ID}>!' }],
     'winter': [{ 'filename': 'winter.gif' }],
     'fighting': [{ 'filename': 'fighting.gif' }],
     '화이팅': [{ 'filename': 'fighting.gif' }],
@@ -112,7 +113,7 @@ TRIGGER_LIST = {
     'preach': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
     'preacher': [{'content': 'Praise be', 'filename': 'cha_eunwoo_preacher.gif'}],
     'preacher_is_saturday_currently': [{
-        'content': "It actually _IS_ Saturday! Thank you father <:iuPray:1456031268494905428>",
+        'content': f"It actually _IS_ Saturday! Thank you father {EMOJI_IU_PRAY}",
     'filename': 'cha_eunwoo_preacher_saturday.gif'}],
     'generation': [{'content': '_La, la-la, la, la-la, la, la-la_', 'filename': 'triples_generation.gif'}], 
     'asap': [{'filename': 'stayc_asap.gif'}],
@@ -128,7 +129,7 @@ TRIGGER_LIST = {
 async def reply_with_gif(incoming, content, filename):
     if filename is not None:
         media_dir = 'gifs' if filename.endswith('.gif') else 'images'
-        new_file = discord.File(f'iu/media/{media_dir}/{filename}', filename=filename)
+        new_file = discord.File(MEDIA_DIR / media_dir / filename, filename=filename)
         await incoming.reply(content, file=new_file)
     else:
         await incoming.reply(content)

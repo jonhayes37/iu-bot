@@ -3,6 +3,7 @@ import logging
 
 import discord
 from discord.ui import View, Select, Modal, TextInput, Button
+from config import Role
 from db.listen_game import (
     SaveResult, get_game_by_status_db, register_player_db, save_round_results_db,
     unregister_player_db, get_registered_players_db, set_round_theme_db,
@@ -48,7 +49,7 @@ class JoinGameView(discord.ui.View):
 
         # Handle backend role assignment
         if interaction.guild and isinstance(interaction.user, discord.Member):
-            target_role = discord.utils.get(interaction.guild.roles, name="Listen Game Player")
+            target_role = discord.utils.get(interaction.guild.roles, name=Role.LISTEN_GAME_PLAYER)
             if target_role and target_role not in interaction.user.roles:
                 try:
                     await interaction.user.add_roles(target_role)
@@ -143,7 +144,7 @@ class SetThemeModal(discord.ui.Modal, title='Set Listen Game Ruleset'):
         embed.set_footer(text="Use `/listen-game-submit-song` to submit your track!")
 
         # Listen Game Player role is hardcoded here
-        target_role = discord.utils.get(interaction.guild.roles, name="Listen Game Player")
+        target_role = discord.utils.get(interaction.guild.roles, name=Role.LISTEN_GAME_PLAYER)
         role_mention = target_role.mention if target_role else ""
 
         if self.ruleset_msg_id:

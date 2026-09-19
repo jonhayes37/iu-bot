@@ -2,6 +2,7 @@
 
 import asyncio
 import discord
+from config import Channel
 from db.tournaments import create_tournament, force_close_active_round
 from ui.bracket_renderer import generate_bracket_image
 from tasks.tournaments import post_round_polls
@@ -46,7 +47,7 @@ async def new_tournament(interaction: discord.Interaction, title: str, descripti
 
     # Generate the bracket image and post it to the #tournaments channel
     image_buffer = await generate_bracket_image(t_id)
-    tournaments_channel = discord.utils.get(interaction.guild.text_channels, name="tournaments")
+    tournaments_channel = discord.utils.get(interaction.guild.text_channels, name=Channel.TOURNAMENTS)
     bracket_file = discord.File(fp=image_buffer, filename=f"bracket_{t_id}.png")
     msg = (
         f"🏆 **{title} has begun!** 🏆\n"

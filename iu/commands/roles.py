@@ -2,6 +2,7 @@
 
 import logging
 import discord
+from config import Channel
 from db.roles import (
     get_all_roles_grouped, get_display_message_ids, register_new_role,
     replace_display_message_ids
@@ -29,7 +30,7 @@ async def register_role(
         return
 
     # Trigger a UI sync
-    roles_channel = discord.utils.get(interaction.guild.text_channels, name='roles')
+    roles_channel = discord.utils.get(interaction.guild.text_channels, name=Channel.ROLES)
     if roles_channel:
         await _sync_roles_display(roles_channel)
         await interaction.followup.send(
@@ -46,7 +47,7 @@ async def sync_roles(
     interaction: discord.Interaction
 ):
     """Edits, adds, or deletes messages in the #roles channel to match the DB."""
-    roles_channel = discord.utils.get(interaction.guild.text_channels, name='roles')
+    roles_channel = discord.utils.get(interaction.guild.text_channels, name=Channel.ROLES)
     if not roles_channel:
         return
 

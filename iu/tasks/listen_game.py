@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import discord
 from discord.ext import tasks
 
+from config import Channel
 from db.listen_game import (
     get_missing_players_for_reminders_db, update_last_reminded_db, get_expired_rounds_db,
     close_round_db, get_revealing_round_ids_db
@@ -25,7 +26,7 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
         logger.error("Could not find guild with ID: %s", guild_id)
         return
 
-    channel = discord.utils.get(guild.text_channels, name='listen-game')
+    channel = discord.utils.get(guild.text_channels, name=Channel.LISTEN_GAME)
     if not channel:
         logger.error("Could not find #listen-game channel.")
         return

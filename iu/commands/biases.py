@@ -3,6 +3,7 @@ import typing
 
 import discord
 from discord import app_commands
+from config import MEDIA_DIR
 from db.biases import (
     create_artist_bias_db, create_ultimate_bias_db, get_artist_bias, get_ultimate_bias,
     update_artist_bias_db, update_ultimate_bias_db
@@ -28,7 +29,7 @@ async def ultimate_bias(interaction: discord.Interaction, member: typing.Optiona
     # Build the embed using the DB column names
     filename = bias_info['image_filename']
     try:
-        bias_image = discord.File(f"iu/media/images/{filename}", filename=filename)
+        bias_image = discord.File(MEDIA_DIR / "images" / filename, filename=filename)
     except FileNotFoundError:
         # Failsafe just in case the DB has a typo or the image was deleted from Unraid
         await interaction.response.send_message(f"Error: Could not find image file `{filename}` on the server.",
@@ -309,7 +310,7 @@ async def bias_group(interaction: discord.Interaction, member: typing.Optional[d
 
     filename = bias_info['image_filename']
     try:
-        bias_image = discord.File(f"iu/media/images/{filename}", filename=filename)
+        bias_image = discord.File(MEDIA_DIR / "images" / filename, filename=filename)
     except FileNotFoundError:
         await interaction.response.send_message(
             f"Error: Could not find image file `{filename}` on the server.",

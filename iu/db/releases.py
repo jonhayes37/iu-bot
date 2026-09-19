@@ -1,19 +1,17 @@
 """Triggers related to parsing new releases from messages and storing them in the database."""
 
 import sqlite3
-import os
 import logging
 from datetime import datetime
+from config import Database
 from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
-DB_PATH_RELEASES = os.getenv('DB_PATH_RELEASES')
-
 def add_new_release(video_id: str, original_url: str, message_id: str, msg_time: datetime) -> bool:
     """Inserts a parsed YouTube release into the database. Returns True if successful, False if it was a duplicate."""
     try:
-        with db_connection(DB_PATH_RELEASES) as conn:
+        with db_connection(Database.RELEASES) as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
@@ -35,13 +33,13 @@ def add_new_release(video_id: str, original_url: str, message_id: str, msg_time:
 
 def mark_release_processed(video_id: str):
     """Marks a video as successfully added to YouTube so it isn't processed again."""
-    with db_connection(DB_PATH_RELEASES) as conn:
+    with db_connection(Database.RELEASES) as conn:
         conn.execute("UPDATE new_releases SET processed = 1 WHERE video_id = ?", (video_id,))
         conn.commit()
 
 def get_playlist_id_for_year(year: int) -> str | None:
     """Checks the database to see if a playlist for the target year already exists."""
-    with db_connection(DB_PATH_RELEASES) as conn:
+    with db_connection(Database.RELEASES) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT playlist_id FROM youtube_playlists WHERE year = ?", (year,))
         row = cursor.fetchone()
@@ -49,7 +47,7 @@ def get_playlist_id_for_year(year: int) -> str | None:
 
 def save_new_playlist(year: int, playlist_id: str):
     """Saves a newly created YouTube playlist ID to the database."""
-    with db_connection(DB_PATH_RELEASES) as conn:
+    with db_connection(Database.RELEASES) as conn:
         conn.execute(
             "INSERT INTO youtube_playlists (year, playlist_id) VALUES (?, ?)",
             (year, playlist_id)

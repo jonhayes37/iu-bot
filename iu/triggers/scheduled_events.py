@@ -3,6 +3,7 @@ import re
 import datetime
 import logging
 import discord
+from config import Channel, Role
 
 logger = logging.getLogger('iu-bot')
 
@@ -49,12 +50,12 @@ async def process_event(event: discord.ScheduledEvent, is_update: bool):
 
     # Only announce if it's a new event creation
     if not is_update:
-        channel = discord.utils.get(event.guild.text_channels, name='community-events')
+        channel = discord.utils.get(event.guild.text_channels, name=Channel.COMMUNITY_EVENTS)
         if not channel:
             logger.error("Could not find #community-events channel.")
             return
 
-        role = discord.utils.get(event.guild.roles, name='Watch Parties')
+        role = discord.utils.get(event.guild.roles, name=Role.WATCH_PARTIES)
         if not role:
             logger.error("Could not find Watch Parties role.")
             return

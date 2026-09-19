@@ -2,6 +2,7 @@
 import logging
 from datetime import datetime, timezone
 import discord
+from config import Channel
 from triggers.releases import store_new_release
 
 logger = logging.getLogger('iu-bot')
@@ -12,7 +13,7 @@ logger = logging.getLogger('iu-bot')
 @discord.app_commands.default_permissions(administrator=True)
 async def backfill_releases(interaction: discord.Interaction, start_date: str):
     """Scans the channel history from a given YYYY-MM-DD date to now and processes releases."""
-    channel = discord.utils.get(interaction.guild.text_channels, name='new-releases')
+    channel = discord.utils.get(interaction.guild.text_channels, name=Channel.NEW_RELEASES)
     if not channel:
         return await interaction.response.send_message("Could not find the #new-releases channel.", ephemeral=True)
 

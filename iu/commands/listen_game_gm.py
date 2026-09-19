@@ -8,6 +8,7 @@ import typing
 import discord
 from discord import app_commands
 
+from config import Channel, Role
 from db.listen_game import (
     create_game_db, start_game_db,
     get_game_by_status_db, get_current_round_db, get_round_submissions_db,
@@ -36,10 +37,10 @@ logger = logging.getLogger('iu-bot')
     substitute_gm="The backup GM to run your turn when you are the listener.",
     max_round_days="Optional: Auto-close rounds after X days if players haven't submitted."
 )
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_create(interaction: discord.Interaction, substitute_gm: discord.Member,
                              max_round_days: typing.Optional[int] = None):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -54,7 +55,7 @@ async def listen_game_create(interaction: discord.Interaction, substitute_gm: di
             ephemeral=True)
         return
 
-    player_role = discord.utils.get(interaction.guild.roles, name='Listen Game Player')
+    player_role = discord.utils.get(interaction.guild.roles, name=Role.LISTEN_GAME_PLAYER)
     deadline_text = f"**Max Round Duration:** {max_round_days} Days" if max_round_days \
         else "**Max Round Duration:** None (GM Managed)"
 
@@ -69,9 +70,9 @@ async def listen_game_create(interaction: discord.Interaction, substitute_gm: di
                                             embed=embed, view=JoinGameView())
 
 @app_commands.command(name="listen-game-start", description="[GM] Close registration and officially start the game.")
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_start(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -127,9 +128,9 @@ async def listen_game_start(interaction: discord.Interaction):
 
 @app_commands.command(name="listen-game-gm-sync-playlist",
                       description="[GM] Syncs DB submissions with the YouTube playlist.")
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -215,9 +216,9 @@ def _sync_missing_videos(playlist_id: str, missing_vids: list[dict]) -> tuple[in
     player="The player whose song you are rejecting.",
     reason="The reason for rejection (sent to the player)."
 )
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_reject_song(interaction: discord.Interaction, player: discord.Member, reason: str):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -277,9 +278,9 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
     player="The listener whose turn you are skipping.",
     reason="The reason for skipping (sent to the player)."
 )
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: discord.Member, reason: str):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -351,9 +352,9 @@ async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: dis
     player="The player to remove.",
     reason="The reason for removal (sent to the player)."
 )
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_remove_player(interaction: discord.Interaction, player: discord.Member, reason: str):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -447,7 +448,7 @@ async def listen_game_gm_remove_player(interaction: discord.Interaction, player:
 @app_commands.command(name="listen-game-gm-force-start-round",
                       description="[GM] Force start ranking phase by explicitly skipping outstanding players.")
 @app_commands.describe(skipped_users="Tag the exact users you are skipping (e.g., @User1 @User2).")
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_force_start_round(interaction: discord.Interaction, skipped_users: str):
     """
     Forcefully advances a round to the ranking phase.
@@ -455,7 +456,7 @@ async def listen_game_gm_force_start_round(interaction: discord.Interaction, ski
     This command requires the GM to explicitly mention all players who have not yet
     submitted. If the mentions do not match the database state, the command fails.
     """
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -539,13 +540,13 @@ async def listen_game_gm_force_start_round(interaction: discord.Interaction, ski
     player="The player you are submitting for.",
     url="The YouTube link to the song."
 )
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_force_submit(interaction: discord.Interaction, player: discord.Member, url: str):
     """
     Forcefully adds a submission for a player, bypassing fuzzy match blocks.
     Updates the live tracker and handles round completion just like a normal submission.
     """
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -666,9 +667,9 @@ async def _process_forced_submission(interaction: discord.Interaction, player: d
 
 @app_commands.command(name="listen-game-gm-approve-playlist",
                       description="[GM] Approve the round's playlist and notify the listener.")
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_approve_playlist(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -759,7 +760,7 @@ async def listen_game_gm_approve_playlist(interaction: discord.Interaction):
     player1="The first player to swap.",
     player2="The second player to swap."
 )
-@app_commands.checks.has_role("Listen Game GM")
+@app_commands.checks.has_role(Role.LISTEN_GAME_GM)
 async def listen_game_gm_swap_players(
     interaction: discord.Interaction,
     player1: discord.Member,

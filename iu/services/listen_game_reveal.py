@@ -18,6 +18,7 @@ import logging
 
 import discord
 
+from config import Role
 from db.listen_game import (
     advance_game_turn_db, get_game_leaderboard_db, get_game_rounds_db, get_next_host_id_db,
     get_round_results_db, get_round_reveal_state_db, set_reveal_step_db
@@ -70,7 +71,7 @@ async def _reveal(channel: discord.TextChannel, round_id: int):
     game_over_step = summary_step + 1
 
     if step < 1:
-        player_role = discord.utils.get(channel.guild.roles, name='Listen Game Player')
+        player_role = discord.utils.get(channel.guild.roles, name=Role.LISTEN_GAME_PLAYER)
         role_text = f"{player_role.mention}, " if player_role else ""
         await channel.send(f"🎧 **{role_text}<@{state['host_id']}> has finished their rankings! "
                            "Here are the results:**")

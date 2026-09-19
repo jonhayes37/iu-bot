@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 import discord
 from discord.ext import tasks
+from config import Channel
 from db.merch import modify_db_balance
 from db.tournaments import (
     check_round_status, get_expired_unresolved_matches, advance_winner,
@@ -59,7 +60,7 @@ async def tournament_resolution_loop(client: discord.Client, guild_id: int):
         logger.error("Could not find guild with ID: %s", guild_id)
         return
 
-    tournaments_channel = discord.utils.get(guild.channels, name="tournaments")
+    tournaments_channel = discord.utils.get(guild.channels, name=Channel.TOURNAMENTS)
     if not tournaments_channel:
         logger.error("Could not find #tournaments channel to resolve polls.")
         return
@@ -179,7 +180,7 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
                 logger.warning("Raffle winner %s is no longer in the guild; mentioning by ID.", winner_id)
                 winner_mention = f"<@{winner_id}>"
 
-            news_channel = discord.utils.get(guild.text_channels, name="dispatch-news")
+            news_channel = discord.utils.get(guild.text_channels, name=Channel.DISPATCH_NEWS)
             if news_channel:
                 msg = (
                     f"{winner_mention} earned **5 hearts** for winning the participation raffle "

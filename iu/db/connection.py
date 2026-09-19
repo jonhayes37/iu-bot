@@ -1,38 +1,36 @@
 """Shared SQLite connection helper for the iu/db/ modules.
 
-Every db/*.py module independently repeated the same shape: open a
-`with sqlite3.connect(DB_PATH_X) as conn:` block (some also guarded it with an
-"is DB_PATH_X even set" check first, others didn't), optionally set
-`conn.row_factory = sqlite3.Row`, then let a try/except around the whole thing handle
-failures. db_connection() centralizes the connect/guard/row_factory steps so each db
-function only needs its own try/except and the query logic that's actually unique to it.
+db_connection() centralizes the connect / "is the path even set" guard / row_factory steps so
+each db function only needs its own try/except and the query logic that's unique to it. The
+database file path is looked up from the environment each time it is called (see config.py).
 """
 
 import contextlib
 import sqlite3
 from typing import Iterator
 
+from config import Database
+
 
 class DatabaseNotConfiguredError(Exception):
-    """Raised when a DB_PATH_* environment variable required for this operation is unset."""
+    """Raised when the DB_PATH_* environment variable for a database is unset."""
 
 
 @contextlib.contextmanager
-def db_connection(db_path: str | None, row_factory: bool = False) -> Iterator[sqlite3.Connection]:
+def db_connection(db: Database, row_factory: bool = False) -> Iterator[sqlite3.Connection]:
     """
-    Opens a sqlite3 connection to db_path, as a drop-in replacement for
-    `with sqlite3.connect(db_path) as conn:`.
+    Opens a sqlite3 connection to the given database, as a drop-in replacement for
+    `with sqlite3.connect(path) as conn:`.
 
     Commits on a clean exit and rolls back on an exception, exactly like the plain
     `with sqlite3.connect(...)` pattern this replaces.
 
-    Raises DatabaseNotConfiguredError if db_path is falsy, so callers can fold that into
-    the same try/except Exception block they already use for every other database error.
+    Raises DatabaseNotConfiguredError if the database's path isn't set, so callers can fold that
+    into the same try/except Exception block they already use for every other database error.
     """
+    db_path = db.path
     if not db_path:
-        raise DatabaseNotConfiguredError(
-            "A DB_PATH_* environment variable is not set for this operation."
-        )
+        raise DatabaseNotConfiguredError(f"{db.env_var} is not set, so the {db.value} database can't be opened.")
 
     with sqlite3.connect(db_path) as conn:
         if row_factory:
@@ -40,7 +38,7 @@ def db_connection(db_path: str | None, row_factory: bool = False) -> Iterator[sq
         yield conn
 
 
-def ensure_column(db_path: str, table: str, column: str, column_type: str) -> None:
+def ensure_column(db: Database, table: str, column: str, column_type: str) -> None:
     """
     Adds `column` to `table` if it doesn't already exist.
 
@@ -50,6 +48,10 @@ def ensure_column(db_path: str, table: str, column: str, column_type: str) -> No
     is there. table/column/column_type must be trusted, hardcoded callers only, never
     user input -- SQLite can't parameterize identifiers in DDL.
     """
+    db_path = db.path
+    if not db_path:
+        raise DatabaseNotConfiguredError(f"{db.env_var} is not set, so the {db.value} database can't be opened.")
+
     with sqlite3.connect(db_path) as conn:
         existing_columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing_columns:

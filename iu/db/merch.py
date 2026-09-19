@@ -1,11 +1,9 @@
 """db/merch.py"""
 from datetime import datetime
-import os
 import zoneinfo
 import sqlite3
+from config import Database
 from db.connection import db_connection
-
-DB_PATH_MERCH = os.getenv('DB_PATH_MERCH')
 
 def ensure_users_exist(cursor: sqlite3.Cursor, *user_ids):
     """
@@ -31,7 +29,7 @@ def process_daily_heart(sender_id: int, receiver_id: int, message_url: str) -> b
     est_zone = zoneinfo.ZoneInfo("America/New_York")
     current_date_str = str(datetime.now(est_zone).date())
 
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
 
         # Check if the sender has already given a heart today
@@ -61,7 +59,7 @@ def process_daily_heart(sender_id: int, receiver_id: int, message_url: str) -> b
 # Processes a message with 5 or more unique people reacting
 def process_milestone_award(message_id: int, author_id: int, message_url: str) -> bool:
     """Checks the state table and awards 3 hearts if not already paid."""
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
 
         # Check idempotency table to prevent duplicate payouts
@@ -90,7 +88,7 @@ def process_milestone_award(message_id: int, author_id: int, message_url: str) -
 
 def modify_db_balance(admin_id: int, target_id: int, amount: int, reason: str):
     """Executes the SQLite transaction to modify a user's balance."""
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
 
         # Ensure the target user is in the database
@@ -113,7 +111,7 @@ def modify_db_balance(admin_id: int, target_id: int, amount: int, reason: str):
 # Add this above your Discord command functions
 def upsert_merch_item(item_id: str, name: str, description: str, price: int, max_per_user: int = None):
     """Inserts a new merch item, or updates it if the item_id already exists."""
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
         # Using SQLite's UPSERT syntax
         cursor.execute("""
@@ -130,7 +128,7 @@ def upsert_merch_item(item_id: str, name: str, description: str, price: int, max
 
 def get_user_balance(user_id: int) -> int:
     """Fetches a user's heart balance. Returns 0 if they don't exist yet."""
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
         row = cursor.fetchone()
@@ -142,7 +140,7 @@ def get_user_balance(user_id: int) -> int:
 
 def get_user_merch_catalog(user_id: int):
     """Fetches the merch catalog and joins it with the user's current inventory."""
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT 
@@ -166,7 +164,7 @@ def process_purchase(user_id: int, item_id: str) -> tuple[bool, str]:
     """
     clean_item_id = item_id.upper()
 
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
         ensure_users_exist(cursor, user_id)
 
@@ -214,7 +212,7 @@ def process_purchase(user_id: int, item_id: str) -> tuple[bool, str]:
 
 def get_user_inventory(user_id: int):
     """Fetches a user's purchased items by joining inventory with the catalog."""
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT m.name, m.item_id, m.description, u.quantity_owned
@@ -231,7 +229,7 @@ def reset_item_inventory(item_id: str) -> int:
     Returns the number of users who had their inventory cleared.
     """
     clean_item_id = item_id.upper()
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
 
         # Delete all records of this item from user_inventory
@@ -244,7 +242,7 @@ def reset_item_inventory(item_id: str) -> int:
 def get_all_item_owners(item_id: str) -> list[tuple[int, int]]:
     """Fetches all users who own a specific item and their quantities."""
     clean_item_id = item_id.upper()
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT user_id, quantity_owned 
@@ -256,7 +254,7 @@ def get_all_item_owners(item_id: str) -> list[tuple[int, int]]:
 def check_user_owns_item(user_id: int, item_id: str) -> bool:
     """Returns True if the user owns at least one of the specified item."""
     clean_item_id = item_id.upper()
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT quantity_owned FROM user_inventory 
@@ -268,7 +266,7 @@ def check_user_owns_item(user_id: int, item_id: str) -> bool:
 def consume_item(user_id: int, item_id: str) -> bool:
     """Deducts one from the user's inventory for the given item. Returns True on success."""
     clean_item_id = item_id.upper()
-    with db_connection(DB_PATH_MERCH) as conn:
+    with db_connection(Database.MERCH) as conn:
         cursor = conn.cursor()
 
         # Verify they actually have it before trying to subtract

@@ -1,18 +1,16 @@
 """Database operations for core bot management."""
 
-import os
 import logging
 from datetime import datetime, timezone, timedelta
+from config import Database
 from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
-DB_PATH_BOT = os.getenv('DB_PATH_BOT')
-
 def save_bot_status_db(status_text: str, days: int) -> bool:
     """Saves a new status to the ledger."""
     try:
-        with db_connection(DB_PATH_BOT) as conn:
+        with db_connection(Database.BOT) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO statuses (status_text, max_duration_days)
@@ -30,7 +28,7 @@ def get_active_bot_status_db() -> str | None:
     Returns None if there are no statuses or if the latest one has expired.
     """
     try:
-        with db_connection(DB_PATH_BOT, row_factory=True) as conn:
+        with db_connection(Database.BOT, row_factory=True) as conn:
             cursor = conn.cursor()
 
             # Grab the absolute latest status

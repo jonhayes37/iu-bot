@@ -10,6 +10,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from config import youtube_token_path
+
 logger = logging.getLogger('iu-bot')
 
 # Robust RegEx that catches standard, mobile, embedded, and shortened YouTube URLs
@@ -17,7 +19,6 @@ YT_REGEX = re.compile(
     r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|'
     r'(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})'
 )
-TOKEN_PATH = os.getenv('TOKEN_DIR')
 
 class QuotaExceededError(Exception):
     """Exception raised when the YouTube Data API quota limit is reached."""
@@ -43,11 +44,12 @@ class _YouTubeServiceCache:
         if service is not None:
             return service
 
-        if not os.path.exists(TOKEN_PATH):
-            logger.error("token.json missing at %s! Cannot authenticate.", TOKEN_PATH)
+        token_path = youtube_token_path()
+        if not token_path or not os.path.exists(token_path):
+            logger.error("token.json missing at %s! Cannot authenticate.", token_path)
             return None
 
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH, ['https://www.googleapis.com/auth/youtube'])
+        creds = Credentials.from_authorized_user_file(token_path, ['https://www.googleapis.com/auth/youtube'])
         service = build('youtube', 'v3', credentials=creds)
         self._local.service = service
         return service

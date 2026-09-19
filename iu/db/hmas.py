@@ -1,17 +1,15 @@
 """Database logic for the HMA nomination command"""
 import logging
-import os
+from config import Database
 from db.connection import db_connection
 from utils.end_of_year import get_current_award_year
-
-DB_PATH_HMAS = os.getenv('DB_PATH_HMAS')
 
 logger = logging.getLogger('iu-bot')
 
 
 def get_family_choices(family_id: str) -> list[tuple[str, str]]:
     """Fetches active categories for a specific family to populate Discord dropdowns."""
-    with db_connection(DB_PATH_HMAS) as conn:
+    with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT category_id, name
@@ -25,7 +23,7 @@ def add_nomination(user_id: int, category_id: str, text: str) -> int:
     """Saves the nomination securely and returns the calculated award year."""
     award_year = get_current_award_year()
 
-    with db_connection(DB_PATH_HMAS) as conn:
+    with db_connection(Database.HMAS) as conn:
         # Crucial: Enable foreign keys so SQLite enforces the category_id check
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
@@ -39,7 +37,7 @@ def add_nomination(user_id: int, category_id: str, text: str) -> int:
 
 def get_yearly_export_data(award_year: int) -> dict[str, dict[str, list[tuple[int, str]]]]:
     """Returns a nested dictionary grouping nominations by Family, then Category."""
-    with db_connection(DB_PATH_HMAS) as conn:
+    with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT f.display_name, c.name, n.user_id, n.nomination_text
@@ -72,7 +70,7 @@ def set_final_nominees(category_id: str, nominees: list[str]) -> int:
     """
     award_year = get_current_award_year()
     try:
-        with db_connection(DB_PATH_HMAS) as conn:
+        with db_connection(Database.HMAS) as conn:
             cursor = conn.cursor()
 
             # Clear out the old list
@@ -100,7 +98,7 @@ def set_final_nominees(category_id: str, nominees: list[str]) -> int:
 def get_all_hma_categories() -> list[dict]:
     """Fetches all award categories."""
     try:
-        with db_connection(DB_PATH_HMAS, row_factory=True) as conn:
+        with db_connection(Database.HMAS, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT category_id, name FROM hma_categories ORDER BY name")
             return [dict(row) for row in cursor.fetchall()]
@@ -112,7 +110,7 @@ def get_user_hma_votes(user_id: int) -> dict:
     """Fetches a user's existing votes, keyed by category_id for instant lookups."""
     award_year = get_current_award_year()
     try:
-        with db_connection(DB_PATH_HMAS, row_factory=True) as conn:
+        with db_connection(Database.HMAS, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT category_id, first_choice, second_choice, third_choice
@@ -129,7 +127,7 @@ def get_hma_final_nominees(category_id: str) -> list[str]:
     """Fetches the vetted list of final nominees for a specific category."""
     award_year = get_current_award_year()
     try:
-        with db_connection(DB_PATH_HMAS) as conn:
+        with db_connection(Database.HMAS) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT nominee_name FROM hma_final_nominees
@@ -145,7 +143,7 @@ def save_hma_vote(user_id: int, category_id: str, first: str, second: str, third
     """Saves or updates a user's ranked HMA ballot for a specific category."""
     award_year = get_current_award_year()
     try:
-        with db_connection(DB_PATH_HMAS) as conn:
+        with db_connection(Database.HMAS) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO hma_votes
@@ -161,7 +159,7 @@ def save_category_suggestion(user_id: int, username: str, new_cats: str, dropped
     """Saves or updates a user's HMA category suggestions."""
     award_year = get_current_award_year()
     try:
-        with db_connection(DB_PATH_HMAS) as conn:
+        with db_connection(Database.HMAS) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO hma_category_suggestions
@@ -178,7 +176,7 @@ def get_user_category_suggestion(user_id: int) -> dict | None:
     """Fetches a user's existing suggestions to pre-fill the modal."""
     award_year = get_current_award_year()
     try:
-        with db_connection(DB_PATH_HMAS, row_factory=True) as conn:
+        with db_connection(Database.HMAS, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT new_categories, dropped_categories
@@ -195,7 +193,7 @@ def get_all_category_suggestions() -> list[dict]:
     """Fetches all suggestions for the current award year to be exported."""
     award_year = get_current_award_year()
     try:
-        with db_connection(DB_PATH_HMAS, row_factory=True) as conn:
+        with db_connection(Database.HMAS, row_factory=True) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM hma_category_suggestions WHERE award_year = ?", (award_year,))
             return [dict(row) for row in cursor.fetchall()]
@@ -206,7 +204,7 @@ def get_all_category_suggestions() -> list[dict]:
 def get_current_categories_by_family() -> dict[str, list[str]]:
     """Fetches all current active categories grouped by family name."""
     try:
-        with db_connection(DB_PATH_HMAS) as conn:
+        with db_connection(Database.HMAS) as conn:
             cursor = conn.cursor()
             # Updated to match your exact schema columns!
             cursor.execute("""

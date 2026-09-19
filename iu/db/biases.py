@@ -1,19 +1,17 @@
 """Database functions for bias embeds"""
 import sqlite3
 import logging
-import os
+from config import Database
 from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
-
-DB_PATH_BIASES = os.getenv('DB_PATH_BIASES', 'db/biases.db')
 
 def create_ultimate_bias_db(user_id: int, name: str, birth_name: str, birthday: str,
                             colour: int, group_name: str, hometown: str,
                             image_filename: str, position: str, reason: str) -> bool:
     """Inserts a new ultimate bias record for a user."""
     try:
-        with db_connection(DB_PATH_BIASES) as conn:
+        with db_connection(Database.BIASES) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO ultimate_biases
@@ -35,7 +33,7 @@ def update_ultimate_bias_db(user_id: int, **updates) -> bool:
         return False
 
     try:
-        with db_connection(DB_PATH_BIASES) as conn:
+        with db_connection(Database.BIASES) as conn:
             cursor = conn.cursor()
 
             # Dynamically construct the SET clause based on provided arguments
@@ -62,7 +60,7 @@ def get_ultimate_bias(user_id: int) -> dict:
     """Fetches the ultimate bias record for a user."""
     try:
         # Using Row factory allows us to access columns by name (like a dictionary)
-        with db_connection(DB_PATH_BIASES, row_factory=True) as conn:
+        with db_connection(Database.BIASES, row_factory=True) as conn:
             cursor = conn.cursor()
 
             cursor.execute("SELECT * FROM ultimate_biases WHERE user_id = ?", (user_id,))
@@ -82,7 +80,7 @@ def create_artist_bias_db(
 ) -> bool:
     """Inserts a new artist bias (bias group) record for a user."""
     try:
-        with db_connection(DB_PATH_BIASES) as conn:
+        with db_connection(Database.BIASES) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO artist_biases
@@ -105,7 +103,7 @@ def update_artist_bias_db(user_id: int, **updates) -> bool:
         return False
 
     try:
-        with db_connection(DB_PATH_BIASES) as conn:
+        with db_connection(Database.BIASES) as conn:
             cursor = conn.cursor()
 
             set_clauses = []
@@ -128,7 +126,7 @@ def update_artist_bias_db(user_id: int, **updates) -> bool:
 def get_artist_bias(user_id: int) -> dict:
     """Fetches the artist bias record for a user."""
     try:
-        with db_connection(DB_PATH_BIASES, row_factory=True) as conn:
+        with db_connection(Database.BIASES, row_factory=True) as conn:
             cursor = conn.cursor()
 
             cursor.execute("SELECT * FROM artist_biases WHERE user_id = ?", (user_id,))

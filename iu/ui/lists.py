@@ -2,14 +2,13 @@
 
 import logging
 import discord
+from config import admin_user_id
 from db.lists import get_event_details, save_submission, get_user_submission
 from db.merch import check_user_owns_item, consume_item
 from utils.discord_files import text_file
 from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
-
-ADMIN_USER_ID = 904751089633615972
 
 class DynamicListModal(discord.ui.Modal):
     """
@@ -113,15 +112,16 @@ class DynamicListModal(discord.ui.Modal):
 
             # Notify admin
             try:
-                admin_user = interaction.client.get_user(ADMIN_USER_ID) or \
-                    await interaction.client.fetch_user(ADMIN_USER_ID)
+                admin_user = interaction.client.get_user(admin_user_id()) or \
+                    await interaction.client.fetch_user(admin_user_id())
                 if admin_user:
                     action = "updated" if previous_lines else "submitted"
                     await admin_user.send(
                         f"📥 **{username}** {action} their list for **{self.event_name}**!"
                     )
             except discord.Forbidden:
-                logger.warning("Could not DM admin (ID: %s) about list submission. DMs might be closed.", ADMIN_USER_ID)
+                logger.warning("Could not DM admin (ID: %s) about list submission. DMs might be closed.",
+                               admin_user_id())
             except Exception as ex:
                 logger.error("Failed to send admin notification DM: %s", ex)
 

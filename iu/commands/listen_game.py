@@ -4,6 +4,7 @@ import logging
 
 import discord
 from discord import app_commands
+from config import Channel, Role
 from db.listen_game import (
     get_current_round_db, get_game_by_status_db,
     get_registered_players_db, get_round_submissions_db,
@@ -23,9 +24,9 @@ logger = logging.getLogger('iu-bot')
 
 @app_commands.command(name="listen-game-post-ruleset",
                       description="[Listener] Set or update the ruleset for your round.")
-@app_commands.checks.has_role("Listen Game Player")
+@app_commands.checks.has_role(Role.LISTEN_GAME_PLAYER)
 async def listen_game_set_theme(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -74,9 +75,9 @@ async def listen_game_set_theme(interaction: discord.Interaction):
 @app_commands.command(name="listen-game-submit-song",
                       description="Submit or update your YouTube track for the current round.")
 @app_commands.describe(url="The YouTube link to your song.")
-@app_commands.checks.has_role("Listen Game Player")
+@app_commands.checks.has_role(Role.LISTEN_GAME_PLAYER)
 async def submit_song(interaction: discord.Interaction, url: str):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 
@@ -234,9 +235,9 @@ async def _process_submission(interaction: discord.Interaction, url: str):
 
 @app_commands.command(name="listen-game-submit-ranking",
                       description="[Listener] Rank the submissions and provide commentary.")
-@app_commands.checks.has_role("Listen Game Player")
+@app_commands.checks.has_role(Role.LISTEN_GAME_PLAYER)
 async def listen_game_submit_ranking(interaction: discord.Interaction):
-    restricted = await validate_channel(interaction, 'listen-game')
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
 

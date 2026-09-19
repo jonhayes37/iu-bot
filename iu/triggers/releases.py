@@ -7,6 +7,7 @@ import re
 import logging
 from datetime import datetime
 import discord
+from config import EMOJI_IU
 from db.releases import add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
 from services.youtube import create_releases_playlist, add_video_to_playlist, get_video_publish_date, extract_video_id
 
@@ -37,7 +38,7 @@ async def store_new_release(message: discord.Message):
             videos_processed += 1
 
     if videos_processed > 0:
-        await message.add_reaction('<:iu:802970899174129744>')
+        await message.add_reaction(EMOJI_IU)
 
 def _process_release_url(url: str, video_id: str, message_id: str, msg_time: datetime, award_year: int) -> bool:
     """Synchronous worker: validates, stores, and syncs a single release URL to YouTube."""

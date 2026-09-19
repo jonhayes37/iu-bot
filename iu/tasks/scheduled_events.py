@@ -6,6 +6,7 @@ from datetime import timedelta
 import discord
 from discord.ext import tasks
 from discord.utils import utcnow
+from config import Channel, MEDIA_DIR
 
 logger = logging.getLogger('iu-bot')
 
@@ -24,7 +25,7 @@ async def check_upcoming_events(client: discord.Client, guild_id: int):
         return
 
     # Find your specific events channel
-    channel = discord.utils.get(guild.text_channels, name='community-events')
+    channel = discord.utils.get(guild.text_channels, name=Channel.COMMUNITY_EVENTS)
     if not channel:
         logger.error("Could not find #community-events channel.")
         return
@@ -60,7 +61,7 @@ async def check_upcoming_events(client: discord.Client, guild_id: int):
 
                 # Post the notification and the mentions
                 msg = f"**{event.name}** is starting soon!\n\n{mentions}"
-                gif_path = "iu/media/gifs/iu_event_thread.gif"
+                gif_path = MEDIA_DIR / 'gifs' / 'iu_event_thread.gif'
                 if os.path.exists(gif_path):
                     await thread.send(content=msg, file=discord.File(gif_path))
                 else:

@@ -3,6 +3,7 @@ import logging
 import random
 import re
 import discord
+from config import Channel
 from db.merch import get_user_balance, modify_db_balance
 from utils.validation import validate_channel
 
@@ -12,7 +13,7 @@ logger = logging.getLogger('iu-bot')
               description="Check how many hearts you have available to spend.")
 async def check_balance(interaction: discord.Interaction):
     """The Discord command logic for checking a user's wallet."""
-    restricted = await validate_channel(interaction, 'merch-booth')
+    restricted = await validate_channel(interaction, Channel.MERCH_BOOTH)
     if restricted:
         return
 
@@ -47,7 +48,7 @@ async def check_balance(interaction: discord.Interaction):
 async def modify_balance(interaction: discord.Interaction, member: discord.Member, amount: int,
                          reason: str):
     """The Discord command logic for modifying a balance."""
-    restricted = await validate_channel(interaction, 'dispatch-news')
+    restricted = await validate_channel(interaction, Channel.DISPATCH_NEWS)
     if restricted:
         logger.error("Wrong channel for balance modification command, must be #dispatch-news.")
         return
@@ -88,7 +89,7 @@ async def random_award(interaction: discord.Interaction, users: str, amount: int
     """The Discord command logic for a random giveaway."""
 
     # Channel restriction check
-    restricted = await validate_channel(interaction, 'dispatch-news')
+    restricted = await validate_channel(interaction, Channel.DISPATCH_NEWS)
     if restricted:
         return
 
