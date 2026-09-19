@@ -9,6 +9,20 @@ from db.connection import ensure_column
 
 logger = logging.getLogger('iu-bot')
 
+# The current definition of new_releases (keep in step with db/schema/releases.sql). Used to rebuild
+# databases created when message_id was UNIQUE on its own, which allowed only one link per message.
+_NEW_RELEASES_TABLE_SQL = """
+    CREATE TABLE new_releases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        video_id TEXT UNIQUE NOT NULL,
+        original_url TEXT NOT NULL,
+        message_id TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        processed BOOLEAN DEFAULT 0,
+        UNIQUE (message_id, video_id)
+    )
+"""
+
 # CREATE TABLE IF NOT EXISTS won't add a column to a table that already exists, so columns added
 # after a database was first created are patched in here: (database, table, column, column type).
 COLUMN_MIGRATIONS = [
@@ -49,4 +63,53 @@ def initialize_databases():
         except Exception as e:
             logger.error("Failed to add %s.%s to the %s database: %s", table, column, db.value, e)
 
+    if Database.RELEASES.path:
+        try:
+            _allow_several_releases_per_message(Database.RELEASES.path)
+        except Exception as e:
+            logger.error("Failed to update the new_releases table: %s", e)
+
     logger.info("All databases initialized successfully.")
+
+
+def _has_unique_index(conn: sqlite3.Connection, table: str, columns: list[str]) -> bool:
+    """True if the table has a UNIQUE constraint on exactly these columns."""
+    for _, index_name, is_unique, *_ in conn.execute(f"PRAGMA index_list({table})").fetchall():
+        index_columns = [row[2] for row in conn.execute(f"PRAGMA index_info({index_name})").fetchall()]
+        if is_unique and index_columns == columns:
+            return True
+    return False
+
+
+def _allow_several_releases_per_message(db_path: str):
+    """
+    Rebuilds new_releases so message_id is no longer UNIQUE by itself. SQLite can't drop a
+    constraint in place, so the rows are copied into a new table inside one transaction: either
+    everything is swapped or nothing changes. A no-op once the table has been rebuilt.
+    """
+    with sqlite3.connect(db_path) as conn:
+        if not _has_unique_index(conn, "new_releases", ["message_id"]):
+            return
+
+        backup_path = f"{db_path}.before-release-migration"
+        if not os.path.exists(backup_path):
+            with sqlite3.connect(backup_path) as backup:
+                conn.backup(backup)
+            logger.info("Saved a copy of the releases database to %s", backup_path)
+
+        conn.execute("BEGIN")
+        try:
+            conn.execute("ALTER TABLE new_releases RENAME TO new_releases_old")
+            conn.execute(_NEW_RELEASES_TABLE_SQL)
+            conn.execute("""
+                INSERT INTO new_releases (id, video_id, original_url, message_id, timestamp, processed)
+                SELECT id, video_id, original_url, message_id, timestamp, processed FROM new_releases_old
+            """)
+            conn.execute("DROP TABLE new_releases_old")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_unprocessed_releases ON new_releases(processed)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_video_id ON new_releases(video_id)")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        logger.info("Rebuilt new_releases so one message can hold several links.")

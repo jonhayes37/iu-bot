@@ -14,7 +14,7 @@ from triggers.interactions import handle_interaction
 from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
 from triggers.message import check_message_for_replies, respond_to_ping
-from triggers.polls import handle_poll_vote
+from triggers.polls import handle_poll_vote, handle_poll_vote_remove
 from triggers.releases import store_new_release
 from triggers.roles import handle_role_assignment
 from triggers.scheduled_events import process_event
@@ -157,6 +157,9 @@ class IUBot(discord.Client):
 
     async def on_raw_poll_vote_add(self, payload: discord.RawPollVoteActionEvent):
         await handle_poll_vote(self, payload)
+
+    async def on_raw_poll_vote_remove(self, payload: discord.RawPollVoteActionEvent):
+        await handle_poll_vote_remove(self, payload)
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         await handle_reaction_add(payload, self)

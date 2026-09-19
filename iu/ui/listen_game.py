@@ -340,26 +340,41 @@ class ListenGameRankingView(View):
 
     async def update_ui(self, interaction: discord.Interaction):
         self.setup_select_menu()
-
-        embed = discord.Embed(
-            title="Listen Game Rankings",
-            description="Here are your rankings so far:",
-            color=0x3498db
-        )
-
-        for item in self.ranked_submissions:
-            song_title = item['submission']['raw_title']
-            embed.add_field(
-                name=f"#{item['rank']} - {song_title}",
-                value=item['commentary'],
-                inline=False
-            )
-
-        if not self.unranked_submissions:
-            embed.description = "✅ **All songs ranked!** Review your list and click Confirm to publish."
-            embed.color = 0x2ecc71
-
+        embed = build_rankings_embed(self.ranked_submissions, all_ranked=not self.unranked_submissions)
         await interaction.response.edit_message(embed=embed, view=self)
+
+# Discord rejects an embed whose text adds up to more than 6000 characters. Stay a little under it.
+EMBED_TEXT_BUDGET = 5800
+FIELD_VALUE_LIMIT = 1024
+MIN_PREVIEW_LENGTH = 60
+
+def build_rankings_embed(ranked_submissions: list[dict], all_ranked: bool) -> discord.Embed:
+    """
+    The host's ranking summary. Long commentary is shortened in this preview so the embed always
+    fits Discord's size limit; the full text is saved and published in the reveal.
+    """
+    title = "Listen Game Rankings"
+    description = "✅ **All songs ranked!** Review your list and click Confirm to publish." if all_ranked \
+        else "Here are your rankings so far:"
+
+    names = [f"#{item['rank']} - {item['submission']['raw_title']}"[:256] for item in ranked_submissions]
+    overhead = len(title) + len(description) + sum(len(name) for name in names) + 100
+    per_field = FIELD_VALUE_LIMIT
+    if ranked_submissions:
+        per_field = min(FIELD_VALUE_LIMIT, max(MIN_PREVIEW_LENGTH, (EMBED_TEXT_BUDGET - overhead) // len(names)))
+
+    embed = discord.Embed(title=title, description=description, color=0x2ecc71 if all_ranked else 0x3498db)
+    shortened = False
+    for name, item in zip(names, ranked_submissions):
+        commentary = item['commentary']
+        if len(commentary) > per_field:
+            commentary = commentary[:per_field - 1] + "…"
+            shortened = True
+        embed.add_field(name=name, value=commentary, inline=False)
+
+    if shortened:
+        embed.set_footer(text="Long commentary is shortened in this preview. The full text will be published.")
+    return embed
 
 class RankSingleSongButton(Button):
     """Button fallback for when there is only one song left to rank."""

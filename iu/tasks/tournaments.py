@@ -6,12 +6,12 @@ from datetime import datetime, timezone, timedelta
 import discord
 from discord.ext import tasks
 from config import Channel
-from db.merch import modify_db_balance
+from db.merch import get_award_recipient, modify_db_balance
 from db.tournaments import (
     check_round_status, get_expired_unresolved_matches, advance_winner,
     get_unpolled_matches, set_match_poll_data, get_tournament_days,
     get_tournament_winner_name, get_tournament_raffle_winner, get_active_tournament_id,
-    set_tournament_completed
+    has_polled_matches, set_tournament_completed
 )
 from ui.bracket_renderer import generate_bracket_image
 
@@ -44,8 +44,10 @@ async def post_round_polls(channel: discord.TextChannel, tournament_id: str, rou
             # Post it to the channel
             message = await channel.send(poll=poll)
 
-            # Store the matchup
-            set_match_poll_data(match['match_id'], message.id, end_time)
+            # Store the matchup, using the expiry Discord actually set (the local clock is a little
+            # earlier, which could get a poll counted before it has really closed)
+            expires_at = message.poll.expires_at if message.poll else None
+            set_match_poll_data(match['match_id'], message.id, expires_at or end_time)
 
         except Exception as ex:
             logger.error("Failed to post poll for match %s: %s", match['match_id'], ex)
@@ -98,6 +100,19 @@ async def _process_expired_matches(tournaments_channel, expired_matches):
                 logger.error("Message %s is not a poll!", match['message_id'])
                 continue
 
+            # Close the poll first (an early close from /force-close-round leaves it open) so the
+            # counts we read are final and no vote can slip in between tallying and closing.
+            if not poll.is_finalised():
+                try:
+                    message = await message.end_poll()
+                except discord.HTTPException:
+                    # Discord closed it in the meantime; read its final state instead
+                    message = await tournaments_channel.fetch_message(match['message_id'])
+                poll = message.poll
+                if not poll:
+                    logger.error("Message %s is not a poll!", match['message_id'])
+                    continue
+
             # Tally the votes
             # We map the first answer to entrant_a, second to entrant_b
             ans_a = poll.answers[0]
@@ -134,8 +149,6 @@ async def _process_expired_matches(tournaments_channel, expired_matches):
 
             if success:
                 logger.info("Match %s resolved: %s won.", match['match_id'], winner_name)
-                if not poll.is_finalised():
-                    await message.end_poll()
 
         except discord.NotFound:
             logger.error("Poll message %s was deleted by a user.", match['message_id'])
@@ -150,25 +163,28 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
     current_round = status['current_round']
     t_name = status['tournament_name']
 
-    # Handle the Grand Finale if the entire tournament is finished
+    # Handle the Grand Finale if the entire tournament is finished. The tournament is only marked
+    # completed once the announcement is posted, so if anything here fails the next check retries.
     if status.get('is_tournament_over'):
-        set_tournament_completed(tournament_id)
-
         image_buffer = await generate_bracket_image(tournament_id)
         winner_name = get_tournament_winner_name(tournament_id)
         finale_msg = (
             f"The **{t_name}** tournament has concluded, and the Grand Champion is **{winner_name}**!"
         )
 
-        # Run the participation raffle
-        raffle_data = get_tournament_raffle_winner(tournament_id)
+        # Run the participation raffle. The hearts are recorded with a marker for this tournament,
+        # so a retry reuses the same winner and never pays twice.
+        raffle_marker = f"[raffle:{tournament_id}]"
+        already_paid_to = get_award_recipient(raffle_marker)
+        raffle_data = get_tournament_raffle_winner(tournament_id, winner_id=already_paid_to)
         if raffle_data:
             winner_id = raffle_data['user_id']
             tickets = raffle_data['tickets']
             total_pool = raffle_data['total_pool']
 
             # Award the winner with 5 hearts
-            modify_db_balance("IU bot", winner_id, 5, f"Won the raffle for {t_name}!")
+            if already_paid_to is None:
+                modify_db_balance("IU bot", winner_id, 5, f"Won the raffle for {t_name}! {raffle_marker}")
 
             guild = channel.guild
             # Fall back to a raw mention if the winner has since left the server --
@@ -181,7 +197,7 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
                 winner_mention = f"<@{winner_id}>"
 
             news_channel = discord.utils.get(guild.text_channels, name=Channel.DISPATCH_NEWS)
-            if news_channel:
+            if news_channel and already_paid_to is None:
                 msg = (
                     f"{winner_mention} earned **5 hearts** for winning the participation raffle "
                     f"for the **{t_name}**!"
@@ -201,6 +217,7 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
             file = discord.File(fp=image_buffer, filename="bracket_final.png")
 
         await channel.send(content=finale_msg, file=file)
+        set_tournament_completed(tournament_id)
         return
 
     # Check if the active round needs its polls posted
@@ -208,6 +225,14 @@ async def check_round_completion(channel: discord.TextChannel, tournament_id: st
     if not unpolled_matches:
         # No new polls to post. This means the round is currently ongoing and we're just waiting.
         logger.info("Tournament %s round %s is ongoing.", tournament_id, current_round)
+        return
+
+    # If some of this round's polls are already up, the rest failed to post earlier: post just those
+    # instead of announcing a new round again
+    if has_polled_matches(tournament_id, current_round):
+        logger.warning("Posting the polls that failed earlier for tournament %s round %s.",
+                       tournament_id, current_round)
+        await post_round_polls(channel, tournament_id, current_round, days_per_round)
         return
 
     # If there are unpolled matches, we just crossed the boundary into a new round!

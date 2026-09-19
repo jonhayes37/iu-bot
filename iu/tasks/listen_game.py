@@ -11,10 +11,12 @@ from db.listen_game import (
     close_round_db, get_revealing_round_ids_db
 )
 from services.listen_game_reveal import start_reveal
+from tasks.common import keep_running
 
 logger = logging.getLogger('iu-bot')
 
 @tasks.loop(hours=1)
+@keep_running
 async def check_listen_game_reminders(client: discord.Client, guild_id:int):
     logger.info("Running listen game background checks...")
     if not guild_id:
@@ -52,21 +54,22 @@ async def check_listen_game_reminders(client: discord.Client, guild_id:int):
         # Lock the round so /listen-game-submit-song stops working
         success = close_round_db(round_id)
         if success:
-            host_user = client.get_user(host_id) or await client.fetch_user(host_id)
-            if host_user:
+            # A failed DM (closed DMs, deleted account) must not stop the other rounds or the reminders
+            try:
+                host_user = client.get_user(host_id) or await client.fetch_user(host_id)
                 playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}" if playlist_id \
                     else "No playlist generated."
-                msg = (
+                await host_user.send(
                     "⏰ **Time's Up!**\n\n"
                     "The automated deadline for your Listen Game round has passed. "
                     "Submissions are now locked!\n\n"
                     f"Here is your generated playlist with the songs submitted so far: {playlist_url}\n\n"
-                    "When you've decided your rankings, post your results in the channel and tag the GM!"
+                    "When you've decided your rankings, run `/listen-game-submit-ranking` in the channel!"
                 )
-                try:
-                    await host_user.send(msg)
-                except discord.Forbidden:
-                    logger.warning("Could not DM listener %s about round timeout.", host_id)
+            except discord.Forbidden:
+                logger.warning("Could not DM listener %s about round timeout.", host_id)
+            except discord.HTTPException as ex:
+                logger.warning("Could not notify listener %s about round timeout: %s", host_id, ex)
 
     # ---------------------------------------------------------
     # Phase 2: Send Reminders (Only for rounds still active)

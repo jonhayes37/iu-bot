@@ -1,5 +1,6 @@
 """Triggers related to parsing new releases from messages and storing them in the database."""
 
+import enum
 import sqlite3
 import logging
 from datetime import datetime
@@ -8,8 +9,18 @@ from db.connection import db_connection
 
 logger = logging.getLogger('iu-bot')
 
-def add_new_release(video_id: str, original_url: str, message_id: str, msg_time: datetime) -> bool:
-    """Inserts a parsed YouTube release into the database. Returns True if successful, False if it was a duplicate."""
+class AddResult(enum.Enum):
+    """Outcome of recording a posted release."""
+    ADDED = "added"          # new release, still needs to go on the playlist
+    PENDING = "pending"      # seen before but never made it onto the playlist, so try again
+    DUPLICATE = "duplicate"  # already handled
+    ERROR = "error"
+
+def add_new_release(video_id: str, original_url: str, message_id: str, msg_time: datetime) -> AddResult:
+    """
+    Records a parsed YouTube release. If the video was recorded earlier but never reached the
+    playlist (for example the YouTube quota ran out), returns PENDING so the caller retries it.
+    """
     try:
         with db_connection(Database.RELEASES) as conn:
             cursor = conn.cursor()
@@ -20,16 +31,30 @@ def add_new_release(video_id: str, original_url: str, message_id: str, msg_time:
             """, (video_id, original_url, message_id, msg_time.isoformat()))
 
             conn.commit()
-            return True
+            return AddResult.ADDED
 
     except sqlite3.IntegrityError:
-        # The UNIQUE constraint in your schema caught a duplicate video_id or message_id
-        logger.debug("Duplicate video_id or message_id ignored: %s", video_id)
-        return False
+        # The UNIQUE constraint caught a duplicate video_id or message_id
+        return _classify_existing_release(video_id)
     except Exception as ex:
-        # This will now show up in your Unraid logs if something breaks!
         logger.error("CRITICAL: Database error inserting release %s: %s", video_id, ex)
-        return False
+        return AddResult.ERROR
+
+def _classify_existing_release(video_id: str) -> AddResult:
+    """For a video that is already recorded: has it reached the playlist yet?"""
+    try:
+        with db_connection(Database.RELEASES) as conn:
+            row = conn.execute("SELECT processed FROM new_releases WHERE video_id = ?", (video_id,)).fetchone()
+    except Exception as ex:
+        logger.error("Database error looking up release %s: %s", video_id, ex)
+        return AddResult.ERROR
+
+    if row is not None and not row[0]:
+        logger.info("Release %s was recorded earlier but is not on the playlist yet; retrying.", video_id)
+        return AddResult.PENDING
+
+    logger.debug("Duplicate video_id or message_id ignored: %s", video_id)
+    return AddResult.DUPLICATE
 
 def mark_release_processed(video_id: str):
     """Marks a video as successfully added to YouTube so it isn't processed again."""

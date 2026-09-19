@@ -370,8 +370,9 @@ def get_tournament_winner_name(tournament_id: str) -> str:
 
 def process_user_vote(message_id: int, user_id: int, answer_id: int) -> dict | None:
     """
-    Saves a vote using the exact entrant_id. If this vote completes the round 
-    for the user, it locks the reward ledger and returns tournament details.
+    Saves a vote using the exact entrant_id. If this vote completes the round for a user who
+    hasn't been rewarded for it yet, returns the tournament details. The caller pays the reward
+    and then records it with mark_reward_claimed(), so a failed payment is retried on their next vote.
     """
     try:
         with db_connection(Database.TOURNAMENTS, row_factory=True) as conn:
@@ -386,7 +387,8 @@ def process_user_vote(message_id: int, user_id: int, answer_id: int) -> dict | N
             match = cursor.fetchone()
 
             if not match:
-                logger.error("No match found for message_id %s", message_id)
+                # Any poll in the server ends up here, not just tournament matches
+                logger.debug("No tournament match for message_id %s", message_id)
                 return None
 
             t_id = match['tournament_id']
@@ -426,17 +428,11 @@ def process_user_vote(message_id: int, user_id: int, answer_id: int) -> dict | N
             user_votes = cursor.fetchone()[0]
 
             if user_votes >= total_matches:
-                # Lock the reward in the ledger
-                cursor.execute("""
-                    INSERT INTO tournament_rewards_ledger (tournament_id, round_num, user_id)
-                    VALUES (?, ?, ?)
-                """, (t_id, r_num, user_id))
-
                 # Fetch the tournament name for the Discord announcement
                 cursor.execute("SELECT name FROM tournaments WHERE tournament_id = ?", (t_id,))
                 t_name = cursor.fetchone()['name']
 
-                return {"tournament_name": t_name, "round_num": r_num}
+                return {"tournament_id": t_id, "tournament_name": t_name, "round_num": r_num}
 
             return None
 
@@ -444,10 +440,48 @@ def process_user_vote(message_id: int, user_id: int, answer_id: int) -> dict | N
         logger.error("Failed to process user vote for %s: %s", user_id, ex)
         return None
 
-def get_tournament_raffle_winner(tournament_id: str) -> dict | None:
+def mark_reward_claimed(tournament_id: str, round_num: int, user_id: int) -> None:
+    """Records that the user has been paid for voting in every matchup of the round. Raises on DB errors."""
+    with db_connection(Database.TOURNAMENTS) as conn:
+        conn.execute("""
+            INSERT OR IGNORE INTO tournament_rewards_ledger (tournament_id, round_num, user_id)
+            VALUES (?, ?, ?)
+        """, (tournament_id, round_num, user_id))
+
+def remove_user_vote(message_id: int, user_id: int, answer_id: int) -> bool:
+    """
+    Forgets a vote the user retracted from a poll. Only removes it if it is still the choice they
+    are retracting, so a vote change (remove old, add new) can't delete the new vote.
+    """
+    try:
+        with db_connection(Database.TOURNAMENTS, row_factory=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT match_id, entrant_a_id, entrant_b_id FROM tournament_matches WHERE message_id = ?",
+                (message_id,)
+            )
+            match = cursor.fetchone()
+            if not match:
+                return False
+
+            # Discord poll answers are 1-indexed in the order we added them
+            entrant_id = match['entrant_a_id'] if answer_id == 1 else match['entrant_b_id']
+            cursor.execute("""
+                DELETE FROM tournament_votes
+                WHERE match_id = ? AND user_id = ? AND choice_entrant_id = ?
+            """, (match['match_id'], user_id, entrant_id))
+            return cursor.rowcount > 0
+    except Exception as ex:
+        logger.error("Failed to remove vote for %s: %s", user_id, ex)
+        return False
+
+def get_tournament_raffle_winner(tournament_id: str, winner_id: int | None = None) -> dict | None:
     """
     Calculates total votes per user (1 vote = 1 ticket) and selects a winner.
     Returns the winning user_id, their ticket count, and the total pool size.
+
+    Pass winner_id to describe an already-chosen winner instead of drawing again (used when the
+    finale is retried, so the same person wins every time).
     """
     try:
         with db_connection(Database.TOURNAMENTS, row_factory=True) as conn:
@@ -471,11 +505,12 @@ def get_tournament_raffle_winner(tournament_id: str) -> dict | None:
             user_ids = [row['user_id'] for row in participants]
             weights = [row['tickets'] for row in participants]
 
-            # Select the winner heavily weighted by their participation
-            winner_id = random.choices(user_ids, weights=weights, k=1)[0]
+            if winner_id is None:
+                # Select the winner heavily weighted by their participation
+                winner_id = random.choices(user_ids, weights=weights, k=1)[0]
 
             # Grab the winner's ticket count for the announcement
-            winner_tickets = next(row['tickets'] for row in participants if row['user_id'] == winner_id)
+            winner_tickets = next((row['tickets'] for row in participants if row['user_id'] == winner_id), 0)
             total_pool = sum(weights)
 
             return {
@@ -487,6 +522,19 @@ def get_tournament_raffle_winner(tournament_id: str) -> dict | None:
     except Exception as ex:
         logger.error("Failed to run raffle for %s: %s", tournament_id, ex)
         return None
+
+def has_polled_matches(tournament_id: str, round_num: int) -> bool:
+    """True if at least one match in the round already has its poll posted."""
+    try:
+        with db_connection(Database.TOURNAMENTS) as conn:
+            row = conn.execute("""
+                SELECT 1 FROM tournament_matches
+                WHERE tournament_id = ? AND round_num = ? AND message_id IS NOT NULL LIMIT 1
+            """, (tournament_id, round_num)).fetchone()
+            return row is not None
+    except Exception as ex:
+        logger.error("Failed to check polled matches for %s round %s: %s", tournament_id, round_num, ex)
+        return False
 
 def force_close_active_round(tournament_id: str) -> int:
     """

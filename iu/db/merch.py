@@ -108,6 +108,40 @@ def modify_db_balance(admin_id: int, target_id: int, amount: int, reason: str):
 
         conn.commit()
 
+def award_once(marker: str, admin_id: str, target_id: int, amount: int, reason: str) -> bool:
+    """
+    Pays an award unless one carrying this marker was already paid. The marker is added to the
+    reason so the payment can be recognised later. Returns True if it was paid now, False if it had
+    been paid before. Raises on DB errors.
+    """
+    with db_connection(Database.MERCH) as conn:
+        # Take the write lock before checking, so two callers can't both pass the check
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM transactions WHERE instr(reason, ?) > 0", (marker,)).fetchone():
+            return False
+
+        cursor = conn.cursor()
+        ensure_users_exist(cursor, target_id)
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_id))
+        cursor.execute("""
+            INSERT INTO transactions (sender_id, receiver_id, amount, reason, message_url)
+            VALUES (?, ?, ?, ?, NULL)
+        """, (f"ADMIN:{admin_id}", target_id, amount, f"{reason} {marker}"))
+        return True
+
+
+def get_award_recipient(marker: str) -> int | None:
+    """
+    Finds who a one-off award was already paid to. Awards embed a unique marker in their reason
+    (for example "[raffle:ab12cd34]") so they can be recognised, and never paid twice, later.
+    """
+    with db_connection(Database.MERCH) as conn:
+        row = conn.execute(
+            "SELECT receiver_id FROM transactions WHERE instr(reason, ?) > 0 LIMIT 1", (marker,)
+        ).fetchone()
+        return row[0] if row else None
+
+
 # Add this above your Discord command functions
 def upsert_merch_item(item_id: str, name: str, description: str, price: int, max_per_user: int = None):
     """Inserts a new merch item, or updates it if the item_id already exists."""

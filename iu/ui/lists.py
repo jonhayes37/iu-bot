@@ -87,17 +87,11 @@ class DynamicListModal(discord.ui.Modal):
                 fail_msg, file=text_file(raw_list, "your_list.txt"), ephemeral=True)
             return
 
-        # Consume the item if necessary
-        if needs_burn:
-            if not consume_item(interaction.user.id, "WAYLT"):
-                await interaction.response.send_message(
-                    "❌ Failed to consume your WAYLT bonus pick from inventory. Please try again or ping an admin.", 
-                    ephemeral=True
-                )
-                return
-
         user_id = interaction.user.id
         username = interaction.user.display_name
+
+        # Save first and use up the item afterwards, so a failed save can never cost the user their
+        # bonus pick. (If the process dies in between, they keep the pick, which is the safer mistake.)
         success = save_submission(self.event_id, user_id, username, raw_list, clean_text, urls)
 
         if success:
@@ -105,8 +99,22 @@ class DynamicListModal(discord.ui.Modal):
                 "Your list has been submitted! You can click the button again anytime "
                 "before the event closes to edit it."
             )
+            burn_failed = False
             if needs_burn:
-                msg = f"🎟️ **What Are You Listening To Bonus Pick Consumed!**\n{msg}"
+                try:
+                    burn_failed = not consume_item(user_id, "WAYLT")
+                except Exception as ex:
+                    logger.error("Failed to consume WAYLT for user %s: %s", user_id, ex)
+                    burn_failed = True
+
+                if burn_failed:
+                    logger.warning("List for %s saved, but their WAYLT bonus pick could not be consumed.", user_id)
+                    msg = (
+                        "⚠️ Your list was saved, but I couldn't use up your WAYLT bonus pick. "
+                        f"An admin has been told and will sort it out.\n{msg}"
+                    )
+                else:
+                    msg = f"🎟️ **What Are You Listening To Bonus Pick Consumed!**\n{msg}"
 
             await interaction.response.send_message(msg, ephemeral=True)
 
@@ -116,8 +124,10 @@ class DynamicListModal(discord.ui.Modal):
                     await interaction.client.fetch_user(admin_user_id())
                 if admin_user:
                     action = "updated" if previous_lines else "submitted"
+                    note = f"\n⚠️ Their WAYLT bonus pick could not be consumed (user ID {user_id}); please check." \
+                        if burn_failed else ""
                     await admin_user.send(
-                        f"📥 **{username}** {action} their list for **{self.event_name}**!"
+                        f"📥 **{username}** {action} their list for **{self.event_name}**!{note}"
                     )
             except discord.Forbidden:
                 logger.warning("Could not DM admin (ID: %s) about list submission. DMs might be closed.",

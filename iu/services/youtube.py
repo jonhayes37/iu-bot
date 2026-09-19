@@ -178,11 +178,16 @@ def extract_video_id(url: str) -> str | None:
 
     return match.group(1)
 
-def get_playlist_video_ids(playlist_id: str) -> set[str]:
-    """Fetches all video IDs currently present in a YouTube playlist."""
+def get_playlist_video_ids(playlist_id: str) -> set[str] | None:
+    """
+    Fetches all video IDs currently present in a YouTube playlist.
+
+    Returns None if the playlist couldn't be read, so a failure can't be mistaken for an empty
+    playlist. Raises QuotaExceededError when the daily API quota is used up.
+    """
     youtube = get_yt_service()
     if not youtube:
-        return set()
+        return None
 
     video_ids = set()
     try:
@@ -203,8 +208,12 @@ def get_playlist_video_ids(playlist_id: str) -> set[str]:
 
         return video_ids
     except HttpError as ex:
+        error_reason = ex.error_details[0].get('reason') if ex.error_details else "Unknown"
+        if error_reason == "quotaExceeded":
+            logger.warning("YouTube API Quota exceeded while reading playlist %s!", playlist_id)
+            raise QuotaExceededError(ex) from ex
         logger.error("Failed to fetch playlist items for %s: %s", playlist_id, ex)
-        return set()
+        return None
 
 def add_video_to_playlist(playlist_id: str, video_id: str) -> bool:
     """Adds a video to the specified playlist. Returns True if successful."""

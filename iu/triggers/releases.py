@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 import discord
 from config import EMOJI_IU
-from db.releases import add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
+from db.releases import AddResult, add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
 from services.youtube import create_releases_playlist, add_video_to_playlist, get_video_publish_date, extract_video_id
 
 logger = logging.getLogger('iu-bot')
@@ -58,7 +58,7 @@ def _process_release_url(url: str, video_id: str, message_id: str, msg_time: dat
 
         # Save to database initially as unprocessed (processed=0)
         added = add_new_release(video_id=video_id, original_url=url, message_id=message_id, msg_time=msg_time)
-        if not added:
+        if added in (AddResult.DUPLICATE, AddResult.ERROR):
             return False
 
         # Check for existing playlist for this specific year

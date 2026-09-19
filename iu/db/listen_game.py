@@ -484,51 +484,32 @@ def delete_submission_db(round_id: int, user_id: int) -> bool:
         return False
 
 def skip_game_turn_db(game_id: int, round_id: int) -> int | None:
-    """Marks current round as skipped and advances the turn order to the next player.
-    
-    Returns the next host's user ID, or None if the game has ended.
     """
-    try:
-        with db_connection(Database.LISTEN_GAME) as conn:
-            cursor = conn.cursor()
+    Marks the current round as skipped and moves on to the next player's turn.
 
-            # Close current round as skipped
-            cursor.execute("UPDATE listen_rounds SET status = 'skipped' WHERE round_id = ?", (round_id,))
-            # Get current host's turn order
+    Returns the next host's user ID, or None if that was the last turn and the game has ended.
+    Raises on DB errors (so None always means "game over") and if the round can no longer be
+    skipped because its results are already being revealed or it is finished.
+    """
+    with db_connection(Database.LISTEN_GAME) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE listen_rounds SET status = 'skipped'
+            WHERE round_id = ? AND status IN ('setting_theme', 'submitting', 'ranking')
+        """, (round_id,))
+        if cursor.rowcount == 0:
+            raise ValueError(f"Round {round_id} can't be skipped in its current status")
+
+        next_host_id = _find_next_host_id(cursor, game_id, round_id)
+        if next_host_id:
             cursor.execute("""
-                SELECT p.turn_order 
-                FROM listen_rounds r
-                JOIN listen_players p ON r.host_id = p.user_id AND r.game_id = p.game_id
-                WHERE r.round_id = ?
-            """, (round_id,))
-            current_turn_order = cursor.fetchone()[0]
-
-            # Find the next player in the turn order
-            cursor.execute("""
-                SELECT user_id 
-                FROM listen_players 
-                WHERE game_id = ? AND turn_order > ? 
-                ORDER BY turn_order ASC LIMIT 1
-            """, (game_id, current_turn_order))
-
-            next_player_row = cursor.fetchone()
-
-            # If there is a next player, create the new round
-            if next_player_row:
-                next_host_id = next_player_row[0]
-                cursor.execute("""
-                    INSERT INTO listen_rounds (game_id, host_id, status)
-                    VALUES (?, ?, 'setting_theme')
-                """, (game_id, next_host_id))
-                return next_host_id
-
-            # If no next player, mark game as finished
+                INSERT INTO listen_rounds (game_id, host_id, status)
+                VALUES (?, ?, 'setting_theme')
+            """, (game_id, next_host_id))
+        else:
             cursor.execute("UPDATE listen_games SET status = 'finished' WHERE game_id = ?", (game_id,))
-            return None
-
-    except Exception as ex:
-        logger.error("Error skipping game turn: %s", ex)
-        return None
+        return next_host_id
 
 def remove_player_from_game_db(game_id: int, user_id: int) -> bool:
     """Removes a player from the active game roster."""

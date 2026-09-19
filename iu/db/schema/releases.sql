@@ -12,9 +12,10 @@ CREATE TABLE IF NOT EXISTS new_releases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     video_id TEXT UNIQUE NOT NULL,    -- Extracted YouTube ID (e.g., dQw4w9WgXcQ)
     original_url TEXT NOT NULL,       -- The raw link posted in Discord
-    message_id TEXT UNIQUE NOT NULL,  -- Discord message ID (prevents duplicate parsing)
+    message_id TEXT NOT NULL,         -- Discord message ID (one message can contain several links)
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, 
-    processed BOOLEAN DEFAULT 0       -- 0 = pending (False), 1 = added to YT (True)
+    processed BOOLEAN DEFAULT 0,      -- 0 = pending (False), 1 = added to YT (True)
+    UNIQUE (message_id, video_id)
 );
 
 -- Indexes to make your daily batching and fallback commands lightning fast

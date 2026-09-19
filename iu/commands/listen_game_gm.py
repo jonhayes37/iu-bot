@@ -158,7 +158,19 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
 
     # Each of these is a blocking YouTube API call; the list call and the per-video
     # insert loop both run in a thread so they don't stall the event loop.
-    existing_yt_vids = await asyncio.to_thread(get_playlist_video_ids, playlist_id)
+    try:
+        existing_yt_vids = await asyncio.to_thread(get_playlist_video_ids, playlist_id)
+    except QuotaExceededError:
+        await interaction.followup.send(
+            "❌ **YouTube API Quota Exceeded.** Nothing was changed. Please run this command again tomorrow.")
+        return
+
+    if existing_yt_vids is None:
+        # Don't guess: treating an unreadable playlist as empty would re-add every song
+        await interaction.followup.send(
+            "❌ Couldn't read the YouTube playlist right now, so nothing was changed. Try again in a few minutes.")
+        return
+
     missing_vids = [sub for sub in submissions if sub['video_id'] not in existing_yt_vids]
 
     if not missing_vids:
@@ -238,24 +250,25 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
         await interaction.followup.send("⚠️ Submissions are closed! You cannot reject a song at this phase.")
         return
 
-    # Fetch the submission
-    submission = get_user_submission_db(active_round['round_id'], player.id)
-    if not submission:
-        await interaction.followup.send(f"⚠️ {player.display_name} has not submitted a song for this round.")
-        return
+    async with SUBMISSION_LOCK:
+        # Fetch the submission
+        submission = get_user_submission_db(active_round['round_id'], player.id)
+        if not submission:
+            await interaction.followup.send(f"⚠️ {player.display_name} has not submitted a song for this round.")
+            return
 
-    # Delete from DB
-    success = delete_submission_db(active_round['round_id'], player.id)
-    if not success:
-        await interaction.followup.send("❌ Database error: Could not remove the submission.")
-        return
+        # Delete from DB
+        success = delete_submission_db(active_round['round_id'], player.id)
+        if not success:
+            await interaction.followup.send("❌ Database error: Could not remove the submission.")
+            return
 
-    # Delete from YouTube
-    playlist_id = active_round.get('playlist_id')
-    if playlist_id:
-        yt_removed = await asyncio.to_thread(remove_video_from_playlist, playlist_id, submission['video_id'])
-        if not yt_removed:
-            logger.warning("Failed to remove video %s from YT playlist during GM rejection.", submission['video_id'])
+        # Delete from YouTube
+        playlist_id = active_round.get('playlist_id')
+        if playlist_id:
+            yt_removed = await asyncio.to_thread(remove_video_from_playlist, playlist_id, submission['video_id'])
+            if not yt_removed:
+                logger.warning("Failed to remove video %s from YT playlist during GM rejection.", submission['video_id'])
 
     # DM the player
     try:
@@ -311,7 +324,12 @@ async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: dis
         return
 
     # 1. Execute the skip
-    next_host_id = skip_game_turn_db(game['game_id'], active_round['round_id'])
+    try:
+        next_host_id = skip_game_turn_db(game['game_id'], active_round['round_id'])
+    except Exception as ex:
+        logger.error("Error skipping game turn: %s", ex)
+        await interaction.followup.send("❌ Database error: the turn could not be skipped, so nothing changed.")
+        return
 
     # 2. DM the skipped player
     try:
@@ -387,20 +405,21 @@ async def listen_game_gm_remove_player(interaction: discord.Interaction, player:
             )
             return
 
-        # If we are in the submission phase, scrub their current submission if they made one
-        # if active_round['status'] == 'submitting':
-        #     submission = get_user_submission_db(active_round['round_id'], player.id)
-        #     if submission:
-        #         delete_submission_db(active_round['round_id'], player.id)
-        #         playlist_id = active_round.get('playlist_id')
-        #         if playlist_id:
-        #             remove_video_from_playlist(playlist_id, submission['video_id'])
-
     # Perform the database removal
     success = remove_player_from_game_db(game_id, player.id)
     if not success:
         await interaction.followup.send("❌ Database error: Could not remove the player.")
         return
+
+    # While submissions are open, their song must go too: it would otherwise stay in the playlist and
+    # count towards the round being complete
+    if game['status'] == 'playing' and active_round and active_round['status'] == 'submitting':
+        async with SUBMISSION_LOCK:
+            submission = get_user_submission_db(active_round['round_id'], player.id)
+            if submission and delete_submission_db(active_round['round_id'], player.id):
+                playlist_id = active_round.get('playlist_id')
+                if playlist_id:
+                    await asyncio.to_thread(remove_video_from_playlist, playlist_id, submission['video_id'])
 
     # Notify the player
     try:

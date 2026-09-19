@@ -7,12 +7,14 @@ import discord
 from discord.ext import tasks
 from discord.utils import utcnow
 from config import Channel, MEDIA_DIR
+from tasks.common import keep_running
 
 logger = logging.getLogger('iu-bot')
 
 notified_events = set()
 
 @tasks.loop(minutes=1)
+@keep_running
 async def check_upcoming_events(client: discord.Client, guild_id: int):
     logger.info("Running scheduled event check...")
     if not guild_id:
