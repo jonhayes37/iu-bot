@@ -1,6 +1,6 @@
 # IU bot
 
-Discord bot (discord.py 2.x, Python 3.14) for the HallyU server. See [README.md](README.md) for the user-facing feature list.
+Discord bot (discord.py 2.x, Python 3.14) for the HallyU server. See [README.md](README.md) for the user-facing feature list; when you add, rename or change a slash command, update its README section too (every command should appear there).
 
 ## Layout
 
@@ -28,6 +28,8 @@ python iu/main.py                                      # run locally (needs env 
 ```
 
 CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: pylint, pytest with coverage, and `coverage report --fail-under=80` (which runs even if the tests fail).
+
+Deploying, Unraid, logs and database access are covered in [docs/playbook.md](docs/playbook.md).
 
 **After finishing any set of code changes, run `pylint iu` and fix everything it reports before calling the work done** (it must exit 0, since CI fails on any message). Don't silence a finding with `# pylint: disable` or by editing `.pylintrc` unless the user agrees; fix the code instead. The size/complexity checks (`too-many-*`) and `duplicate-code` are disabled in `.pylintrc` because existing handlers exceed them, so new code shouldn't rely on that as a reason to write sprawling functions.
 
