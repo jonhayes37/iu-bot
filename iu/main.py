@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import signal
 import sqlite3
 
 import discord
@@ -369,6 +370,9 @@ def initialize_databases():
             logger.error("Failed to migrate tournaments.db: %s", e)
 
     logger.info("All databases initialized successfully.")
+
+# Graceful shutdown from docker stop
+signal.signal(signal.SIGTERM, lambda *_: signal.raise_signal(signal.SIGINT))
 
 # Run database setup before starting the bot
 initialize_databases()

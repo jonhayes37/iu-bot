@@ -12,20 +12,20 @@ All code lives in `iu/` and imports are **relative to `iu/`** (`from db.lists im
 - `ui/` — discord `View`/`Modal` classes, plus `bracket_renderer.py` (Playwright + Jinja2 -> PNG).
 - `tasks/` — `tasks.loop` background jobs (listen game reminders, tournament resolution, scheduled events).
 - `triggers/` — event-driven handlers called from `main.py` (`on_message`, member join, reactions, ...).
-- `services/youtube.py` — YouTube Data API client (cached, thread-safe build).
+- `services/youtube.py` — YouTube Data API client (one client per thread; the HTTP layer isn't thread-safe).
 - `utils/` — pure helpers (`strings.py`, `validation.py`, `end_of_year.py`).
 
 ## Commands
 
 ```bash
-pip install -e . && pip install -r requirements.txt    # what CI does
+pip install -e . && pip install -r requirements-dev.txt  # what CI does (runtime deps + dev tools)
 pylint iu                                              # lint (config in .pylintrc, max line 120)
-pytest --cov=iu                                        # tests; CI then requires coverage >= 45%
+pytest --cov=iu                                        # tests; CI then requires coverage >= 80%
 make build-push                                        # docker build (linux/amd64), tag, push jonhayes37/iu-bot
 python iu/main.py                                      # run locally (needs env vars below)
 ```
 
-CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs pylint, pytest with coverage, and `coverage report --fail-under=45` on every PR. Keep `pylint iu` clean.
+CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: pylint, pytest with coverage, and `coverage report --fail-under=80` (which runs even if the tests fail). Keep `pylint iu` clean.
 
 ## Environment
 
@@ -34,7 +34,7 @@ Read via `os.getenv`: `DISCORD_TOKEN`, `DISCORD_GUILD`, `HALLYU_ID`, `TOKEN_DIR`
 ## Conventions and gotchas
 
 - **Blocking work must not run on the event loop.** sqlite and YouTube calls are synchronous; from async code wrap them in `asyncio.to_thread(...)` (see `triggers/releases.py`, `commands/listen_game_gm.py`). Don't call `time.sleep` or blocking I/O directly in a command or task.
-- **DB functions swallow errors.** Pattern: `try: with db_connection(DB_PATH_X) as conn: ... except Exception: logger.error(...); return False/None/[]`. `db_connection()` commits on clean exit, rolls back on exception, and raises `DatabaseNotConfiguredError` when the path is unset (caught by the same `except`).
+- **DB error handling is inconsistent.** Most `db/` functions use `try: with db_connection(DB_PATH_X) as conn: ... except Exception: logger.error(...); return False/None/[]`, but `db/merch.py` and parts of `db/releases.py` / `db/hmas.py` let exceptions propagate. Check the function before assuming either. `db_connection()` commits on clean exit, rolls back on exception, and raises `DatabaseNotConfiguredError` when the path is unset. Returning `None` can mean "error" or "no result" (e.g. `advance_game_turn_db`).
 - **DB path constants are read at import time** (`DB_PATH_X = os.getenv(...)` at module level). Changing the env var afterwards has no effect.
 - **Schema changes:** `CREATE TABLE IF NOT EXISTS` won't alter existing tables. Add new columns via `ensure_column()` in `initialize_databases()` (see the `tournaments.description` example) in addition to editing the `.sql`. New indexes can just be `CREATE INDEX IF NOT EXISTS` in the schema.
 - **Channel-restricted commands** use `restricted = await validate_channel(interaction, 'name'); if restricted: return`. It returns `True` when it already sent the rejection.
@@ -46,11 +46,31 @@ Read via `os.getenv`: `DISCORD_TOKEN`, `DISCORD_GUILD`, `HALLYU_ID`, `TOKEN_DIR`
 
 `pytest`, `pytest-asyncio` (`asyncio_mode = "auto"` in [pyproject.toml](pyproject.toml)), `pytest-cov`, and `parameterized` are the intended tools. There are no tests yet.
 
-Prerequisites still to sort out when adding the first tests:
+Setup already in place: `pytest`, `pytest-asyncio` and `pytest-cov` are in `requirements-dev.txt` (which includes `requirements.txt`; the Docker image installs only `requirements.txt`), and `pythonpath = ["iu"]` is set in [pyproject.toml](pyproject.toml) so `from db.x import ...` resolves in tests.
 
-- `pytest`, `pytest-asyncio`, and `pytest-cov` are installed in the local venv but **not in `requirements.txt`**, so CI would fail at the test step. Add them.
-- Put `iu/` on the import path (e.g. `pythonpath = ["iu"]` under `[tool.pytest.ini_options]`) so `from db.x import ...` resolves. Add a `tests/` dir and `testpaths`.
-- CI runs `pytest`, which exits non-zero if zero tests are collected.
+Still to do when adding the first tests:
+
+- Create a `tests/` directory and add `testpaths = ["tests"]` to `[tool.pytest.ini_options]` (adding it before the directory exists only produces a warning).
+- Add `addopts = "--import-mode=importlib"` to `[tool.pytest.ini_options]` (see layout below).
+- Move `iu/ui/test_render.py` out of the package (e.g. `scripts/`): it is a manual script that pytest would try to collect.
+- CI currently fails by design: with no tests pytest exits non-zero (no tests ran) and coverage is far below the 80% gate.
+
+### Test layout
+
+Tests live in a top-level `tests/` directory that **mirrors `iu/`**, not next to the source (unlike Go's `foo_test.go`):
+
+```
+iu/db/lists.py          ->  tests/db/test_lists.py
+iu/commands/merch.py    ->  tests/commands/test_merch.py
+iu/utils/validation.py  ->  tests/utils/test_validation.py
+                            tests/conftest.py            # shared fixtures (e.g. temp SQLite DB)
+                            tests/db/conftest.py         # fixtures used only by that folder
+```
+
+- **Do not colocate tests inside `iu/`.** CI runs `pylint iu` and `pytest --cov=iu`, and the Docker build copies the tree, so colocated tests would be linted, counted in the coverage denominator and shipped in the image. `.dockerignore` already excludes a top-level `tests/`.
+- **No `__init__.py` files in `tests/`, and use `--import-mode=importlib`.** Otherwise same-named files (`tests/db/test_lists.py` vs `tests/ui/test_lists.py`) collide, and a `tests/db/` package could shadow the real `db` package that the code imports as `from db.lists import ...`.
+- Name files `test_<module>.py` and functions `test_<behaviour>`. Use `@pytest.mark.parametrize` (or `parameterized`) for table-driven cases, the closest match to Go table tests.
+- Put fixtures shared across files in `tests/conftest.py`; folder-specific ones in that folder's `conftest.py`.
 
 Guidelines for writing tests:
 

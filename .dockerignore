@@ -1,0 +1,34 @@
+# Secrets
+.env
+.env.*
+credentials.json
+token.json
+**/client_secret*.json
+
+# Local databases (the container uses the mounted /app/data)
+*.db
+*.sqlite*
+
+# VCS, CI and editor files
+.git
+.github
+.gitignore
+.vscode
+.idea
+
+# Python environments and caches
+venv
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.coverage
+*.egg-info
+
+# Not needed at runtime
+Dockerfile
+.dockerignore
+Makefile
+README.md
+CLAUDE.md
+tests
