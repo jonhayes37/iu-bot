@@ -72,11 +72,11 @@ Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `D
 
 ## Testing
 
-`pytest`, `pytest-asyncio` (`asyncio_mode = "auto"`, so `async def test_...` just works), `pytest-cov`, `freezegun` and `parameterized` are the tools, all in the `dev` group. **The scaffolding is in place; there are no tests yet.** [pyproject.toml](pyproject.toml) sets `testpaths = ["tests"]`, `--import-mode=importlib`, `pythonpath = ["iu", "tests"]` (so `from db.x import ...` and `from testsupport.fakes import ...` both resolve) and the coverage settings (`source = iu`, omitting `main.py` and `scripts/`).
+`pytest`, `pytest-asyncio` (`asyncio_mode = "auto"`, so `async def test_...` just works), `pytest-cov`, `freezegun` and `parameterized` are the tools, all in the `dev` group. **Every package under `iu/` is tested** (about 1,800 tests, near 100% coverage), mirroring the layout below. [pyproject.toml](pyproject.toml) sets `testpaths = ["tests"]`, `--import-mode=importlib`, `pythonpath = ["iu", "tests"]` (so `from db.x import ...` and `from testsupport.fakes import ...` both resolve) and the coverage settings (`source = iu`, omitting `main.py` and `scripts/`).
 
 An unclosed SQLite connection or file surfaces as an unraisable `ResourceWarning`, which `filterwarnings` in [pyproject.toml](pyproject.toml) turns into a test failure, so leaks in `db/` code can't slip in. (`with sqlite3.connect(...)` only commits; wrap it in `contextlib.closing(...)` or use `db_connection`.)
 
-CI is red until real tests exist: with none, pytest exits non-zero ("no tests ran") and coverage is 0% against the 80% gate.
+CI should be green: it runs the whole suite (about 20 seconds) and requires 80% coverage. **When you add or change behaviour, add or update its tests in the same change.** Tests describe intended behaviour; if a test uncovers a bug, fix the code rather than encoding the bug (or mark it `xfail(strict=True)` with the reason until it is fixed).
 
 ### Shared fixtures and helpers
 
@@ -126,7 +126,7 @@ iu/utils/validation.py  ->  tests/utils/test_validation.py
 
 Guidelines for writing tests:
 
-- **Test `bot.py` and `db/initialize.py` directly**, not `main.py`. `IUBot()` can be constructed without connecting; patch `tree.sync`, `add_view` and the task `.start` methods (or call handlers such as `triggers/polls.handle_poll_vote` with a mock client) rather than running the bot. `main.py` only wires things together, so it needs no tests.
+- **Test `bot.py` and `db/initialize.py` directly**, not `main.py`. `IUBot()` can be constructed without connecting; patch `tree.sync`, `add_view` and the task `.start` methods (or call handlers such as `triggers/polls.handle_poll_vote` with a mock client) rather than running the bot. `main.py` only wires things together; `tests/test_main.py` just checks the order of startup.
 - **DB tests use real SQLite, not mocks.** Use the `databases(...)` fixture (temp files, real schemas and migrations, env vars set) with `query`/`execute` for checking and seeding state. Prefer this over mocking `sqlite3`; the schemas contain constraints and cascades worth exercising.
 - **Pure logic is the easiest coverage:** `utils/*`, `utils/validation.sanitize_list`, `triggers/releases.get_eligible_year`, the `_process_release_url` / `_sync_missing_videos` sync workers, bracket data building. Use `parameterized` for table-driven cases.
 - **Discord objects:** commands are `app_commands.Command` objects; call the underlying coroutine with `.callback(interaction, ...)` and an interaction from the `make_interaction` fixture. Assert on `interaction.sent` (and `.ephemeral`), and on DB state.
