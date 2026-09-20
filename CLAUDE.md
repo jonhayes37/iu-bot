@@ -24,12 +24,13 @@ uv sync                    # create .venv from uv.lock (runtime deps + dev tools
 uv run pylint iu tests     # lint the code and the tests (config in .pylintrc, max line 120; run from the repo root)
 uv run pytest --cov=iu     # tests; CI then requires coverage >= 80%
 uv add <package>           # add a runtime dependency (edits pyproject.toml and uv.lock); add --dev for a dev tool
-uv lock --upgrade          # refresh every locked version (review the diff, run the checks)
+uv lock --upgrade          # refresh the transitive versions only: direct deps are pinned with ==, so bump those in pyproject.toml (docs/playbook.md 1.9)
+make upgrade-deps         # re-pin every outdated direct dependency, then uv lock --upgrade; upgrade-deps-dry-run only lists
 make build-push           # docker build (linux/amd64), tag, push jonhayes37/iu-bot (:latest and :<commit>)
 uv run python iu/main.py   # run locally (needs env vars below)
 ```
 
-Dependencies are managed with uv: direct dependencies live in [pyproject.toml](pyproject.toml) (`[project] dependencies`, and the `dev` group for pylint/pytest/etc.), and `uv.lock` pins every transitive version. **Commit `uv.lock` with any change to `pyproject.toml`.** There is no `requirements.txt`. The Docker image installs only the runtime dependencies from the lock (`uv sync --frozen --no-dev`). `playwright` is pinned by hand because the wheel and the Chromium the image downloads must match; Dependabot ([.github/dependabot.yml](.github/dependabot.yml)) proposes the other updates weekly.
+Dependencies are managed with uv: direct dependencies live in [pyproject.toml](pyproject.toml) (`[project] dependencies`, and the `dev` group for pylint/pytest/etc.), and `uv.lock` pins every transitive version. **Commit `uv.lock` with any change to `pyproject.toml`.** There is no `requirements.txt`. The Docker image installs only the runtime dependencies from the lock (`uv sync --frozen --no-dev`). There is no Dependabot: upgrade with `make upgrade-deps` (which also moves `playwright`), and check the Dockerfile's base image and `uv` pin and the CI action versions by hand. After upgrading `playwright`, build the image and render a bracket, since the wheel and the Chromium the image downloads must match and CI never launches Chromium.
 
 CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: `uv sync --frozen`, pylint, pytest with coverage, `coverage report --fail-under=80` (which runs even if the tests fail), and a `pip-audit` scan of the locked runtime dependencies.
 

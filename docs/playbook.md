@@ -48,9 +48,7 @@ uv run pytest --cov=iu  # the whole suite, about 20 seconds; CI requires 80% cov
 
 Changing a dependency: `uv add <package>` (or edit `pyproject.toml` and run `uv lock`), then commit
 both `pyproject.toml` and `uv.lock`. CI installs with `--frozen`, so it fails if they disagree.
-`uv lock --upgrade` moves everything to the newest allowed versions. The `playwright` version is
-pinned by hand: the Python package and the Chromium the image downloads are a matched pair, so after
-bumping it, build the image and check that a tournament bracket still renders.
+To move dependencies to newer versions, run `make upgrade-deps` (see [Upgrade the dependencies](#19-upgrade-the-dependencies)).
 
 If you added or changed a slash command, update its section in the README too. If you added a
 database column, add it to `COLUMN_MIGRATIONS` in `iu/db/initialize.py` as well as the `.sql`
@@ -182,6 +180,57 @@ the change in git, rebuilding and pushing again.
 
 Database changes are not undone by a rollback. New columns stay, which is harmless because older
 code ignores them.
+
+### 1.9 Upgrade the dependencies
+
+Do this every month or two, and whenever CI's `pip-audit` step reports a vulnerability. Work on a
+branch (step 1.1).
+
+1. See what would change, without changing anything:
+
+   ```bash
+   make upgrade-deps-dry-run
+   ```
+
+2. Upgrade:
+
+   ```bash
+   make upgrade-deps
+   ```
+
+   This runs [scripts/upgrade_dependencies.py](../scripts/upgrade_dependencies.py), which lists the
+   outdated direct dependencies (`uv tree --outdated --depth 1`), re-pins each one to its latest
+   version with `uv add` (in the dev group where it belongs), then runs `uv lock --upgrade` to
+   refresh the transitive dependencies. If a step fails it stops, leaving the earlier changes in
+   place; review them with `git diff` or undo them with `git checkout pyproject.toml uv.lock`.
+
+3. Review what changed: `git diff pyproject.toml uv.lock`. Major version bumps (for example a
+   formatter going from 8 to 9) can change behaviour, so read those.
+
+4. Run the checks (step 1.2): `uv run pylint iu tests` and `uv run pytest --cov=iu`. Then commit
+   `pyproject.toml` and `uv.lock` together; CI installs with `--frozen` and fails if they disagree.
+
+**If Playwright was upgraded, test the image.** The Python package and the Chromium the image
+downloads are a matched pair, and nothing in CI launches Chromium, so tests can't catch a break.
+Build the image (step 1.5) *without pushing*, or run the bot locally, and render a tournament
+bracket to confirm the image still comes out. Only then merge and deploy.
+
+**After upgrading Google's packages** (`google-api-python-client`, `google-auth-*`), also try one
+real YouTube action, such as adding a release, since the tests mock every YouTube call.
+
+**What the command doesn't cover.** There is no Dependabot, so nothing opens update pull requests
+for you. Now and then, also check by hand: the Python base image and the pinned `uv` version in the
+[Dockerfile](../Dockerfile) (`PYTHON_IMAGE` and `COPY --from=ghcr.io/astral-sh/uv:...`), and the
+action versions in [.github/workflows/ci.yaml](../.github/workflows/ci.yaml). CI's `pip-audit` step
+is the safety net for vulnerable Python packages.
+
+**Deploying:** a dependency change reaches production only when you build and push a new image
+(steps 1.5 to 1.7). If something misbehaves afterwards, roll back with step 1.8.
+
+**Why a command and not just `uv lock --upgrade`:** the direct dependencies in `pyproject.toml` are
+pinned exactly (`discord.py==2.7.1`), so `uv lock --upgrade` alone never moves them; it only
+refreshes the transitive ones. To upgrade one dependency by hand, change its pin with
+`uv add "discord.py==2.8.0"` (add `--dev` for a development tool).
 
 ## 2. Unraid
 
