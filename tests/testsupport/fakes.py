@@ -109,6 +109,7 @@ def make_channel(name: str = "general", channel_id: int | None = None) -> MagicM
     channel.id = channel_id or next_id()
     channel.name = name
     channel.mention = f"<#{channel.id}>"
+    channel.jump_url = f"https://discord.com/channels/1/{channel.id}"
     channel.sent = []
     channel.send = AsyncMock(side_effect=_recorder(channel.sent, "channel"))
     channel.fetch_message = AsyncMock(side_effect=_sent_message)
@@ -122,10 +123,20 @@ def make_guild(*, channels: tuple[str, ...] = (), roles: tuple[str, ...] = (),
     guild.id = guild_id or next_id()
     guild.name = "Test Server"
     guild.text_channels = [make_channel(name) for name in channels]
+    for text_channel in guild.text_channels:
+        text_channel.guild = guild
     guild.channels = list(guild.text_channels)
     guild.roles = [make_role(name) for name in roles]
     guild.members = []
     guild.scheduled_events = []
+
+    async def fetch_member(user_id):
+        member = next((m for m in guild.members if m.id == user_id), None)
+        if member is None:
+            raise discord.NotFound(MagicMock(status=404, reason="Not Found"), "Unknown Member")
+        return member
+
+    guild.fetch_member = AsyncMock(side_effect=fetch_member)
     guild.get_member = MagicMock(side_effect=lambda uid: next((m for m in guild.members if m.id == uid), None))
     guild.get_channel = MagicMock(side_effect=lambda cid: next((c for c in guild.channels if c.id == cid), None))
     return guild
@@ -173,6 +184,7 @@ def make_interaction(*, user: MagicMock | None = None, channel: str | MagicMock 
     interaction.followup = followup
     interaction.edit_original_response = AsyncMock(side_effect=_recorder(interaction.sent, "edit"))
     interaction.original_response = AsyncMock(side_effect=_sent_message)
+    interaction.delete_original_response = AsyncMock()
     interaction.client = make_client(guild=guild)
     return interaction
 
@@ -203,3 +215,45 @@ def make_client(*, guild: MagicMock | None = None) -> MagicMock:
     client.fetch_user = AsyncMock()
     client.get_user = MagicMock(return_value=None)
     return client
+
+
+def make_poll_message(message_id: int, answers: tuple[str, str] = ("A", "B"), votes: tuple[int, int] = (0, 0), *,
+                      finalised: bool = True, expires_at=None) -> MagicMock:
+    """
+    A message holding a two-answer poll. `message.end_poll()` closes it (like Discord does) and returns the
+    message with the poll finalised; `message.poll.answers[i]` has `.text` and `.vote_count`.
+    """
+    message = MagicMock(spec=discord.Message)
+    message.id = message_id
+    poll = MagicMock(spec=discord.Poll)
+    poll.answers = [MagicMock(text=text, vote_count=count) for text, count in zip(answers, votes)]
+    poll.expires_at = expires_at
+    state = {"finalised": finalised}
+    poll.is_finalised = MagicMock(side_effect=lambda: state["finalised"])
+    message.poll = poll
+
+    async def end_poll():
+        state["finalised"] = True
+        return message
+
+    message.end_poll = AsyncMock(side_effect=end_poll)
+    return message
+
+
+def make_scheduled_event(name: str, start_time, *, attendees: tuple[MagicMock, ...] = (),
+                         status: discord.EventStatus = discord.EventStatus.scheduled) -> MagicMock:
+    """A scheduled event; `event.users(limit=...)` yields the attendees, like the real async iterator."""
+    event = MagicMock(spec=discord.ScheduledEvent)
+    event.id = next_id()
+    event.name = name
+    event.status = status
+    event.start_time = start_time
+
+    def users(limit=None):
+        async def generate():
+            for attendee in attendees[:limit]:
+                yield attendee
+        return generate()
+
+    event.users = users
+    return event

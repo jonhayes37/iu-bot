@@ -14,6 +14,12 @@ logger = logging.getLogger('iu-bot')
 EVENT_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]{1,64}')
 
 @discord.app_commands.command(name='create-list-event', description="[Admin] Start a new list submission event.")
+@discord.app_commands.describe(
+    event_id="A short unique code: letters, numbers, - and _ (e.g., mid_2026)",
+    event_name="The event's title, shown on the announcement and the form",
+    expected_count="How many items each list must have (0 for no fixed number)",
+    placeholder="The example text shown in the empty submission form"
+)
 @admin_only
 async def create_list_event(
     interaction: discord.Interaction,
@@ -46,6 +52,7 @@ async def create_list_event(
 
 @discord.app_commands.command(name='close-list-event',
                               description="[Admin] Close an active list event and disable its button.")
+@discord.app_commands.describe(event_id="The code of the event to close (e.g., mid_2026)")
 @admin_only
 async def close_list_event(
     interaction: discord.Interaction,
@@ -110,6 +117,7 @@ async def close_list_event(
 
 @discord.app_commands.command(name='export-lists',
               description="[Admin] Export all list submissions for a specific event to .txt files.")
+@discord.app_commands.describe(event_id="The code of the event to export (e.g., mid_2026)")
 @admin_only
 async def export_lists(interaction: discord.Interaction, event_id: str):
     """Fetches data, formats it via the helper, and uploads the files to Discord."""

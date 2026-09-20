@@ -88,6 +88,7 @@ async def new_tournament(interaction: discord.Interaction, title: str, descripti
 
 @discord.app_commands.command(name="force-close-round",
                               description="[Admin] Immediately end the active voting round for a tournament.")
+@discord.app_commands.describe(tournament_id="The tournament's ID (shown when it was created)")
 @admin_only
 async def force_close_round(interaction: discord.Interaction, tournament_id: str):
     """Fast-forwards the clock on active polls so the background task resolves them."""

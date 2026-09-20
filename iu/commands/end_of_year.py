@@ -78,7 +78,7 @@ async def export_eoy_nominations(interaction: discord.Interaction):
     if t25_buffer.getvalue():
         files.append(discord.File(
             fp=io.BytesIO(t25_buffer.getvalue().encode('utf-8')),
-            filename=f"top_100_{year}.txt"
+            filename=f"top_25_{year}.txt"
         ))
 
     if hms_buffer.getvalue():

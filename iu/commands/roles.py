@@ -13,6 +13,11 @@ logger = logging.getLogger('iu-bot')
 
 @discord.app_commands.command(name='register-role',
                               description="[Admin] Add a new assignable role to the #roles channel.")
+@discord.app_commands.describe(
+    role="The server role members will be able to give themselves",
+    category="The heading it is listed under in #roles (created if new)",
+    aliases="Optional: other names members can type for it, separated by commas"
+)
 @admin_only
 async def register_role(
     interaction: discord.Interaction,

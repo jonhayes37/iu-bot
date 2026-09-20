@@ -2,7 +2,7 @@
 import io
 import discord
 from db.hmas import (
-    get_family_choices, get_yearly_export_data,
+    get_yearly_export_data,
     set_final_nominees, get_all_category_suggestions,
     get_current_categories_by_family
 )
@@ -17,13 +17,6 @@ MAX_NOMINEE_LENGTH = 300
 # A Discord select menu holds at most 25 options, and the voting menu lists every nominee
 MAX_NOMINEES_PER_CATEGORY = 25
 
-
-def build_dropdown(family_id: str) -> list[discord.app_commands.Choice[str]]:
-    """Helper function to fetch DB rows and convert them to Discord Choices."""
-    items = get_family_choices(family_id)
-    # Discord enforces a strict hard limit of 25 choices per dropdown.
-    # We slice [:25] just in case the DB ever exceeds it, preventing a bot crash.
-    return [discord.app_commands.Choice(name=name, value=cat_id) for cat_id, name in items][:25]
 
 @discord.app_commands.command(name='hma-nomination', description="Submit a nomination for the HallyU Music Awards!")
 @discord.app_commands.describe(

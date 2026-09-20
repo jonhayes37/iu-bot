@@ -279,7 +279,20 @@ async def create_bias_group(
 
 @app_commands.command(name="update-bias-group",
                       description="[Admin] Update specific fields of an existing bias group record.")
-@app_commands.describe(member="The server member whose record you want to update.")
+@app_commands.describe(
+    member="The server member whose record you want to update.",
+    name="The group's name",
+    members="Comma-separated list of members",
+    label="The group's company/label",
+    debut_date="The group's debut date",
+    bias="The user's bias in this group",
+    title_track="The user's favourite title track (URLs supported)",
+    b_track="The user's favourite b-side track (URLs supported)",
+    album="The user's favourite album (URLs supported)",
+    colour_hex="Hex colour code for the embed",
+    image_filename="Exact filename in the local images folder",
+    reason="Why is this their bias group?"
+)
 @admin_only
 async def update_bias_group(
     interaction: discord.Interaction,

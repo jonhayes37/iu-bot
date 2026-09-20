@@ -199,6 +199,18 @@ def make_client() -> Callable[..., mock.MagicMock]:
 
 
 @pytest.fixture
+def make_scheduled_event() -> Callable[..., mock.MagicMock]:
+    """Factory: `make_scheduled_event("Watch Party", start_time, attendees=(member,))`."""
+    return fakes.make_scheduled_event
+
+
+@pytest.fixture
+def make_poll_message() -> Callable[..., mock.MagicMock]:
+    """Factory: `make_poll_message(555, ("Song A", "Song B"), votes=(3, 2), finalised=False)`."""
+    return fakes.make_poll_message
+
+
+@pytest.fixture
 def interaction() -> mock.MagicMock:
     """A ready-made interaction from an ordinary member in #general. Read what was sent from `.sent`."""
     return fakes.make_interaction()

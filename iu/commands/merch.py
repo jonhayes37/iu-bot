@@ -227,9 +227,6 @@ async def draw_raffle(interaction: discord.Interaction):
 
     # Pick a winner
     # The `k=1` parameter returns a list with one item, so we select it.
-    if not user_ids: # Should be caught by the ticket_data check, but for safety
-        await interaction.response.send_message("Raffle pool is empty.", ephemeral=True)
-        return
     winner_id = random.choices(user_ids, weights=weights, k=1)[0]
     logger.info("Raffle winner: %s", winner_id)
 
