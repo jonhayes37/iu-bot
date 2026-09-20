@@ -5,7 +5,7 @@ from unittest import mock
 import discord
 import pytest
 
-from commands.roles import register_role
+from commands.roles import register_role, sync_roles
 from config import Channel, Database
 from db.roles import get_role_id, register_new_role
 
@@ -67,3 +67,35 @@ async def test_without_a_roles_channel_the_role_is_still_registered(make_interac
 
     assert get_role_id("rookies") == 200
     assert "couldn't find the `#roles` channel" in interaction.sent[-1].content
+
+
+class TestSyncRoles:
+    """/sync-roles refreshes the #roles display and says it has."""
+
+    async def test_it_is_acknowledged_first_then_confirmed_privately(self, make_interaction, make_guild):
+        register_new_role(100, "Girl Groups", "Music", ["gg"])
+        interaction = make_interaction(administrator=True, guild=make_guild(channels=(Channel.ROLES,)))
+
+        await sync_roles.callback(interaction)
+
+        interaction.response.defer.assert_awaited_once()
+        [reply] = interaction.sent
+        assert (reply.via, reply.content, reply.ephemeral) == ("followup", "✅ The `#roles` display is up to date.", True)
+
+    async def test_the_roles_are_posted_to_the_channel(self, make_interaction, make_guild):
+        register_new_role(100, "Girl Groups", "Music", ["gg"])
+        guild = make_guild(channels=(Channel.ROLES,))
+        interaction = make_interaction(administrator=True, guild=guild)
+
+        await sync_roles.callback(interaction)
+
+        [posted] = guild.text_channels[0].sent
+        assert posted.content == "**Music**\n- `Girl Groups` (aliases `gg`, `girl groups`)"
+
+    async def test_a_missing_roles_channel_is_reported_instead_of_silence(self, make_interaction, make_guild):
+        interaction = make_interaction(administrator=True, guild=make_guild(channels=()))
+
+        await sync_roles.callback(interaction)
+
+        [reply] = interaction.sent
+        assert (reply.content, reply.ephemeral) == ("❌ I couldn't find the `#roles` channel.", True)

@@ -56,10 +56,10 @@ class Sent:
         return "\n".join(p for p in parts if p)
 
 
-def _sent_message() -> MagicMock:
+def _sent_message(message_id: int | None = None) -> MagicMock:
     """What discord.py hands back after sending: a message with an ID that can be edited or deleted."""
     message = MagicMock(spec=discord.Message)
-    message.id = next_id()
+    message.id = message_id or next_id()
     message.edit = AsyncMock()
     message.delete = AsyncMock()
     return message
@@ -95,6 +95,7 @@ def make_member(user_id: int | None = None, name: str = "member", *, roles: tupl
     member.bot = bot
     member.roles = [make_role(role) for role in roles]
     member.guild_permissions = discord.Permissions(administrator=administrator)
+    member.display_avatar = MagicMock(url=f"https://cdn.example/avatars/{member.id}.png")
     member.sent = []
     member.send = AsyncMock(side_effect=_recorder(member.sent, "dm"))
     member.add_roles = AsyncMock()
@@ -110,6 +111,7 @@ def make_channel(name: str = "general", channel_id: int | None = None) -> MagicM
     channel.mention = f"<#{channel.id}>"
     channel.sent = []
     channel.send = AsyncMock(side_effect=_recorder(channel.sent, "channel"))
+    channel.fetch_message = AsyncMock(side_effect=_sent_message)
     return channel
 
 
@@ -170,6 +172,8 @@ def make_interaction(*, user: MagicMock | None = None, channel: str | MagicMock 
     followup.send = AsyncMock(side_effect=_recorder(interaction.sent, "followup"))
     interaction.followup = followup
     interaction.edit_original_response = AsyncMock(side_effect=_recorder(interaction.sent, "edit"))
+    interaction.original_response = AsyncMock(side_effect=_sent_message)
+    interaction.client = make_client(guild=guild)
     return interaction
 
 

@@ -27,6 +27,17 @@ def _image_file(filename: str) -> discord.File | None:
     return discord.File(IMAGES_DIR / filename, filename=filename)
 
 
+async def _send_with_image(interaction: discord.Interaction, embed: discord.Embed, image: discord.File):
+    """
+    Posts an embed with its picture. Uploading the picture can take longer than the 3 seconds Discord
+    allows for a first response (a cold connection and a slow upload from the NAS are enough), after
+    which the interaction expires and the user sees "The application did not respond". So the response is
+    acknowledged first, which is instant, and the picture is sent as the follow-up.
+    """
+    await interaction.response.defer()
+    await interaction.followup.send(embed=embed, file=image)
+
+
 async def _check_style(interaction: discord.Interaction, colour_hex: str | None,
                        image_filename: str | None) -> tuple[bool, int | None]:
     """
@@ -91,7 +102,7 @@ async def ultimate_bias(interaction: discord.Interaction, member: typing.Optiona
         bias_info['reason']
     ]))
 
-    await interaction.response.send_message('', embed=embed, file=bias_image)
+    await _send_with_image(interaction, embed, bias_image)
 
 @app_commands.command(name="create-ultimate-bias", description="[Admin] Create an ultimate bias record for a user.")
 @app_commands.describe(
@@ -357,4 +368,4 @@ async def bias_group(interaction: discord.Interaction, member: typing.Optional[d
         f"{bias_info['reason']}",
     ]))
 
-    await interaction.response.send_message('', embed=embed, file=bias_image)
+    await _send_with_image(interaction, embed, bias_image)

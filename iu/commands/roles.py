@@ -52,11 +52,17 @@ async def sync_roles(
     interaction: discord.Interaction
 ):
     """Edits, adds, or deletes messages in the #roles channel to match the DB."""
+    # Editing the channel's messages is a series of Discord calls, which can outlast the 3 seconds
+    # allowed for a first response
+    await interaction.response.defer(ephemeral=True)
+
     roles_channel = discord.utils.get(interaction.guild.text_channels, name=Channel.ROLES)
     if not roles_channel:
+        await interaction.followup.send("❌ I couldn't find the `#roles` channel.", ephemeral=True)
         return
 
     await _sync_roles_display(roles_channel)
+    await interaction.followup.send("✅ The `#roles` display is up to date.", ephemeral=True)
 
 async def _sync_roles_display(roles_channel: discord.TextChannel):
     chunks = _build_display_chunks()
