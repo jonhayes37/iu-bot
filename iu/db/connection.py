@@ -89,7 +89,7 @@ def ensure_column(db: Database, table: str, column: str, column_type: str) -> No
     if not db_path:
         raise DatabaseNotConfiguredError(f"{db.env_var} is not set, so the {db.value} database can't be opened.")
 
-    with sqlite3.connect(db_path) as conn:
+    with contextlib.closing(sqlite3.connect(db_path)) as conn:
         existing_columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing_columns:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")

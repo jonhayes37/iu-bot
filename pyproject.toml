@@ -48,6 +48,8 @@ testpaths = ["tests"]
 # importlib mode: test files need no __init__.py, so tests/db/test_lists.py and tests/ui/test_lists.py
 # can share a name, and a tests/db folder can't shadow the real db package
 addopts = "--import-mode=importlib"
+# An unclosed SQLite connection or file shows up as an "unraisable" ResourceWarning; make it a failure
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
 
 [tool.coverage.run]
 source = ["iu"]

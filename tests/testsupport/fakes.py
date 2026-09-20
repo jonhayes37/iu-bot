@@ -56,12 +56,22 @@ class Sent:
         return "\n".join(p for p in parts if p)
 
 
+def _sent_message() -> MagicMock:
+    """What discord.py hands back after sending: a message with an ID that can be edited or deleted."""
+    message = MagicMock(spec=discord.Message)
+    message.id = next_id()
+    message.edit = AsyncMock()
+    message.delete = AsyncMock()
+    return message
+
+
 def _recorder(sent: list[Sent], via: str):
-    """An AsyncMock side effect that records the call as a Sent."""
+    """An AsyncMock side effect that records the call as a Sent and returns a fake sent message."""
     async def record(*args, **kwargs):
         content = args[0] if args else kwargs.pop("content", None)
         kwargs.pop("content", None)
         sent.append(Sent(via, content, kwargs))
+        return _sent_message()
     return record
 
 

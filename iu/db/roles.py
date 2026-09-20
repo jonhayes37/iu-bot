@@ -1,8 +1,18 @@
 """Logic for the roles DB"""
 
 
+from dataclasses import dataclass
 from config import Database
 from db.connection import db_connection
+
+
+@dataclass(frozen=True)
+class AliasClash:
+    """A name a new role wants that another role already answers to."""
+    alias: str
+    role_id: int
+    role_name: str
+
 
 def get_role_id(alias: str) -> int | None:
     """Fetches the Discord Role ID associated with a given name or alias."""
@@ -56,10 +66,37 @@ def replace_display_message_ids(message_ids: list[int]):
         cursor.execute("DELETE FROM display_messages")
         cursor.executemany("INSERT INTO display_messages (message_id) VALUES (?)", [(m,) for m in message_ids])
 
-def register_new_role(role_id: int, role_name: str, category_name: str, aliases: list[str]) -> None:
-    """Inserts a new role, its category, and its aliases into the database."""
+def register_new_role(role_id: int, role_name: str, category_name: str, aliases: list[str]) -> list[AliasClash]:
+    """
+    Inserts a new role, its category, and its aliases into the database.
+
+    Every alias (including the role's own lowercased name, which is always one) must be free: not
+    already an alias of, or the name of, a different role, or `get_role_id` couldn't tell which role
+    someone meant. If any are taken, nothing is saved and the clashes are returned. An empty list means
+    the role was saved. Registering a role again (to rename it or add aliases) is fine.
+    """
+    all_aliases = {a.strip().lower() for a in aliases if a.strip()}
+    all_aliases.add(role_name.lower())
+
     with db_connection(Database.ROLES) as conn:
+        # Take the write lock before checking, so two registrations at once can't claim the same alias
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.cursor()
+
+        clashes = []
+        for alias in sorted(all_aliases):
+            cursor.execute("""
+                SELECT r.role_id, r.role_name FROM role_aliases a
+                JOIN assignable_roles r ON r.role_id = a.role_id
+                WHERE a.alias = ? AND a.role_id != ?
+                UNION
+                SELECT role_id, role_name FROM assignable_roles WHERE LOWER(role_name) = ? AND role_id != ?
+            """, (alias, role_id, alias, role_id))
+            owner = cursor.fetchone()
+            if owner:
+                clashes.append(AliasClash(alias, owner[0], owner[1]))
+        if clashes:
+            return clashes
 
         # Upsert the category
         cursor.execute("SELECT category_id FROM role_categories WHERE name = ?", (category_name,))
@@ -79,12 +116,7 @@ def register_new_role(role_id: int, role_name: str, category_name: str, aliases:
             ON CONFLICT(role_id) DO UPDATE SET category_id = excluded.category_id, role_name = excluded.role_name
         """, (role_id, category_id, role_name))
 
-        # Add aliases (Always include the exact lowercased role name as a free alias)
-        all_aliases = {a.strip().lower() for a in aliases if a.strip()}
-        all_aliases.add(role_name.lower())
-
         for alias in all_aliases:
-            cursor.execute("""
-                INSERT OR IGNORE INTO role_aliases (alias, role_id)
-                VALUES (?, ?)
-            """, (alias, role_id))
+            cursor.execute("INSERT OR IGNORE INTO role_aliases (alias, role_id) VALUES (?, ?)", (alias, role_id))
+
+        return []

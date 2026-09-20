@@ -73,6 +73,8 @@ Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `D
 
 `pytest`, `pytest-asyncio` (`asyncio_mode = "auto"`, so `async def test_...` just works), `pytest-cov`, `freezegun` and `parameterized` are the tools, all in the `dev` group. **The scaffolding is in place; there are no tests yet.** [pyproject.toml](pyproject.toml) sets `testpaths = ["tests"]`, `--import-mode=importlib`, `pythonpath = ["iu", "tests"]` (so `from db.x import ...` and `from testsupport.fakes import ...` both resolve) and the coverage settings (`source = iu`, omitting `main.py` and `scripts/`).
 
+An unclosed SQLite connection or file surfaces as an unraisable `ResourceWarning`, which `filterwarnings` in [pyproject.toml](pyproject.toml) turns into a test failure, so leaks in `db/` code can't slip in. (`with sqlite3.connect(...)` only commits; wrap it in `contextlib.closing(...)` or use `db_connection`.)
+
 CI is red until real tests exist: with none, pytest exits non-zero ("no tests ran") and coverage is 0% against the 80% gate.
 
 ### Shared fixtures and helpers

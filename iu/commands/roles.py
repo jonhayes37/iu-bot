@@ -25,7 +25,14 @@ async def register_role(
     await interaction.response.defer(ephemeral=True)
 
     alias_list = [a.strip() for a in aliases.split(',')] if aliases else []
-    register_new_role(role.id, role.name, category, alias_list)
+    clashes = register_new_role(role.id, role.name, category, alias_list)
+    if clashes:
+        taken = "\n".join(f"- `{c.alias}` is already used by **{c.role_name}**" for c in clashes)
+        await interaction.followup.send(
+            f"❌ Couldn't register **{role.name}**, so nothing was changed. Every name a role answers to "
+            f"(including its own name) must be unique:\n{taken}\n"
+            "Choose different aliases and run the command again.", ephemeral=True)
+        return
 
     # Trigger a UI sync
     roles_channel = discord.utils.get(interaction.guild.text_channels, name=Channel.ROLES)

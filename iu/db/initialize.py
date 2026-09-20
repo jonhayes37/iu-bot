@@ -1,5 +1,6 @@
 """Creates the SQLite databases and brings older ones up to date."""
 
+import contextlib
 import logging
 import os
 import sqlite3
@@ -46,7 +47,7 @@ def initialize_databases():
         try:
             with open(db.schema_path, 'r', encoding='utf-8') as file:
                 schema_script = file.read()
-            with sqlite3.connect(db_path) as conn:
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
                 conn.executescript(schema_script)
                 conn.commit()
                 _check_foreign_keys(conn, db)
@@ -96,13 +97,13 @@ def _allow_several_releases_per_message(db_path: str):
     constraint in place, so the rows are copied into a new table inside one transaction: either
     everything is swapped or nothing changes. A no-op once the table has been rebuilt.
     """
-    with sqlite3.connect(db_path) as conn:
+    with contextlib.closing(sqlite3.connect(db_path)) as conn:
         if not _has_unique_index(conn, "new_releases", ["message_id"]):
             return
 
         backup_path = f"{db_path}.before-release-migration"
         if not os.path.exists(backup_path):
-            with sqlite3.connect(backup_path) as backup:
+            with contextlib.closing(sqlite3.connect(backup_path)) as backup:
                 conn.backup(backup)
             logger.info("Saved a copy of the releases database to %s", backup_path)
 

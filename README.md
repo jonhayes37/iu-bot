@@ -52,7 +52,7 @@ so the channel stays tidy.
 
 | Command | Who | Description |
 | --- | --- | --- |
-| `/register-role role category [aliases]` | Admin | Adds a role to the list (aliases are comma-separated) and refreshes `#roles` |
+| `/register-role role category [aliases]` | Admin | Adds a role to the list (aliases are comma-separated, and each must not already belong to another role) and refreshes `#roles` |
 | `/sync-roles` | Admin | Rebuilds the role list in `#roles` |
 
 ## Hearts and the Merch Booth

@@ -58,18 +58,21 @@ def sanitize_list(raw_text: str, expected_count: int) -> tuple[bool, str, str, s
         if url_match:
             url = url_match.group(1)
             extracted_urls.append(url)
-            line = re.sub(r'\s*\(\s*https?://[^\s()]+\s*\)\s*', '', line)
-            line = re.sub(r'\s*https?://[^\s()]+\s*', '', line)
+            # Replace the link with a space (not nothing) so the words either side don't run together
+            line = re.sub(r'\s*\(\s*https?://[^\s()]+\s*\)\s*', ' ', line)
+            line = re.sub(r'\s*https?://[^\s()]+\s*', ' ', line).strip()
         else:
             extracted_urls.append("")
+
+        # Only strip a real list marker ("1.", "1)", "1 -"), not 2NE1, 2PM, etc. This comes before the
+        # separator is rewritten, or a "1 - Artist - Title" line would lose its marker to the wrong dash.
+        line = re.sub(r'^\d+\s*(?:[.)](?!\d)|-(?=\s))\s*', '', line)
 
         line = re.sub(r'\s*//\s*', ' // ', line)
 
         if ' // ' not in line:
             line = re.sub(r'\s+[-/]\s+', ' // ', line, count=1)
 
-        # Only strip a real list marker ("1.", "1)", "1 -"), not 2NE1, 2PM, etc.
-        line = re.sub(r'^\d+\s*(?:[.)](?!\d)|-(?=\s))\s*', '', line)
         cleaned_lines.append(f"{i}. {line}")
 
     return True, "", "\n".join(cleaned_lines), ",".join(extracted_urls)
