@@ -7,6 +7,7 @@ import discord
 from commands.registry import all_commands
 from config import Channel, guild_id
 from db.bot import get_active_bot_status_db
+from tasks.heartbeat import write_heartbeat
 from tasks.listen_game import check_listen_game_reminders
 from tasks.scheduled_events import check_upcoming_events
 from tasks.tournaments import tournament_resolution_loop
@@ -94,6 +95,10 @@ class IUBot(discord.Client):
 
     async def on_ready(self):
         logger.info('%s has connected to Discord!', self.user)
+
+        # The healthcheck reads this, so it runs even when no server is configured
+        if not write_heartbeat.is_running():
+            write_heartbeat.start(self)
 
         if not guild_id():
             return

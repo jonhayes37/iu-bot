@@ -10,6 +10,7 @@ change them with monkeypatch.setenv.
 
 import enum
 import os
+import tempfile
 from pathlib import Path
 
 IU_DIR = Path(__file__).resolve().parent
@@ -110,6 +111,11 @@ def admin_user_id() -> int:
     """The user ID of the server admin the bot pings and DMs (HALLYU_ID)."""
     value = os.getenv('HALLYU_ID')
     return int(value) if value else DEFAULT_ADMIN_USER_ID
+
+
+def heartbeat_path() -> Path:
+    """The file the bot touches every minute while connected, which the container healthcheck reads (HEARTBEAT_PATH)."""
+    return Path(os.getenv('HEARTBEAT_PATH') or Path(tempfile.gettempdir()) / 'iu-bot-heartbeat')
 
 
 def youtube_token_path() -> str | None:

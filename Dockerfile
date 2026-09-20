@@ -67,8 +67,14 @@ ENV DATA_DIR=/app/data \
     DB_PATH_RELEASES=/app/data/releases.db \
     DB_PATH_ROLES=/app/data/roles.db \
     DB_PATH_TOP_SONGS=/app/data/top_songs.db \
-    DB_PATH_TOURNAMENTS=/app/data/tournaments.db
+    DB_PATH_TOURNAMENTS=/app/data/tournaments.db \
+    HEARTBEAT_PATH=/tmp/iu-bot-heartbeat
 
 USER ${APP_UID}:${APP_GID}
+
+# The bot touches the heartbeat file every minute while connected (tasks/heartbeat.py); the container
+# is unhealthy when it hasn't been touched for 5 minutes. The start period covers the time to connect.
+HEALTHCHECK --interval=2m --timeout=10s --start-period=3m --retries=2 \
+    CMD test -n "$(find "$HEARTBEAT_PATH" -mmin -5 2>/dev/null)" || exit 1
 
 CMD ["python", "iu/main.py"]

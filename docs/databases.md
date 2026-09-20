@@ -154,13 +154,36 @@ Delete old ones so they don't pile up (this removes backup folders older than 14
 find /mnt/user/appdata/iu-bot/backups -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -r {} +
 ```
 
-### Schedule it and keep a copy elsewhere
+### The scheduled backup (Unraid)
 
-Backups that live on the same disk as the data don't survive that disk failing. In Unraid, a common
-way to run the commands above every night is the **User Scripts** plugin (from Community
-Applications), and the **Appdata Backup** plugin can copy the whole appdata folder on a schedule.
-Whatever you use, also copy the result to somewhere off the NAS from time to time. *(Both are
-optional add-ons; check their current names in Community Applications.)*
+The production backup is the **Appdata Backup** plugin (Settings -> Appdata Backup), not the
+commands above, which are for one-off copies and for checking. Its settings:
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Backup type | Stop, backup, start for each container | The container is stopped while its folder is copied, so all eleven databases are captured at the same moment (the consistent copy described above). |
+| Schedule | Daily at 04:00 | The quietest time of day; the bot is offline for only a moment. The Listen Game resumes anything interrupted after a restart. |
+| Destination | `/mnt/user/backups/` | The `backups` share is set to **Array** only, so backups are on parity-protected disks, not on the cache SSD that holds the live data. |
+| Retention | Delete after 7 days, keep at least 3 | Bounds the space used. |
+| Notifications | Errors only | Silence means success, or that it never ran. See the check below. |
+
+The container is not on the plugin's exclude list. If you add a second data folder or move the
+container's data mapping, make sure it is still under an appdata source the plugin covers.
+
+**Check it works** (worth doing now and then, and after changing the plugin's settings):
+
+1. Look in `/mnt/user/backups/` for a recent dated backup that contains the iu-bot data.
+2. Extract the archive somewhere temporary and check every database:
+
+   ```bash
+   for f in extracted/*.db; do echo "$f"; sqlite3 "$f" "PRAGMA integrity_check;"; done
+   ```
+
+   Each should print `ok`.
+
+**What it does not cover:** it doesn't protect against the whole NAS being lost (fire, theft, a
+power surge). Copy the newest backup off the NAS from time to time. It also keeps only about a
+week, so a problem noticed later than that can't be undone from this backup.
 
 ### Restore
 

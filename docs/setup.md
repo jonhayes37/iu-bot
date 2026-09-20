@@ -119,6 +119,7 @@ the playbook).
 | `DB_PATH_<NAME>` | Optional | `/app/data/<name>.db` | Where each database lives (11 of them, listed in [databases.md](databases.md)). An unset one is skipped at startup and its features fail |
 | `DATA_DIR` | No | `/app/data` | Only used by the image to build the paths above |
 | `LOG_LEVEL` | Optional | `INFO` | `DEBUG` also shows the routine "checking..." lines the background loops write every minute, 5 minutes or hour. Use it only while investigating |
+| `HEARTBEAT_PATH` | Optional | `/tmp/iu-bot-heartbeat` | The file the bot touches every minute while connected; the container healthcheck reads it. The image sets it, so leave it alone |
 | `PYTHONUNBUFFERED` | No | `1` | Makes log lines appear immediately |
 
 So in practice you set `DISCORD_TOKEN` and `DISCORD_GUILD`, and map a folder on the host to

@@ -157,6 +157,8 @@ class TestOnReady:
             monkeypatch.setattr(loop, "is_running", mock.Mock(return_value=False))
             loops[name] = loop
         bot.loops = loops
+        monkeypatch.setattr(bot_module.write_heartbeat, "start", mock.Mock())
+        monkeypatch.setattr(bot_module.write_heartbeat, "is_running", mock.Mock(return_value=False))
         return bot
 
     async def test_without_a_server_configured_nothing_starts(self, ready, monkeypatch):
@@ -166,6 +168,20 @@ class TestOnReady:
 
         assert not any(loop.start.called for loop in ready.loops.values())
         ready.change_presence.assert_not_awaited()
+
+    async def test_the_heartbeat_starts_even_without_a_server_configured(self, ready, monkeypatch):
+        monkeypatch.delenv("DISCORD_GUILD")
+
+        await ready.on_ready()
+
+        bot_module.write_heartbeat.start.assert_called_once_with(ready)
+
+    async def test_a_reconnect_does_not_restart_the_heartbeat(self, ready):
+        bot_module.write_heartbeat.is_running.return_value = True
+
+        await ready.on_ready()
+
+        bot_module.write_heartbeat.start.assert_not_called()
 
     async def test_the_three_background_tasks_start_for_the_server(self, ready):
         await ready.on_ready()

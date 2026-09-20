@@ -233,6 +233,20 @@ ranking screen (before pressing **Confirm**) does lose that screen and must run 
 SQLite writes are slow on an array disk protected by parity. Keep the data folder on the SSD/cache
 pool *(check)*, and make sure the share is not set to be moved off it by Unraid's mover.
 
+The nightly backup of that folder (and how to check it) is described in
+[databases.md](databases.md#the-scheduled-backup-unraid).
+
+### Health status
+
+The image has a healthcheck: every 2 minutes Docker checks that the bot has written its heartbeat
+file in the last 5 minutes. The bot writes it every minute while it is connected to Discord. In the
+Docker tab the container shows **healthy** or **unhealthy** (newer Unraid versions; otherwise run
+`docker ps` and read the status column). **Unhealthy** means the bot's event loop has hung or it has
+lost its connection to Discord for several minutes, even though the container is still running.
+Docker does not restart an unhealthy container by itself; restart it from the Docker tab and read
+the logs from before the restart. The status reads **starting** for the first few minutes after a start.
+It does not check the individual background tasks, which log their own errors and keep running.
+
 ### Times are UTC in the logs
 
 Container logs and stored timestamps are UTC. The bot uses Eastern time for the daily heart reset
