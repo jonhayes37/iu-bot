@@ -107,9 +107,10 @@ All Listen Game commands work in `#listen-game`.
    and the listener doesn't submit. IU adds each song to that round's YouTube playlist (creating
    it automatically) and keeps a live "submissions so far" counter in the channel. The GM is
    notified of each submission.
-5. **Approval.** When everyone has submitted, the GM gets a summary. They can reject duplicates
-   or bad picks, then run `/listen-game-gm-approve-playlist` to close the round. The listener
-   receives the playlist by DM.
+5. **Approval.** When everyone has submitted, the GM gets a summary, whether the last song came
+   from a player, a GM force-submit, or removing the last player who still owed one. They can reject
+   duplicates or bad picks, then run `/listen-game-gm-approve-playlist` to close the round. The
+   listener receives the playlist by DM. (A round that hits its deadline closes on its own.)
 6. **Ranking.** The listener runs `/listen-game-submit-ranking`. They choose songs one at a time,
    starting from last place and working up to first, writing commentary for each. Each pick is
    saved as it's made, so if the bot restarts (or the message is dismissed) the listener can run the
@@ -229,8 +230,8 @@ ranked: 1st choice is worth 3 points, 2nd choice 2, and 3rd choice 1.
 | `/export-end-of-year-nominations` | Admin | Exports the Top 25 lists, honourable mentions and Hall of Fame nominations |
 | `/hma-nomination-export [year]` | Admin | Exports the HMA nominations, grouped by category |
 | `/hma-suggestions-export` | Admin | Exports the category suggestions |
-| `/hma-set-nominees category_id nominees_pipe` | Admin | Sets the finalists for an HMA category (separated by `\|`) |
-| `/hall-of-fame-set-nominees nominees_pipe` | Admin | Sets the Hall of Fame finalists (separated by `\|`) |
+| `/hma-set-nominees category_id nominees_pipe` | Admin | Sets the finalists for an HMA category (separated by `\|`): 3 to 25, each up to 100 characters, so the ballot menus can show them |
+| `/hall-of-fame-set-nominees nominees_pipe` | Admin | Sets the Hall of Fame finalists (separated by `\|`): 3 to 25, each up to 100 characters |
 | `/end-of-year-voting` | Admin | Posts the voting buttons |
 
 ## Bias cards

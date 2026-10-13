@@ -8,7 +8,7 @@ from db.listen_game import (
     RoundStatus, get_active_gm_id, get_ranking_picks_db, get_round_submissions_db, get_user_submission_db,
     is_round_complete_db, is_video_claimed_by_other_db, upsert_submission_db
 )
-from services.listen_game import RoundContext, playlist_link, require_active_round, send_dm, update_submission_tracker
+from services.listen_game import after_submissions_changed, require_active_round, send_dm
 from services.listen_game_playlist import (
     SUBMISSION_LOCK, PlaylistOutcome, get_host_name, put_song_in_round_playlist
 )
@@ -128,32 +128,31 @@ async def _process_submission(interaction: discord.Interaction, url: str):
         return
 
     upsert_submission_db(active_round.round_id, user.id, video_id, video_title)
+    quota_hit = outcome is PlaylistOutcome.QUOTA_EXCEEDED
+    gm_id = get_active_gm_id(ctx.game, active_round)
 
-    if outcome is PlaylistOutcome.QUOTA_EXCEEDED:
+    if previous_submission:
+        reply = f"🔄 **Updated!** Your submission has been swapped to `{video_title}`."
+    else:
+        reply = f"✅ **Success!** Your song `{video_title}` has been submitted for review by the GM."
+    if quota_hit:
         # The song is saved anyway; the GM catches the playlist up later
-        await interaction.followup.send(
-            f"✅ **Success!** Your song `{video_title}` has been submitted for review by the GM.\n\n"
-            "⚠️ *Note: YouTube API limits have been reached for today, so it is not in the "
-            "playlist yet. The GM has been notified to sync it tomorrow.*"
-        )
+        reply += ("\n\n⚠️ *Note: YouTube API limits have been reached for today, so it is not in the "
+                  "playlist yet. The GM has been notified to sync it tomorrow.*")
+    await interaction.followup.send(reply)
+
+    if quota_hit:
         await send_dm(
-            interaction.client, get_active_gm_id(ctx.game, active_round),
+            interaction.client, gm_id,
             "🚨 **Listen Game Alert: YouTube Quota Exceeded!**\n"
             "A player submitted a song, but the bot could not add it to the playlist due to "
             "YouTube API limits. The song is safely stored in the database.\n\n"
             "**Please run `/listen-game-gm-sync-playlist` tomorrow** when the quota "
             "resets to catch the playlist up!"
         )
-        return
-
-    if previous_submission:
-        await interaction.followup.send(f"🔄 **Updated!** Your submission has been swapped to `{video_title}`.")
-    else:
-        await interaction.followup.send(
-            f"✅ **Success!** Your song `{video_title}` has been submitted for review by the GM.")
 
     await send_dm(
-        interaction.client, get_active_gm_id(ctx.game, active_round),
+        interaction.client, gm_id,
         f"🎵 **New Listen Game Submission!**\n\n"
         f"**Player:** {user.display_name}\n"
         f"**Song:** `{video_title}`\n"
@@ -162,33 +161,9 @@ async def _process_submission(interaction: discord.Interaction, url: str):
         f"in {interaction.channel.mention}."
     )
 
-    await update_submission_tracker(interaction.channel, ctx)
-
-    # When the last song comes in, route to the GM instead of closing the round
-    if not previous_submission and is_round_complete_db(ctx.game.game_id, active_round.round_id):
-        await _notify_gm_all_submitted(interaction, ctx, playlist_id)
-
-
-async def _notify_gm_all_submitted(interaction: discord.Interaction, ctx: RoundContext, playlist_id: str | None):
-    """DMs the GM the ledger of everything submitted so they can review it and approve the round."""
-    summary_lines = []
-    for submission in get_round_submissions_db(ctx.round.round_id):
-        member = interaction.guild.get_member(submission.user_id)
-        name = member.display_name if member else f"User ID {submission.user_id}"
-        summary_lines.append(f"• **{name}**: `{submission.raw_title}`")
-
-    await send_dm(
-        interaction.client, get_active_gm_id(ctx.game, ctx.round),
-        "**Listen Game: All Submissions Are In!**\n\n"
-        f"Here is the playlist: {playlist_link(playlist_id)}\n\n"
-        "**Submission Ledger (For Review):**\n"
-        + "\n".join(summary_lines) + "\n\n"
-        "Please review the submissions for duplicates. "
-        "If you need to reject a song, use "
-        "`/listen-game-gm-reject-song @player [reason]`.\n"
-        "If everything looks good, run `/listen-game-gm-approve-playlist` "
-        f"in {interaction.channel.mention} to publish it to the channel and notify the listener!"
-    )
+    # A swap can't complete the round, so only a new song can send the GM the ledger
+    await after_submissions_changed(interaction, ctx, playlist_id, check_complete=not previous_submission,
+                                    playlist_behind=quota_hit)
 
 
 @app_commands.command(name="listen-game-submit-ranking",

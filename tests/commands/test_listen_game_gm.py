@@ -9,7 +9,8 @@ import pytest
 from commands.listen_game_gm import (
     _sync_missing_videos, listen_game_create, listen_game_gm_approve_playlist, listen_game_gm_force_start_round,
     listen_game_gm_force_submit, listen_game_gm_reject_song, listen_game_gm_remove_player,
-    listen_game_gm_skip_turn, listen_game_gm_swap_players, listen_game_gm_sync_playlist, listen_game_start
+    LEDGER_SENT, listen_game_gm_skip_turn, listen_game_gm_swap_players, listen_game_gm_sync_playlist,
+    listen_game_start
 )
 from config import Database
 from db.listen_game import (
@@ -540,17 +541,37 @@ class TestRemovePlayer:
         assert get_user_submission_db(round_id, 103) is None
         youtube.assert_called_once_with("PLround", "vidC")
 
-    async def test_removing_the_last_missing_player_closes_the_round_and_tells_the_listener(self, listen_server):
+    async def test_removing_the_last_missing_player_sends_the_gm_the_ledger_to_review(self, listen_server):
         _, round_id = _submitting_round()
         upsert_submission_db(round_id, 102, "vidB", "Song B")        # only 103 hasn't submitted
         interaction = listen_server.interaction(1)
 
         await listen_game_gm_remove_player.callback(interaction, listen_server.members[103], "gone")
 
-        assert get_round_db(round_id).status is RoundStatus.RANKING
-        [dm] = listen_server.dms(101)
-        assert dm.startswith("🎉 **All submissions are in for your Listen Game round!**")
-        assert "https://www.youtube.com/playlist?list=PLround" in dm
+        assert get_round_db(round_id).status is RoundStatus.SUBMITTING        # the GM approves it, not the bot
+        [ledger] = listen_server.dms(GM)
+        assert ledger.startswith("**Listen Game: All Submissions Are In!**")
+        assert "https://www.youtube.com/playlist?list=PLround" in ledger and "• **Member 102**: `Song B`" in ledger
+        assert listen_server.dms(101) == []
+        assert _last_reply(interaction).endswith(LEDGER_SENT)
+
+    async def test_removing_a_player_who_others_are_still_waiting_on_sends_no_ledger(self, listen_server):
+        _, round_id = _submitting_round()
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_remove_player.callback(interaction, listen_server.members[103], "gone")
+
+        assert listen_server.dms(GM) == []
+        assert LEDGER_SENT not in _last_reply(interaction)
+
+    async def test_the_submissions_counter_is_refreshed_while_submissions_are_open(self, listen_server):
+        _, round_id = _submitting_round()
+        update_round_status_message_db(round_id, 9001)
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_remove_player.callback(interaction, listen_server.members[103], "gone")
+
+        interaction.channel.fetch_message.assert_awaited_once_with(9001)
 
     async def test_a_player_with_closed_dms_is_flagged(self, listen_server):
         start_game()
@@ -716,17 +737,21 @@ class TestForceSubmit:
         assert _last_reply(interaction) == \
             "🔄 **Updated!** Swapped submission to `Forced Song` for Member 102. Player was DMed."
 
-    async def test_the_last_missing_song_closes_the_round_and_tells_the_listener(self, listen_server):
+    async def test_the_last_missing_song_sends_the_gm_the_ledger_to_review(self, listen_server):
         _, round_id = _submitting_round()
         upsert_submission_db(round_id, 103, "vidC", "Song C")
         interaction = listen_server.interaction(1)
 
         await listen_game_gm_force_submit.callback(interaction, listen_server.members[102], self.URL)
 
-        assert get_round_db(round_id).status is RoundStatus.RANKING
-        assert listen_server.dms(101)[0].startswith("🎉 **All submissions are in for your Listen Game round!**")
+        assert get_round_db(round_id).status is RoundStatus.SUBMITTING        # the GM approves it, not the bot
+        [ledger] = listen_server.dms(GM)
+        assert ledger.startswith("**Listen Game: All Submissions Are In!**")
+        assert "• **Member 102**: `Forced Song`" in ledger and "• **Member 103**: `Song C`" in ledger
+        assert listen_server.dms(101) == []
+        assert _last_reply(interaction).endswith(LEDGER_SENT)
 
-    async def test_replacing_a_song_does_not_close_the_round_again(self, listen_server):
+    async def test_replacing_a_song_does_not_send_the_ledger_again(self, listen_server):
         _, round_id = _submitting_round()
         upsert_submission_db(round_id, 102, "old", "Old")
         upsert_submission_db(round_id, 103, "vidC", "Song C")
@@ -735,6 +760,8 @@ class TestForceSubmit:
         await listen_game_gm_force_submit.callback(interaction, listen_server.members[102], self.URL)
 
         assert get_round_db(round_id).status is RoundStatus.SUBMITTING
+        assert listen_server.dms(GM) == []
+        assert LEDGER_SENT not in _last_reply(interaction)
 
     async def test_a_playlist_that_cannot_be_made(self, listen_server, youtube):
         _, round_id = _submitting_round()
@@ -764,8 +791,24 @@ class TestForceSubmit:
         await listen_game_gm_force_submit.callback(interaction, listen_server.members[102], self.URL)
 
         assert get_user_submission_db(round_id, 102) is not None
+        assert _last_reply(interaction).startswith("✅ **Success!** `Forced Song` accepted for Member 102.")
         assert "Run `/listen-game-gm-sync-playlist` tomorrow" in _last_reply(interaction)
         assert len(listen_server.dms(102)) == 1
+
+    async def test_running_out_of_quota_on_the_last_song_still_sends_the_ledger_with_a_sync_reminder(
+            self, listen_server, youtube):
+        _, round_id = _submitting_round()
+        upsert_submission_db(round_id, 103, "vidC", "Song C")
+        update_round_status_message_db(round_id, 9001)
+        youtube.put.return_value = (PlaylistOutcome.QUOTA_EXCEEDED, "PLround")
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_force_submit.callback(interaction, listen_server.members[102], self.URL)
+
+        [ledger] = listen_server.dms(GM)
+        assert "Run `/listen-game-gm-sync-playlist` once the quota resets, before approving" in ledger
+        assert _last_reply(interaction).endswith(LEDGER_SENT)
+        interaction.channel.fetch_message.assert_awaited_once_with(9001)
 
     async def test_a_player_with_closed_dms_is_flagged(self, listen_server):
         _submitting_round()

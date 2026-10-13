@@ -3,7 +3,7 @@
 import pytest
 
 from commands.hmas import (
-    MAX_NOMINEE_LENGTH, MAX_NOMINEES_PER_CATEGORY, end_of_year_hma_suggestions, hma_nomination,
+    MAX_NOMINEE_LENGTH, end_of_year_hma_suggestions, hma_nomination,
     hma_nomination_export, hma_set_nominees, hma_suggestions_export
 )
 from config import Database
@@ -12,6 +12,7 @@ from db.hmas import (
 )
 from ui.hma_nominations import MultiNominationView
 from ui.hma_suggestions import HMASuggestionsHub
+from utils.validation import MAX_BALLOT_NOMINEES, MAX_BALLOT_NOMINEE_LENGTH
 
 
 @pytest.fixture(autouse=True)
@@ -83,11 +84,11 @@ class TestSetNominees:
     """/hma-set-nominees sets the final list for a category."""
 
     async def test_saves_the_list_and_confirms_it(self, admin_interaction):
-        await hma_set_nominees.callback(admin_interaction, "soty", "IVE - HEYA | aespa - Supernova ")
+        await hma_set_nominees.callback(admin_interaction, "soty", "IVE - HEYA | aespa - Supernova | IU - Love wins all ")
 
-        assert get_hma_final_nominees("soty") == ["IVE - HEYA", "aespa - Supernova"]
+        assert get_hma_final_nominees("soty") == ["IU - Love wins all", "IVE - HEYA", "aespa - Supernova"]
         assert admin_interaction.sent[0].content == (
-            "✅ **Saved 2 nominees for `soty` (2026)!**\n\n• IVE - HEYA\n• aespa - Supernova")
+            "✅ **Saved 3 nominees for `soty` (2026)!**\n\n• IVE - HEYA\n• aespa - Supernova\n• IU - Love wins all")
 
     @pytest.mark.parametrize("text", ["", "|", "  |  "])
     async def test_a_list_with_no_names_is_refused(self, admin_interaction, text):
@@ -96,7 +97,7 @@ class TestSetNominees:
         assert admin_interaction.sent[0].content == "❌ No valid nominees found. Check your formatting."
 
     async def test_more_nominees_than_a_menu_holds_are_refused(self, admin_interaction):
-        many = " | ".join(f"Act {i}" for i in range(MAX_NOMINEES_PER_CATEGORY + 1))
+        many = " | ".join(f"Act {i}" for i in range(MAX_BALLOT_NOMINEES + 1))
 
         await hma_set_nominees.callback(admin_interaction, "soty", many)
 
@@ -104,27 +105,41 @@ class TestSetNominees:
         assert get_hma_final_nominees("soty") == []
 
     async def test_exactly_the_most_a_menu_holds_is_fine(self, admin_interaction):
-        many = " | ".join(f"Act {i}" for i in range(MAX_NOMINEES_PER_CATEGORY))
+        many = " | ".join(f"Act {i}" for i in range(MAX_BALLOT_NOMINEES))
 
         await hma_set_nominees.callback(admin_interaction, "soty", many)
 
         assert len(get_hma_final_nominees("soty")) == 25
 
+    async def test_fewer_than_a_ballot_ranks_are_refused(self, admin_interaction):
+        await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa")
+
+        assert admin_interaction.sent[0].content.startswith("❌ You gave 2 nominees, but voters rank their top 3")
+        assert get_hma_final_nominees("soty") == []
+
+    async def test_a_nominee_longer_than_a_menu_shows_is_refused(self, admin_interaction):
+        long_name = "x" * (MAX_BALLOT_NOMINEE_LENGTH + 1)
+
+        await hma_set_nominees.callback(admin_interaction, "soty", f"IVE | aespa | {long_name}")
+
+        assert "at most 100 characters per nominee" in admin_interaction.sent[0].content
+        assert get_hma_final_nominees("soty") == []
+
     async def test_the_same_nominee_twice_is_refused(self, admin_interaction):
-        await hma_set_nominees.callback(admin_interaction, "soty", "IVE | IVE")
+        await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa | IVE")
 
         assert admin_interaction.sent[0].content == "❌ The list has the same nominee more than once."
 
     async def test_an_unknown_category_is_refused_and_nothing_changes(self, admin_interaction):
         set_final_nominees("soty", ["Old"])
 
-        await hma_set_nominees.callback(admin_interaction, "not_a_category", "IVE")
+        await hma_set_nominees.callback(admin_interaction, "not_a_category", "IVE | aespa | IU")
 
         assert admin_interaction.sent[0].content.startswith("❌ There is no category called `not_a_category`.")
         assert get_hma_final_nominees("soty") == ["Old"]
 
     async def test_the_reply_is_private(self, admin_interaction):
-        await hma_set_nominees.callback(admin_interaction, "soty", "IVE")
+        await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa | IU")
 
         admin_interaction.response.defer.assert_awaited_once_with(ephemeral=True)
 

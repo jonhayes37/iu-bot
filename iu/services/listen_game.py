@@ -6,8 +6,8 @@ from dataclasses import dataclass
 import discord
 
 from db.listen_game import (
-    Game, GameStatus, Round, RoundStatus, get_current_round_db, get_game_by_status_db,
-    get_registered_players_db, get_round_submissions_db
+    Game, GameStatus, Round, RoundStatus, get_active_gm_id, get_current_round_db, get_game_by_status_db,
+    get_registered_players_db, get_round_submissions_db, is_round_complete_db
 )
 
 logger = logging.getLogger('iu-bot')
@@ -88,3 +88,55 @@ async def update_submission_tracker(channel: discord.abc.Messageable, ctx: Round
         await tracker_message.edit(content=text)
     except (discord.NotFound, discord.Forbidden) as ex:
         logger.warning("Could not update the submissions tracker message: %s", ex)
+
+
+async def after_submissions_changed(interaction: discord.Interaction, ctx: RoundContext, playlist_id: str | None, *,
+                                    check_complete: bool = True, playlist_behind: bool = False) -> bool:
+    """
+    Run after a round's submissions change: refreshes the tracker and, if every remaining player has
+    now submitted, DMs the GM running the round the ledger to review. The round stays open either way;
+    only /listen-game-gm-approve-playlist moves it on to ranking, so the GM always sees the full list.
+
+    check_complete is False when the change can't have completed the round (a player swapping songs).
+    playlist_behind says a song couldn't be added to the playlist (YouTube quota), so the GM should
+    sync it before approving. Returns True if the ledger was sent.
+    """
+    await update_submission_tracker(interaction.channel, ctx)
+
+    if not check_complete or not is_round_complete_db(ctx.game.game_id, ctx.round.round_id):
+        return False
+
+    await _send_ledger_to_gm(interaction, ctx, playlist_id, playlist_behind)
+    return True
+
+
+async def _send_ledger_to_gm(interaction: discord.Interaction, ctx: RoundContext, playlist_id: str | None,
+                             playlist_behind: bool):
+    """DMs the GM the ledger of everything submitted so they can review it and approve the round."""
+    summary_lines = []
+    for submission in get_round_submissions_db(ctx.round.round_id):
+        member = interaction.guild.get_member(submission.user_id)
+        name = member.display_name if member else f"User ID {submission.user_id}"
+        summary_lines.append(f"• **{name}**: `{submission.raw_title}`")
+
+    sync_note = ""
+    if playlist_behind:
+        sync_note = (
+            "⚠️ The YouTube quota ran out, so the playlist is missing at least one song. Run "
+            "`/listen-game-gm-sync-playlist` once the quota resets, before approving, so the listener gets "
+            "the full playlist.\n\n"
+        )
+
+    await send_dm(
+        interaction.client, get_active_gm_id(ctx.game, ctx.round),
+        "**Listen Game: All Submissions Are In!**\n\n"
+        f"Here is the playlist: {playlist_link(playlist_id)}\n\n"
+        "**Submission Ledger (For Review):**\n"
+        + "\n".join(summary_lines) + "\n\n"
+        + sync_note +
+        "Please review the submissions for duplicates. "
+        "If you need to reject a song, use "
+        "`/listen-game-gm-reject-song @player [reason]`.\n"
+        "If everything looks good, run `/listen-game-gm-approve-playlist` "
+        f"in {interaction.channel.mention} to publish it to the channel and notify the listener!"
+    )

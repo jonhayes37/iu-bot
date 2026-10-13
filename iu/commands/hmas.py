@@ -9,13 +9,10 @@ from db.hmas import (
 from ui.hma_nominations import MultiNominationView
 from ui.hma_suggestions import HMASuggestionsHub
 from utils.end_of_year import get_current_award_year
-from utils.validation import admin_only
+from utils.validation import admin_only, ballot_nominees_problem
 
 # Long enough for a song title, artist and a YouTube link; the nominee is echoed in messages and embed fields
 MAX_NOMINEE_LENGTH = 300
-
-# A Discord select menu holds at most 25 options, and the voting menu lists every nominee
-MAX_NOMINEES_PER_CATEGORY = 25
 
 
 @discord.app_commands.command(name='hma-nomination', description="Submit a nomination for the HallyU Music Awards!")
@@ -96,14 +93,9 @@ async def hma_set_nominees(interaction: discord.Interaction, category_id: str, n
         await interaction.followup.send("❌ No valid nominees found. Check your formatting.")
         return
 
-    if len(nominees) > MAX_NOMINEES_PER_CATEGORY:
-        await interaction.followup.send(
-            f"❌ You gave {len(nominees)} nominees, but a voting menu holds at most "
-            f"{MAX_NOMINEES_PER_CATEGORY}. Shorten the list and try again.")
-        return
-
-    if len(set(nominees)) != len(nominees):
-        await interaction.followup.send("❌ The list has the same nominee more than once.")
+    problem = ballot_nominees_problem(nominees)
+    if problem:
+        await interaction.followup.send(problem)
         return
 
     year = set_final_nominees(category_id, nominees)

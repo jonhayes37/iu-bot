@@ -37,6 +37,39 @@ def parse_colour(text: str) -> int | None:
     return int(match.group(1), 16) if match else None
 
 
+# A voting ballot is three select menus that each list every nominee. Discord allows 25 options per
+# menu and 100 characters per option, and voters must rank three different nominees.
+MIN_BALLOT_NOMINEES = 3
+MAX_BALLOT_NOMINEES = 25
+MAX_BALLOT_NOMINEE_LENGTH = 100
+
+
+def ballot_nominees_problem(nominees: list[str]) -> str | None:
+    """
+    Why this list of nominees couldn't be shown on a voting ballot, as a message for the admin, or
+    None if it can. Checked when the nominees are set, so a bad list never reaches the voters.
+    """
+    if len(nominees) < MIN_BALLOT_NOMINEES:
+        return (f"❌ You gave {len(nominees)} nominee{'s' if len(nominees) != 1 else ''}, but voters rank "
+                f"their top {MIN_BALLOT_NOMINEES}, so a ballot needs at least {MIN_BALLOT_NOMINEES}.")
+
+    if len(nominees) > MAX_BALLOT_NOMINEES:
+        return (f"❌ You gave {len(nominees)} nominees, but a voting menu holds at most "
+                f"{MAX_BALLOT_NOMINEES}. Shorten the list and try again.")
+
+    if len(set(nominees)) != len(nominees):
+        return "❌ The list has the same nominee more than once."
+
+    too_long = [name for name in nominees if len(name) > MAX_BALLOT_NOMINEE_LENGTH]
+    if too_long:
+        examples = "\n".join(f"• {name[:MAX_BALLOT_NOMINEE_LENGTH]}… ({len(name)} characters)"
+                             for name in too_long[:5])
+        return (f"❌ A voting menu shows at most {MAX_BALLOT_NOMINEE_LENGTH} characters per nominee. "
+                f"Shorten these:\n{examples}")
+
+    return None
+
+
 def sanitize_list(raw_text: str, expected_count: int) -> tuple[bool, str, str, str]:
     """
     Parses the raw modal text for Top 25 and HMs.

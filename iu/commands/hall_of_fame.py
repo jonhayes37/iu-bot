@@ -1,7 +1,7 @@
 """Commands for the hall of fame"""
 import discord
 from db.hall_of_fame import set_hof_final_nominees
-from utils.validation import admin_only
+from utils.validation import admin_only, ballot_nominees_problem
 
 @discord.app_commands.command(name='hall-of-fame-set-nominees',
                               description="[Admin] Set the shortlist of nominees for the Hall of Fame.")
@@ -16,6 +16,11 @@ async def hall_of_fame_set_nominees(interaction: discord.Interaction, nominees_p
     nominees = [n.strip() for n in nominees_pipe.split('|') if n.strip()]
     if not nominees:
         await interaction.followup.send("❌ No valid nominees found. Check your formatting.")
+        return
+
+    problem = ballot_nominees_problem(nominees)
+    if problem:
+        await interaction.followup.send(problem)
         return
 
     year = set_hof_final_nominees(nominees)

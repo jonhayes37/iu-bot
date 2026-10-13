@@ -5,7 +5,10 @@ import pytest
 from discord import app_commands
 
 from config import Channel
-from utils.validation import admin_only, parse_colour, sanitize_list, validate_channel
+from utils.validation import (
+    MAX_BALLOT_NOMINEE_LENGTH, MAX_BALLOT_NOMINEES, admin_only, ballot_nominees_problem, parse_colour,
+    sanitize_list, validate_channel
+)
 
 
 def _admin_command():
@@ -119,6 +122,41 @@ class TestParseColour:
     ])
     def test_invalid_colours(self, text):
         assert parse_colour(text) is None
+
+
+
+class TestBallotNomineesProblem:
+    """ballot_nominees_problem refuses lists that Discord's voting menus can't show."""
+
+    @pytest.mark.parametrize("count", [3, MAX_BALLOT_NOMINEES])
+    def test_a_list_a_ballot_can_show_is_fine(self, count):
+        assert ballot_nominees_problem([f"Act {i}" for i in range(count)]) is None
+
+    def test_a_name_of_exactly_the_longest_a_menu_shows_is_fine(self):
+        assert ballot_nominees_problem(["A", "B", "x" * MAX_BALLOT_NOMINEE_LENGTH]) is None
+
+    @pytest.mark.parametrize("nominees, expected", [
+        (["IU"], "❌ You gave 1 nominee, but voters rank their top 3, so a ballot needs at least 3."),
+        (["IU", "BTS"], "❌ You gave 2 nominees, but voters rank their top 3, so a ballot needs at least 3."),
+    ])
+    def test_too_few_for_a_top_three(self, nominees, expected):
+        assert ballot_nominees_problem(nominees) == expected
+
+    def test_more_than_a_menu_holds(self):
+        problem = ballot_nominees_problem([f"Act {i}" for i in range(MAX_BALLOT_NOMINEES + 1)])
+
+        assert problem == "❌ You gave 26 nominees, but a voting menu holds at most 25. Shorten the list and try again."
+
+    def test_the_same_nominee_twice(self):
+        assert ballot_nominees_problem(["IU", "BTS", "IU"]) == "❌ The list has the same nominee more than once."
+
+    def test_names_too_long_for_a_menu_are_listed_with_their_length(self):
+        long_name = "x" * (MAX_BALLOT_NOMINEE_LENGTH + 20)
+
+        problem = ballot_nominees_problem(["IU", "BTS", long_name])
+
+        assert problem == ("❌ A voting menu shows at most 100 characters per nominee. Shorten these:\n"
+                           f"• {'x' * MAX_BALLOT_NOMINEE_LENGTH}… (120 characters)")
 
 
 class TestSanitizeList:

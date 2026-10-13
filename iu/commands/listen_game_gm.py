@@ -16,7 +16,10 @@ from db.listen_game import (
     remove_player_from_game_db, skip_game_turn_db, start_game_db, swap_player_orders_db, update_game_start_message_db,
     upsert_submission_db
 )
-from services.listen_game import playlist_link, require_active_round, send_dm, update_submission_tracker
+from services.listen_game import (
+    RoundContext, after_submissions_changed, playlist_link, require_active_round, send_dm,
+    update_submission_tracker
+)
 from services.listen_game_playlist import (
     SUBMISSION_LOCK, PlaylistOutcome, get_host_name, put_song_in_round_playlist
 )
@@ -32,6 +35,10 @@ from utils.validation import validate_channel
 logger = logging.getLogger('iu-bot')
 
 ROUND_ALREADY_MOVED_ON = "⚠️ The round has already moved on, so nothing was changed."
+LEDGER_SENT = (
+    "\n\n📋 Everyone remaining has now submitted, so the submission ledger has been DMed to the GM running "
+    "this round. Run `/listen-game-gm-approve-playlist` once it looks right."
+)
 
 _SWAP_FAILURES = {
     SwapOutcome.NO_ACTIVE_HOST: "❌ Could not determine the current active host or turn order.",
@@ -391,22 +398,17 @@ async def listen_game_gm_remove_player(interaction: discord.Interaction, player:
     )
     dm_status = "Player was DMed." if dm_sent else "Player has DMs disabled."
 
+    # Removing them changes the count, and may mean everyone left has now submitted
+    ledger_sent = False
+    if submissions_open:
+        ledger_sent = await after_submissions_changed(
+            interaction, RoundContext(game, active_round), active_round.playlist_id)
+
     # Acknowledge the GM and announce in channel
-    await interaction.followup.send(f"✅ **Success!** {player.display_name} has been removed from the game. {dm_status}")
+    reply = f"✅ **Success!** {player.display_name} has been removed from the game. {dm_status}"
+    await interaction.followup.send(reply + (LEDGER_SENT if ledger_sent else ""))
     await interaction.channel.send(f"The Game Master has removed {player.display_name} from the game.")
 
-    # Check if removing this player caused the round to suddenly be complete!
-    if submissions_open and is_round_complete_db(game.game_id, active_round.round_id):
-        if close_round_db(active_round.round_id):
-            await send_dm(
-                interaction.client, active_round.host_id,
-                "🎉 **All submissions are in for your Listen Game round!**\n\n"
-                "A player was removed, which means everyone remaining has already submitted. "
-                "The round has been automatically closed.\n\n"
-                f"Here is your generated playlist to review: {playlist_link(active_round.playlist_id)}\n\n"
-                "When you've decided your rankings, run `/listen-game-submit-ranking` in "
-                "the channel to start the reveal!"
-            )
 
 @app_commands.command(name="listen-game-gm-force-start-round",
                       description="[GM] Force start ranking phase by explicitly skipping outstanding players.")
@@ -533,41 +535,27 @@ async def _process_forced_submission(interaction: discord.Interaction, player: d
         return
 
     upsert_submission_db(active_round.round_id, player.id, video_id, video_title)
-    player_dm = f"✅ The GM has forcefully submitted your song `{video_title}` for the Listen Game!"
+    quota_hit = outcome is PlaylistOutcome.QUOTA_EXCEEDED
 
-    if outcome is PlaylistOutcome.QUOTA_EXCEEDED:
-        # Handle YouTube Quota limits gracefully: the song is saved and can be synced later
-        await interaction.followup.send(
-            f"✅ **Success!** `{video_title}` accepted into the database for {player.display_name}.\n\n"
-            "⚠️ *Note: YouTube API limits have been reached. "
-            "Run `/listen-game-gm-sync-playlist` tomorrow to push it to the playlist.*"
-        )
-        await send_dm(interaction.client, player.id, player_dm)
-        return
+    # A swap can't complete the round, so only a new song can send the ledger
+    ledger_sent = await after_submissions_changed(interaction, ctx, playlist_id,
+                                                  check_complete=not previous_submission, playlist_behind=quota_hit)
 
-    await update_submission_tracker(interaction.channel, ctx)
-
-    # Final Completion Check & DM to Host
-    if not previous_submission and is_round_complete_db(ctx.game.game_id, active_round.round_id):
-        if close_round_db(active_round.round_id):
-            await send_dm(
-                interaction.client, active_round.host_id,
-                "🎉 **All submissions are in for your Listen Game round!**\n\n"
-                "The round has been automatically closed. Here is your generated playlist to review: "
-                f"{playlist_link(playlist_id)}\n\nWhen you've decided your rankings, run "
-                "`/listen-game-submit-ranking` in the channel to start the reveal!"
-            )
-
-    # Notify Player & Respond to GM
-    player_notified = await send_dm(interaction.client, player.id, player_dm)
+    player_notified = await send_dm(
+        interaction.client, player.id,
+        f"✅ The GM has forcefully submitted your song `{video_title}` for the Listen Game!")
     dm_status = "Player was DMed." if player_notified else "Player has DMs disabled."
 
     if previous_submission:
-        await interaction.followup.send(
-            f"🔄 **Updated!** Swapped submission to `{video_title}` for {player.display_name}. {dm_status}")
+        reply = f"🔄 **Updated!** Swapped submission to `{video_title}` for {player.display_name}. {dm_status}"
     else:
-        await interaction.followup.send(
-            f"✅ **Success!** `{video_title}` accepted for {player.display_name}. {dm_status}")
+        reply = f"✅ **Success!** `{video_title}` accepted for {player.display_name}. {dm_status}"
+    if quota_hit:
+        reply += ("\n\n⚠️ *Note: YouTube API limits have been reached. "
+                  "Run `/listen-game-gm-sync-playlist` tomorrow to push it to the playlist.*")
+    if ledger_sent:
+        reply += LEDGER_SENT
+    await interaction.followup.send(reply)
 
 @app_commands.command(name="listen-game-gm-approve-playlist",
                       description="[GM] Approve the round's playlist and notify the listener.")

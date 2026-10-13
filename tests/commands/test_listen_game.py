@@ -319,8 +319,37 @@ class TestSubmitSong:
         await submit_song.callback(interaction, URL)
 
         assert get_user_submission_db(round_id, 102) is not None
+        assert _reply(interaction).startswith(
+            "✅ **Success!** Your song `IU - Good Day` has been submitted for review by the GM.")
         assert "YouTube API limits have been reached for today" in _reply(interaction)
-        assert len(listen_server.dms(1)) == 1
+        quota_alert, new_song = listen_server.dms(1)
+        assert quota_alert.startswith("🚨 **Listen Game Alert: YouTube Quota Exceeded!**")
+        assert new_song.startswith("🎵 **New Listen Game Submission!**")
+
+    async def test_running_out_of_quota_on_the_last_song_still_updates_the_counter_and_sends_the_ledger(
+            self, listen_server, youtube):
+        _, round_id = self._open_round()
+        upsert_submission_db(round_id, 103, "vidC", "Song C")
+        update_round_status_message_db(round_id, 9001)
+        youtube.put.return_value = (PlaylistOutcome.QUOTA_EXCEEDED, "PLround")
+        interaction = listen_server.interaction(102)
+
+        await submit_song.callback(interaction, URL)
+
+        interaction.channel.fetch_message.assert_awaited_once_with(9001)
+        ledger = listen_server.dms(1)[-1]
+        assert ledger.startswith("**Listen Game: All Submissions Are In!**")
+        assert "Run `/listen-game-gm-sync-playlist` once the quota resets, before approving" in ledger
+        assert get_round_db(round_id).status is RoundStatus.SUBMITTING
+
+    async def test_a_ledger_without_a_quota_problem_has_no_sync_reminder(self, listen_server):
+        _, round_id = self._open_round()
+        upsert_submission_db(round_id, 103, "vidC", "Song C")
+        interaction = listen_server.interaction(102)
+
+        await submit_song.callback(interaction, URL)
+
+        assert "sync-playlist" not in listen_server.dms(1)[-1]
 
 
 class TestSubmitRanking:
