@@ -132,7 +132,7 @@ async def _process_submission(interaction: discord.Interaction, url: str):
     if outcome is PlaylistOutcome.QUOTA_EXCEEDED:
         # The song is saved anyway; the GM catches the playlist up later
         await interaction.followup.send(
-            f"✅ **Success!** Your song `{video_title}` has been accepted into the database.\n\n"
+            f"✅ **Success!** Your song `{video_title}` has been submitted for review by the GM.\n\n"
             "⚠️ *Note: YouTube API limits have been reached for today, so it is not in the "
             "playlist yet. The GM has been notified to sync it tomorrow.*"
         )
@@ -149,7 +149,8 @@ async def _process_submission(interaction: discord.Interaction, url: str):
     if previous_submission:
         await interaction.followup.send(f"🔄 **Updated!** Your submission has been swapped to `{video_title}`.")
     else:
-        await interaction.followup.send(f"✅ **Success!** Your song `{video_title}` has been accepted.")
+        await interaction.followup.send(
+            f"✅ **Success!** Your song `{video_title}` has been submitted for review by the GM.")
 
     await send_dm(
         interaction.client, get_active_gm_id(ctx.game, active_round),
@@ -157,7 +158,8 @@ async def _process_submission(interaction: discord.Interaction, url: str):
         f"**Player:** {user.display_name}\n"
         f"**Song:** `{video_title}`\n"
         f"**URL:** {url}\n\n"
-        "You can review this round's playlist or use `/listen-game-gm-reject-song` if this is a duplicate."
+        "If you need to reject the song, use `/listen-game-gm-reject-song @player [reason]` "
+        f"in {interaction.channel.mention}."
     )
 
     await update_submission_tracker(interaction.channel, ctx)

@@ -17,3 +17,6 @@ iu/scripts/client_secret.json
 # Generated
 preview.html
 requirements-audit.txt
+
+# macOS (no slash, so it matches in every folder)
+.DS_Store

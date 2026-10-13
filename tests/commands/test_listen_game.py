@@ -231,10 +231,12 @@ class TestSubmitSong:
         saved = get_user_submission_db(round_id, 102)
         assert (saved.video_id, saved.raw_title) == (VIDEO, "IU - Good Day")
         assert youtube.put.call_args.args[2:] == (VIDEO, None)
-        assert _reply(interaction) == "✅ **Success!** Your song `IU - Good Day` has been accepted."
+        assert _reply(interaction) == (
+            "✅ **Success!** Your song `IU - Good Day` has been submitted for review by the GM.")
         [dm] = listen_server.dms(1)
         assert dm.startswith("🎵 **New Listen Game Submission!**")
         assert "**Player:** Member 102" in dm and f"**URL:** {URL}" in dm and "`IU - Good Day`" in dm
+        assert f"`/listen-game-gm-reject-song @player [reason]` in {interaction.channel.mention}." in dm
 
     async def test_changing_a_song_removes_the_old_one_from_the_playlist_and_says_updated(self, listen_server, youtube):
         _, round_id = self._open_round()

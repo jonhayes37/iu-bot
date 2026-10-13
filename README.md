@@ -115,7 +115,7 @@ All Listen Game commands work in `#listen-game`.
    saved as it's made, so if the bot restarts (or the message is dismissed) the listener can run the
    command again and carry on, or press **Start over**. When the list is complete they press
    **Confirm & Publish Results**.
-7. **Reveal.** IU counts the results down in the channel, one song every 15 seconds with the
+7. **Reveal.** IU counts the results down in the channel, one song every 15 seconds (with its YouTube embed) and the
    listener's commentary, then posts the round's points and the current standings, and announces
    the next listener. If the bot is restarted mid-reveal it picks up where it left off.
 8. **Finish.** After the last turn IU posts the final leaderboard and links to every round's playlist.

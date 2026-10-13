@@ -81,8 +81,8 @@ class TestRevealMidGame:
         texts = _texts(channel)
         assert len(texts) == 4
         assert texts[0] == f"🎧 **{_role_mention(channel)}, <@101> has finished their rankings! Here are the results:**"
-        assert texts[1] == "**2nd: [Song by 103](<https://youtu.be/vid103>)**\nComment 2"
-        assert texts[2] == "**1st: [Song by 102](<https://youtu.be/vid102>)**\nComment 1"
+        assert texts[1] == "**2nd: [Song by 103](https://youtu.be/vid103)**\nComment 2"
+        assert texts[2] == "**1st: [Song by 102](https://youtu.be/vid102)**\nComment 1"
         assert texts[3].startswith("🎉 **Round complete!**")
 
     async def test_the_summary_lists_results_standings_and_who_is_next(self, channel):

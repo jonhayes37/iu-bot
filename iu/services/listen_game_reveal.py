@@ -85,7 +85,7 @@ async def _reveal(channel: discord.TextChannel, round_id: int):
             continue
 
         url = f"https://youtu.be/{result.video_id}"
-        await channel.send(f"**{get_ordinal(result.rank)}: [{result.raw_title}](<{url}>)**\n{result.commentary}")
+        await channel.send(f"**{get_ordinal(result.rank)}: [{result.raw_title}]({url})**\n{result.commentary}")
         step = index + 1
         set_reveal_step_db(round_id, step)
         await asyncio.sleep(REVEAL_DELAY_SECONDS)
