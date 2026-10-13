@@ -22,7 +22,7 @@ All code lives in `iu/` and imports are **relative to `iu/`** (`from db.lists im
 ```bash
 uv sync                    # create .venv from uv.lock (runtime deps + dev tools); install uv: https://docs.astral.sh/uv/
 uv run pylint iu tests     # lint the code and the tests (config in .pylintrc, max line 120; run from the repo root)
-uv run pytest --cov=iu     # tests; CI then requires coverage >= 80%
+uv run pytest --cov=iu     # tests; CI then requires coverage >= 98% (lines and branches)
 uv add <package>           # add a runtime dependency (edits pyproject.toml and uv.lock); add --dev for a dev tool
 uv lock --upgrade          # refresh the transitive versions only: direct deps are pinned with ==, so bump those in pyproject.toml (docs/playbook.md 1.9)
 make upgrade-deps         # re-pin every outdated direct dependency, then uv lock --upgrade; upgrade-deps-dry-run only lists
@@ -32,7 +32,7 @@ uv run python iu/main.py   # run locally (needs env vars below)
 
 Dependencies are managed with uv: direct dependencies live in [pyproject.toml](pyproject.toml) (`[project] dependencies`, and the `dev` group for pylint/pytest/etc.), and `uv.lock` pins every transitive version. **Commit `uv.lock` with any change to `pyproject.toml`.** There is no `requirements.txt`. The Docker image installs only the runtime dependencies from the lock (`uv sync --frozen --no-dev`). There is no Dependabot: upgrade with `make upgrade-deps` (which also moves `playwright`), and check the Dockerfile's base image and `uv` pin and the CI action versions by hand. After upgrading `playwright`, build the image and render a bracket, since the wheel and the Chromium the image downloads must match and CI never launches Chromium.
 
-CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: `uv sync --frozen`, pylint, pytest with coverage, `coverage report --fail-under=80` (which runs even if the tests fail), and a `pip-audit` scan of the locked runtime dependencies.
+CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and every push to `main`: `uv sync --frozen`, pylint, pytest with coverage, `coverage report --fail-under=98` (which runs even if the tests fail), and a `pip-audit` scan of the locked runtime dependencies.
 
 Deploying, Unraid and logs are covered in [docs/playbook.md](docs/playbook.md). Setup facts (Discord app, required channels/roles, settings) are in [docs/setup.md](docs/setup.md), YouTube credentials and quota in [docs/youtube.md](docs/youtube.md), and database inspection, permissions, backups and adding a new database in [docs/databases.md](docs/databases.md). Keep them in step with changes: a new channel or role name goes in `config.py` and `docs/setup.md`; a new database goes in `docs/databases.md`.
 
@@ -74,11 +74,11 @@ Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `D
 
 ## Testing
 
-`pytest`, `pytest-asyncio` (`asyncio_mode = "auto"`, so `async def test_...` just works), `pytest-cov`, `freezegun` and `parameterized` are the tools, all in the `dev` group. **Every package under `iu/` is tested** (about 1,800 tests, near 100% coverage), mirroring the layout below. [pyproject.toml](pyproject.toml) sets `testpaths = ["tests"]`, `--import-mode=importlib`, `pythonpath = ["iu", "tests"]` (so `from db.x import ...` and `from testsupport.fakes import ...` both resolve) and the coverage settings (`source = iu`, omitting `main.py` and `scripts/`).
+`pytest`, `pytest-asyncio` (`asyncio_mode = "auto"`, so `async def test_...` just works), `pytest-cov`, `freezegun` and `parameterized` are the tools, all in the `dev` group. **Every package under `iu/` is tested** (about 1,900 tests, near 100% line and branch coverage), mirroring the layout below. [pyproject.toml](pyproject.toml) sets `testpaths = ["tests"]`, `--import-mode=importlib`, `pythonpath = ["iu", "tests"]` (so `from db.x import ...` and `from testsupport.fakes import ...` both resolve) and the coverage settings (`source = iu`, `branch = true`, omitting `main.py` and `scripts/`).
 
 An unclosed SQLite connection or file surfaces as an unraisable `ResourceWarning`, which `filterwarnings` in [pyproject.toml](pyproject.toml) turns into a test failure, so leaks in `db/` code can't slip in. (`with sqlite3.connect(...)` only commits; wrap it in `contextlib.closing(...)` or use `db_connection`.)
 
-CI should be green: it runs the whole suite (about 20 seconds) and requires 80% coverage. **When you add or change behaviour, add or update its tests in the same change.** Tests describe intended behaviour; if a test uncovers a bug, fix the code rather than encoding the bug (or mark it `xfail(strict=True)` with the reason until it is fixed).
+CI should be green: it runs the whole suite (about 20 seconds) and requires 98% coverage, counting both outcomes of every branch, so new code needs tests for its `if`s as well as its lines. **When you add or change behaviour, add or update its tests in the same change.** Tests describe intended behaviour; if a test uncovers a bug, fix the code rather than encoding the bug (or mark it `xfail(strict=True)` with the reason until it is fixed).
 
 ### Shared fixtures and helpers
 
@@ -98,7 +98,7 @@ CI should be green: it runs the whole suite (about 20 seconds) and requires 80% 
 | `make_member`, `make_channel`, `make_guild`, `make_message`, `make_client` | Fakes limited to the real discord.py classes (`spec=`). Members and channels record what they are sent on `.sent` |
 | `fake_bracket_render` | Bracket rendering returns a fake PNG; returns the mock to assert on |
 
-`tests/services/conftest.py` adds `youtube_client` (a fake YouTube API client installed as the one `services.youtube` uses; set results with `client.playlistItems.return_value.insert.return_value.execute.return_value = ...`) and `http_error("quotaExceeded")` (the errors the Google client raises). `testsupport/listen_game.py` has `start_game(players)` and `reveal_ready_round(game_id)` to build a Listen Game situation in a real temporary database.
+`tests/services/conftest.py` adds `youtube_client` (a fake YouTube API client installed as the one `services.youtube` uses; set results with `client.playlistItems.return_value.insert.return_value.execute.return_value = ...`) and `http_error("quotaExceeded")` (the errors the Google client raises). `testsupport/listen_game.py` has `start_game(players)`, `submitting_round(players)` and `reveal_ready_round(game_id)` to build a Listen Game situation in a real temporary database.
 
 For commands, call the handler with `await some_command.callback(interaction, ...)` (this skips the permission checks, which `test_registry.py` verifies separately for every command). `tests/commands/conftest.py` has `listen_server`, a server set up for the Listen Game: members 1 (GM), 2 (substitute GM) and 101-103, `listen_server.interaction(user_id)`, `.dms(user_id)` and `.blocked(user_id)`. Patch the YouTube functions a command imports in the command's own module (`monkeypatch.setattr("commands.listen_game.get_video_title", ...)`).
 
@@ -123,7 +123,7 @@ iu/utils/validation.py  ->  tests/utils/test_validation.py
 - **Do not colocate tests inside `iu/`.** the Docker build copies `iu/`, and coverage measures `iu/`, so colocated tests would be shipped in the image and counted in the coverage denominator. `.dockerignore` already excludes a top-level `tests/`.
 - **No `__init__.py` files in `tests/`, and use `--import-mode=importlib`.** Otherwise same-named files (`tests/db/test_lists.py` vs `tests/ui/test_lists.py`) collide, and a `tests/db/` package could shadow the real `db` package that the code imports as `from db.lists import ...`.
 - Tests are linted like the code (`pylint iu tests`). Fixtures from `conftest.py` are fine as parameters; if a fixture is defined and used in the same file, give the function a different name with `@pytest.fixture(name="thing")` instead of disabling `redefined-outer-name`.
-- Name files `test_<module>.py` and functions `test_<behaviour>`. Use `@pytest.mark.parametrize` (or `parameterized`) for table-driven cases, the closest match to Go table tests.
+- Name files `test_<module>.py` and functions `test_<behaviour>`. Pylint's file (1000 lines) and class (20 tests) size limits apply to tests too: split a big module's tests by area (`test_listen_game_gm.py` and `test_listen_game_gm_submissions.py`) or a big class by situation (`TestSubmitSong` / `TestSubmitSongWhenYouTubeIsOverQuota`, sharing setup through a `_`-prefixed base class, which pytest doesn't collect). Use `@pytest.mark.parametrize` (or `parameterized`) for table-driven cases, the closest match to Go table tests.
 - Put fixtures shared across files in `tests/conftest.py`; folder-specific ones in that folder's `conftest.py`. Importable helpers live in `tests/testsupport/` (the only package under `tests/`; its name is unique so it can't clash with the code).
 
 Guidelines for writing tests:

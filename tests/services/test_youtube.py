@@ -291,6 +291,22 @@ class TestGetVideoSnippets:
         assert result == {"v050": {"title": "kept"}}
         assert "error fetching details for 50 videos" in caplog.text
 
+    def test_a_used_up_quota_is_raised_not_mistaken_for_missing_videos(self, youtube_client, http_error):
+        youtube_client.videos.return_value.list.return_value.execute.side_effect = http_error("quotaExceeded")
+
+        with pytest.raises(QuotaExceededError):
+            get_video_snippets(["a"])
+        with pytest.raises(QuotaExceededError):
+            get_video_title("a")
+
+    def test_another_youtube_error_skips_the_batch(self, youtube_client, http_error, caplog):
+        youtube_client.videos.return_value.list.return_value.execute.side_effect = http_error("backendError")
+
+        with caplog.at_level(logging.ERROR, logger="iu-bot"):
+            assert get_video_snippets(["a"]) == {}
+
+        assert "error fetching details for 1 videos" in caplog.text
+
     def test_get_video_title(self, youtube_client):
         self._respond(youtube_client, {"a": {"title": "IU - Good Day"}})
 

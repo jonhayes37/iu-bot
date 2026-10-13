@@ -287,16 +287,39 @@ class TestProcessExpiredMatches:
         assert "is not a poll" in caplog.text
         assert self._winners(query, tournament_id) == [None, "Song 2"]
 
-    async def test_a_deleted_poll_is_reported_and_the_others_still_resolve(self, server, query, round_one, caplog):
+    async def test_a_deleted_poll_goes_to_the_higher_seed_so_the_bracket_can_move_on(
+            self, server, query, round_one, caplog):
         tournament_id, expired = round_one
-        second = fakes.make_poll_message(expired[1]["message_id"], ("C", "D"), (4, 1))
+        second = fakes.make_poll_message(expired[1]["message_id"], ("C", "D"), (1, 4))
         server.channel.fetch_message = mock.AsyncMock(side_effect=[NOT_FOUND, second])
 
-        with caplog.at_level(logging.ERROR, logger="iu-bot"):
+        with caplog.at_level(logging.WARNING, logger="iu-bot"):
             await _process_expired_matches(server.channel, expired)
 
-        assert "was deleted by a user" in caplog.text
-        assert self._winners(query, tournament_id) == [None, "Song 2"]
+        assert f"for match {expired[0]['match_id']} was deleted" in caplog.text
+        assert "the higher seed advances" in caplog.text
+        assert self._winners(query, tournament_id) == ["Song 1", "Song 3"]      # Song 1 is seed 1 of 1 v 4
+
+    async def test_a_deleted_poll_in_the_second_slot_also_goes_to_the_higher_seed(self, server, query, round_one):
+        tournament_id, expired = round_one
+        first = fakes.make_poll_message(expired[0]["message_id"], ("A", "B"), (1, 4))
+        server.channel.fetch_message = mock.AsyncMock(side_effect=[first, NOT_FOUND])
+
+        await _process_expired_matches(server.channel, expired)
+
+        assert self._winners(query, tournament_id) == ["Song 4", "Song 2"]      # Song 2 is seed 2 of 2 v 3
+
+    async def test_a_failure_recording_a_deleted_polls_result_is_reported_and_retried_next_tick(
+            self, server, query, round_one, caplog, monkeypatch):
+        tournament_id, expired = round_one
+        monkeypatch.setattr("tasks.tournaments.advance_winner", mock.Mock(side_effect=OSError("disk")))
+        server.channel.fetch_message = mock.AsyncMock(side_effect=NOT_FOUND)
+
+        with caplog.at_level(logging.ERROR, logger="iu-bot"):
+            await _process_expired_matches(server.channel, expired[:1])
+
+        assert f"Error resolving match {expired[0]['match_id']}: disk" in caplog.text
+        assert self._winners(query, tournament_id) == [None, None]
 
     async def test_an_unexpected_error_on_one_match_is_reported_and_the_others_still_resolve(
             self, server, query, round_one, caplog):

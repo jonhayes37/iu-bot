@@ -43,7 +43,7 @@ Before every commit:
 
 ```bash
 uv run pylint iu tests  # must exit 0, CI fails on any message
-uv run pytest --cov=iu  # the whole suite, about 20 seconds; CI requires 80% coverage
+uv run pytest --cov=iu  # the whole suite, about 20 seconds; CI requires 98% coverage
 ```
 
 Changing a dependency: `uv add <package>` (or edit `pyproject.toml` and run `uv lock`), then commit
@@ -75,7 +75,7 @@ git push -u origin short-description-of-change
 ```
 
 Open a pull request on GitHub (or run `gh pr create` if you have the GitHub CLI). CI runs
-automatically and checks three things: `pylint iu tests`, the tests, and the 80% coverage minimum.
+automatically and checks three things: `pylint iu tests`, the tests, and the 98% coverage minimum.
 
 CI should be green before you merge. If the tests fail, fix the code or the test rather than merging
 red: the suite covers nearly every function, so a failure usually means the change broke something.

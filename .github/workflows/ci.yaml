@@ -37,7 +37,7 @@ jobs:
       - name: Testing coverage
         if: ${{ !cancelled() }}
         run: |
-          uv run --frozen coverage report --fail-under=80
+          uv run --frozen coverage report --fail-under=95
 
       # Known-vulnerability scan of what production installs (the locked runtime dependencies).
       - name: Audit dependencies

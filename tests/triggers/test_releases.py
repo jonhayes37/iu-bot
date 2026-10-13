@@ -10,6 +10,7 @@ import pytest
 
 from config import EMOJI_IU, Database
 from db.releases import add_new_release, get_playlist_id_for_year, mark_release_processed, save_new_playlist
+from services.youtube import QuotaExceededError
 from triggers.releases import _process_release_url, store_new_release, store_new_releases
 
 VIDEO_A, VIDEO_B = "aaaaaaaaaa1", "bbbbbbbbbb2"
@@ -239,6 +240,17 @@ class TestWhichVideosCount:
 
         assert "Could not fetch publish date for aaaaaaaaaa1" in caplog.text
         assert _rows(query) == []
+
+    async def test_a_used_up_quota_stores_nothing_and_says_to_backfill_later(self, post, youtube, query, caplog):
+        youtube.snippets.side_effect = QuotaExceededError(ValueError("quotaExceeded"))
+        message = post(f"{_url(VIDEO_A)} {_url(VIDEO_B)}")
+
+        with caplog.at_level(logging.WARNING, logger="iu-bot"):
+            await store_new_release(message)
+
+        assert _rows(query) == []
+        assert "YouTube quota used up; skipping 2 release links" in caplog.text
+        message.add_reaction.assert_not_awaited()
 
     async def test_without_a_youtube_client_nothing_is_stored(self, post, youtube, query, caplog):
         youtube.snippets.side_effect = lambda ids: None

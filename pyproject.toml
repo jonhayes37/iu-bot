@@ -53,6 +53,8 @@ filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
 
 [tool.coverage.run]
 source = ["iu"]
+# Count both outcomes of every if/else, not just the lines run
+branch = true
 omit = [
     "iu/main.py",               # wiring only, see CLAUDE.md
     "iu/scripts/*",             # one-off manual helpers

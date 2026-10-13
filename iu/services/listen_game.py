@@ -14,6 +14,10 @@ logger = logging.getLogger('iu-bot')
 
 NO_ACTIVE_GAME = "⚠️ There is no active game right now."
 NO_ACTIVE_ROUND = "⚠️ Could not find an active round."
+YOUTUBE_QUOTA_USED_UP = (
+    "❌ The bot has used up today's YouTube allowance, so it can't look up songs right now. Nothing was "
+    "submitted. Please try again after it resets at midnight Pacific time."
+)
 
 
 @dataclass

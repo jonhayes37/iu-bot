@@ -124,30 +124,41 @@ async def _process_expired_matches(tournaments_channel, expired_matches):
                 winner_id = match['entrant_b_id']
                 winner_name = ans_b.text
             else:
-                # Tie is broken by the higher seed
-                seed_a = match.get('entrant_a_seed', 99)
-                seed_b = match.get('entrant_b_seed', 99)
-                if seed_a < seed_b:
-                    winner_id = match['entrant_a_id']
-                    winner_name = poll.answers[0].text
-                else:
-                    winner_id = match['entrant_b_id']
-                    winner_name = poll.answers[1].text
+                winner_id = _higher_seed(match)
+                winner_name = ans_a.text if winner_id == match['entrant_a_id'] else ans_b.text
 
-            # Advance the winner in the database
-            advance_winner(
-                match_id=match['match_id'],
-                tournament_id=match['tournament_id'],
-                current_round=match['round_num'],
-                current_pos=match['match_position'],
-                winner_id=winner_id
-            )
+            _advance(match, winner_id)
             logger.info("Match %s resolved: %s won.", match['match_id'], winner_name)
 
         except discord.NotFound:
-            logger.error("Poll message %s was deleted by a user.", match['message_id'])
+            # The votes are gone with the message. Without a result the bracket could never move on, so the
+            # match is decided as a tie would be.
+            logger.warning("Poll message %s for match %s was deleted, so its votes can't be counted; "
+                           "the higher seed advances.", match['message_id'], match['match_id'])
+            try:
+                _advance(match, _higher_seed(match))
+            except Exception as ex:
+                logger.error("Error resolving match %s: %s", match['match_id'], ex)
         except Exception as ex:
             logger.error("Error resolving match %s: %s", match['match_id'], ex)
+
+
+def _higher_seed(match: dict) -> int:
+    """The entrant with the better (lower) seed, who wins a tied match."""
+    seed_a = match.get('entrant_a_seed', 99)
+    seed_b = match.get('entrant_b_seed', 99)
+    return match['entrant_a_id'] if seed_a < seed_b else match['entrant_b_id']
+
+
+def _advance(match: dict, winner_id: int):
+    """Records the match's winner and slots them into the next round."""
+    advance_winner(
+        match_id=match['match_id'],
+        tournament_id=match['tournament_id'],
+        current_round=match['round_num'],
+        current_pos=match['match_position'],
+        winner_id=winner_id
+    )
 
 async def check_round_completion(channel: discord.TextChannel, tournament_id: str, days_per_round: int):
     """

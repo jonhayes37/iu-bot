@@ -10,7 +10,9 @@ from db.listen_game import (
     RoundStatus, close_round_db, get_current_round_db, get_round_db, get_user_submission_db, save_ranking_pick_db,
     set_round_theme_db, update_round_ruleset_message_db, update_round_status_message_db, upsert_submission_db
 )
+from services.listen_game import YOUTUBE_QUOTA_USED_UP
 from services.listen_game_playlist import PlaylistOutcome
+from services.youtube import QuotaExceededError
 from testsupport.listen_game import reveal_ready_round, start_game
 from ui.listen_game import ListenGameRankingView, SetThemeModal
 
@@ -127,8 +129,8 @@ class TestPostRuleset:
         assert _reply(interaction) == "⚠️ The game is not currently waiting for a ruleset."
 
 
-class TestSubmitSong:
-    """/listen-game-submit-song."""
+class _SubmitSongSetup:
+    """The YouTube fakes and an open round, shared by the /listen-game-submit-song tests."""
 
     @pytest.fixture(name="youtube", autouse=True)
     def _youtube(self, monkeypatch):
@@ -145,6 +147,10 @@ class TestSubmitSong:
         round_id = _round_id(game_id)
         set_round_theme_db(round_id, "Rain songs")
         return game_id, round_id
+
+
+class TestSubmitSong(_SubmitSongSetup):
+    """/listen-game-submit-song."""
 
     async def test_only_in_the_game_channel(self, listen_server, make_channel):
         interaction = listen_server.interaction(102)
@@ -310,6 +316,22 @@ class TestSubmitSong:
 
         assert _reply(interaction) == "❌ Failed to add video to the playlist. It may be blocked or private."
         assert get_user_submission_db(round_id, 102) is None
+
+
+class TestSubmitSongWhenYouTubeIsOverQuota(_SubmitSongSetup):
+    """/listen-game-submit-song when the daily YouTube quota runs out."""
+
+    async def test_a_used_up_quota_says_so_instead_of_blaming_the_video(self, listen_server, youtube):
+        _, round_id = self._open_round()
+        youtube.title.side_effect = QuotaExceededError(ValueError("quotaExceeded"))
+        interaction = listen_server.interaction(102)
+
+        await submit_song.callback(interaction, URL)
+
+        assert _reply(interaction) == YOUTUBE_QUOTA_USED_UP
+        assert "midnight Pacific time" in YOUTUBE_QUOTA_USED_UP
+        assert get_user_submission_db(round_id, 102) is None
+        youtube.put.assert_not_called()
 
     async def test_running_out_of_quota_keeps_the_song_and_tells_the_player_and_the_gm(self, listen_server, youtube):
         _, round_id = self._open_round()

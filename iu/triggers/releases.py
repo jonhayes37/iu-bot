@@ -10,7 +10,8 @@ import discord
 from config import EMOJI_IU
 from db.releases import AddResult, add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
 from services.youtube import (
-    add_video_to_playlist, create_releases_playlist, extract_video_id, get_video_snippets, parse_publish_date
+    QuotaExceededError, add_video_to_playlist, create_releases_playlist, extract_video_id, get_video_snippets,
+    parse_publish_date
 )
 from utils.end_of_year import award_year_for
 
@@ -45,7 +46,12 @@ async def store_new_releases(messages: list[discord.Message]):
     # The video lookup, playlist creation, and playlist insert are all blocking YouTube API /
     # sqlite calls. Running them in threads keeps a slow response from stalling the bot's event
     # loop for every other user while a link is being processed.
-    snippets = await asyncio.to_thread(get_video_snippets, [video_id for _, _, video_id in links])
+    try:
+        snippets = await asyncio.to_thread(get_video_snippets, [video_id for _, _, video_id in links])
+    except QuotaExceededError:
+        logger.warning("YouTube quota used up; skipping %d release links. Run /backfill-new-releases for them "
+                       "after it resets.", len(links))
+        return
     if snippets is None:
         logger.warning("No YouTube client available; skipping %d release links.", len(links))
         return

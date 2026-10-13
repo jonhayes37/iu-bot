@@ -9,7 +9,7 @@ from unittest import mock
 
 from db.listen_game import (
     RoundResult, close_round_db, create_game_db, get_current_round_db, get_ordered_players_db, register_player_db,
-    save_round_results_db, set_round_theme_db, start_game_db, upsert_submission_db
+    save_round_results_db, set_round_theme_db, start_game_db, update_round_playlist_db, upsert_submission_db
 )
 
 GM, SUB_GM = 1, 2
@@ -25,6 +25,15 @@ def start_game(players: tuple[int, ...] = (101, 102, 103), max_round_days: int |
     return game_id
 
 
+
+def submitting_round(players: tuple[int, ...] = (101, 102, 103), playlist: str | None = "PLround") -> tuple[int, int]:
+    """A game whose round is taking submissions (the first player is listening). Returns (game_id, round_id)."""
+    game_id = start_game(players)
+    round_id = get_current_round_db(game_id).round_id
+    set_round_theme_db(round_id, "Rain songs")
+    if playlist:
+        update_round_playlist_db(round_id, playlist)
+    return game_id, round_id
 def reveal_ready_round(game_id: int, results: list[tuple[int, str]] | None = None) -> int:
     """
     Takes the game's current round through theme, submissions and ranking, up to the moment the reveal

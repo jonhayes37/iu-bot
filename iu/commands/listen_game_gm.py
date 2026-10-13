@@ -17,7 +17,7 @@ from db.listen_game import (
     upsert_submission_db
 )
 from services.listen_game import (
-    RoundContext, after_submissions_changed, playlist_link, require_active_round, send_dm,
+    YOUTUBE_QUOTA_USED_UP, RoundContext, after_submissions_changed, playlist_link, require_active_round, send_dm,
     update_submission_tracker
 )
 from services.listen_game_playlist import (
@@ -35,6 +35,9 @@ from utils.validation import validate_channel
 logger = logging.getLogger('iu-bot')
 
 ROUND_ALREADY_MOVED_ON = "⚠️ The round has already moved on, so nothing was changed."
+# The reason is DMed to the player inside a message that must stay under Discord's 2000 characters
+MAX_REASON_LENGTH = 1000
+Reason = app_commands.Range[str, 1, MAX_REASON_LENGTH]
 LEDGER_SENT = (
     "\n\n📋 Everyone remaining has now submitted, so the submission ledger has been DMed to the GM running "
     "this round. Run `/listen-game-gm-approve-playlist` once it looks right."
@@ -237,7 +240,7 @@ def _sync_missing_videos(playlist_id: str, missing_vids: list[Submission]) -> tu
     reason="The reason for rejection (sent to the player)."
 )
 @app_commands.checks.has_role(Role.LISTEN_GAME_GM)
-async def listen_game_gm_reject_song(interaction: discord.Interaction, player: discord.Member, reason: str):
+async def listen_game_gm_reject_song(interaction: discord.Interaction, player: discord.Member, reason: Reason):
     restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
@@ -264,6 +267,9 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
             if not yt_removed:
                 logger.warning("Failed to remove video %s from YT playlist during GM rejection.", submission.video_id)
 
+    # One fewer song is in, so the counter goes down (a rejection can't complete the round)
+    await update_submission_tracker(interaction.channel, ctx)
+
     # DM the player
     dm_sent = await send_dm(
         interaction.client, player.id,
@@ -284,7 +290,7 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
     reason="The reason for skipping (sent to the player)."
 )
 @app_commands.checks.has_role(Role.LISTEN_GAME_GM)
-async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: discord.Member, reason: str):
+async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: discord.Member, reason: Reason):
     restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
@@ -350,7 +356,7 @@ async def listen_game_gm_skip_turn(interaction: discord.Interaction, player: dis
     reason="The reason for removal (sent to the player)."
 )
 @app_commands.checks.has_role(Role.LISTEN_GAME_GM)
-async def listen_game_gm_remove_player(interaction: discord.Interaction, player: discord.Member, reason: str):
+async def listen_game_gm_remove_player(interaction: discord.Interaction, player: discord.Member, reason: Reason):
     restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
     if restricted:
         return
@@ -512,7 +518,11 @@ async def _process_forced_submission(interaction: discord.Interaction, player: d
         await interaction.followup.send("❌ Invalid YouTube URL.")
         return
 
-    video_title = await asyncio.to_thread(get_video_title, video_id)
+    try:
+        video_title = await asyncio.to_thread(get_video_title, video_id)
+    except QuotaExceededError:
+        await interaction.followup.send(YOUTUBE_QUOTA_USED_UP)
+        return
     if not video_title:
         await interaction.followup.send("❌ Could not fetch that video. It may be private or deleted.")
         return
@@ -623,6 +633,11 @@ async def listen_game_gm_swap_players(
     player1: discord.Member,
     player2: discord.Member
 ):
+    # The pinned turn order it updates is in the game channel
+    restricted = await validate_channel(interaction, Channel.LISTEN_GAME)
+    if restricted:
+        return
+
     game = get_game_by_status_db(GameStatus.PLAYING)
     if not game:
         await interaction.response.send_message("⚠️ There is no active Listen Game currently running.",
