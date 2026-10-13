@@ -556,7 +556,7 @@ class TestRemovePlayer:
         assert _last_reply(interaction).endswith(LEDGER_SENT)
 
     async def test_removing_a_player_who_others_are_still_waiting_on_sends_no_ledger(self, listen_server):
-        _, round_id = _submitting_round()
+        _submitting_round()
         interaction = listen_server.interaction(1)
 
         await listen_game_gm_remove_player.callback(interaction, listen_server.members[103], "gone")

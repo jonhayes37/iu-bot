@@ -3,7 +3,7 @@
 import discord
 import pytest
 
-from commands.bot import set_iu_status
+from commands.bot import MAX_STATUS_DAYS, MAX_STATUS_LENGTH, set_iu_status
 from config import Channel, Database
 from db.bot import get_active_bot_status_db
 
@@ -52,10 +52,11 @@ async def test_the_status_lasts_a_week_by_default(make_interaction, execute, fro
     assert get_active_bot_status_db() is None
 
 
-async def test_a_blank_status_clears_the_presence(make_interaction):
+async def test_leaving_the_text_out_clears_the_status_and_the_clear_is_saved(make_interaction):
+    await set_iu_status.callback(make_interaction(channel=Channel.SANDBOX, administrator=True), "Good Day")
     interaction = make_interaction(channel=Channel.SANDBOX, administrator=True)
 
-    await set_iu_status.callback(interaction, "", 7)
+    await set_iu_status.callback(interaction)
 
     interaction.client.change_presence.assert_awaited_once_with(status=discord.Status.online, activity=None)
     assert interaction.sent[0].content == "✅ IU's status has been cleared!"
@@ -71,3 +72,12 @@ async def test_the_newest_status_replaces_the_previous_one(make_interaction, exe
     execute(Database.BOT, "UPDATE statuses SET created_at = '2026-03-17 12:00:00' WHERE status_text = 'new'")
 
     assert get_active_bot_status_db() == "new"
+
+
+def test_the_options_are_limited_to_what_discord_shows_and_a_sensible_expiry():
+    options = {p.name: p for p in set_iu_status.parameters}
+
+    assert not options["status_text"].required
+    assert (options["status_text"].min_value, options["status_text"].max_value) == (1, MAX_STATUS_LENGTH)
+    assert (options["days"].min_value, options["days"].max_value) == (1, MAX_STATUS_DAYS)
+    assert MAX_STATUS_LENGTH == 128

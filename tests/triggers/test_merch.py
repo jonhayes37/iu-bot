@@ -8,7 +8,7 @@ import pytest
 
 from config import Channel, Database
 from db.merch import get_user_balance, is_milestone_paid
-from triggers.merch import _paid_milestones, _reaction_totals, _remember, handle_reaction_add
+from triggers.merch import _known_reactors, _paid_milestones, _reaction_totals, _remember, handle_reaction_add
 from testsupport import fakes
 
 SENDER, AUTHOR, MESSAGE_ID = 10, 20, 5000
@@ -23,11 +23,11 @@ def _merch_database(databases, frozen_time):
 @pytest.fixture(autouse=True)
 def _forget_what_was_learned():
     """The module remembers messages between events; every test starts with a clean memory."""
-    _reaction_totals.clear()
-    _paid_milestones.clear()
+    for cache in (_reaction_totals, _paid_milestones, _known_reactors):
+        cache.clear()
     yield
-    _reaction_totals.clear()
-    _paid_milestones.clear()
+    for cache in (_reaction_totals, _paid_milestones, _known_reactors):
+        cache.clear()
 
 
 def _reaction(*users, count=None):
@@ -235,6 +235,75 @@ class TestMilestone:
         await handle_reaction_add(server.payload(emoji="giveHeart", user_id=SENDER), server.client)
 
         assert get_user_balance(AUTHOR) == 1 + 3          # the daily heart and the milestone
+
+
+    async def test_the_authors_own_reaction_does_not_count(self, server, make_member):
+        author = make_member(user_id=AUTHOR, name="Author")
+        self._cache_with_reactions(server, server.humans(4) + [author])
+
+        await handle_reaction_add(server.payload(emoji="👍", user_id=AUTHOR), server.client)
+
+        assert get_user_balance(AUTHOR) == 0
+
+
+class TestWhoReactedIsReadSparingly:
+    """Reading who reacted costs a request per emoji, so it is read once, then once more to confirm a payout."""
+
+    @staticmethod
+    def _count_reads(server, *reaction_groups):
+        """Caches the message with these reactions; returns a function giving how many reactor lists were read."""
+        server.message.reactions = [_reaction(*users) for users in reaction_groups]
+        for reaction in server.message.reactions:
+            reaction.users = mock.Mock(wraps=reaction.users)
+        server.client.cached_messages = [server.message]
+        return lambda: sum(reaction.users.call_count for reaction in server.message.reactions)
+
+    async def test_the_same_few_people_reacting_again_cost_no_more_reads(self, server):
+        fans = server.humans(3)
+        reads = self._count_reads(server, fans, fans)          # 6 reactions from 3 people
+
+        for fan in fans * 3:
+            await handle_reaction_add(server.payload(emoji="👍", user_id=fan.id), server.client)
+
+        assert reads() == 2                                     # each emoji's list, once
+        assert get_user_balance(AUTHOR) == 0
+
+    async def test_the_fifth_person_is_confirmed_with_one_more_read_and_paid_once(self, server):
+        fans = server.humans(5)
+        reads = self._count_reads(server, fans[:4], fans[:1])  # 5 reactions from 4 people
+        await handle_reaction_add(server.payload(emoji="👍", user_id=fans[0].id), server.client)
+        server.message.reactions[1] = _reaction(fans[0], fans[4])      # the fifth person reacts
+        server.message.reactions[1].users = mock.Mock(wraps=server.message.reactions[1].users)
+
+        await handle_reaction_add(server.payload(emoji="👍", user_id=fans[4].id), server.client)
+        await handle_reaction_add(server.payload(emoji="👍", user_id=fans[4].id), server.client)
+
+        assert get_user_balance(AUTHOR) == 3 and len(server.news.sent) == 1
+        # Read when the message reached 5 reactions, and once more to confirm; not again once paid
+        assert server.message.reactions[0].users.call_count == 2
+        assert server.message.reactions[1].users.call_count == 1          # this list was replaced in between
+        assert reads() == 3
+
+    async def test_the_author_reacting_is_not_counted_from_memory_either(self, server):
+        fans = server.humans(4)
+        self._count_reads(server, fans, fans[:1])              # 5 reactions from 4 people
+        await handle_reaction_add(server.payload(emoji="👍", user_id=fans[0].id), server.client)
+
+        await handle_reaction_add(server.payload(emoji="👍", user_id=AUTHOR), server.client)
+
+        assert _known_reactors[MESSAGE_ID] == {fan.id for fan in fans}
+
+    async def test_someone_who_took_their_reaction_back_is_noticed_before_paying(self, server):
+        fans = server.humans(5)
+        self._count_reads(server, fans[:4], fans[:1])
+        await handle_reaction_add(server.payload(emoji="👍", user_id=fans[0].id), server.client)
+        # The fifth person reacts, but fan 3 has taken theirs back, which the bot doesn't hear about
+        server.message.reactions = [_reaction(*fans[:3]), _reaction(fans[0], fans[4])]
+
+        await handle_reaction_add(server.payload(emoji="👍", user_id=fans[4].id), server.client)
+
+        assert get_user_balance(AUTHOR) == 0
+        assert _known_reactors[MESSAGE_ID] == {fans[0].id, fans[1].id, fans[2].id, fans[4].id}
 
 
 class TestMessagesNotInTheCache:

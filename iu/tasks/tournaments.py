@@ -13,6 +13,7 @@ from db.tournaments import (
     get_tournament_winner_name, get_tournament_raffle_winner, get_active_tournament_id,
     has_polled_matches, set_tournament_completed
 )
+from tasks.common import keep_running
 from ui.bracket_renderer import generate_bracket_image
 
 logger = logging.getLogger('iu-bot')
@@ -54,6 +55,7 @@ async def post_round_polls(channel: discord.TextChannel, tournament_id: str, rou
 
 
 @tasks.loop(minutes=5)
+@keep_running
 async def tournament_resolution_loop(client: discord.Client, guild_id: int):
     """Wakes up every 5 minutes to resolve expired tournament polls."""
     logger.debug("Running tournament resolution loop...")
@@ -67,27 +69,21 @@ async def tournament_resolution_loop(client: discord.Client, guild_id: int):
         logger.error("Could not find #tournaments channel to resolve polls.")
         return
 
-    try:
-        expired_matches = get_expired_unresolved_matches()
-        if len(expired_matches) > 0:
-            logger.info("Found %d expired matches to resolve.", len(expired_matches))
-            await _process_expired_matches(tournaments_channel, expired_matches)
-            t_id = expired_matches[0]['tournament_id']
+    expired_matches = get_expired_unresolved_matches()
+    if len(expired_matches) > 0:
+        logger.info("Found %d expired matches to resolve.", len(expired_matches))
+        await _process_expired_matches(tournaments_channel, expired_matches)
+        t_id = expired_matches[0]['tournament_id']
 
-            # Let Discord's backend catch up and post all "Poll Closed" messages
-            await asyncio.sleep(max(10,2*len(expired_matches)))
-        else:
-            t_id = get_active_tournament_id()
-            if not t_id:
-                logger.debug("No active tournament found, skipping round completion check.")
-                return
+        # Let Discord's backend catch up and post all "Poll Closed" messages
+        await asyncio.sleep(max(10,2*len(expired_matches)))
+    else:
+        t_id = get_active_tournament_id()
+        if not t_id:
+            logger.debug("No active tournament found, skipping round completion check.")
+            return
 
-        await check_round_completion(tournaments_channel, t_id, get_tournament_days(t_id))
-    except Exception:
-        # An unhandled exception here would otherwise propagate out of the loop body,
-        # which permanently stops tasks.loop from ticking again (no auto-retry) --
-        # silently halting every active tournament until the bot is restarted.
-        logger.exception("Unhandled error in tournament resolution loop; will retry next tick.")
+    await check_round_completion(tournaments_channel, t_id, get_tournament_days(t_id))
 
 async def _process_expired_matches(tournaments_channel, expired_matches):
     for match in expired_matches:

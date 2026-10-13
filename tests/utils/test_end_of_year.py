@@ -4,9 +4,11 @@ The awards year runs December 1 to November 30 on purpose (the videos are made i
 switchover happens at midnight Toronto time. Toronto is UTC-5 in winter, so 05:00 UTC is midnight.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
-from utils.end_of_year import get_current_award_year
+from utils.end_of_year import award_year_for, get_current_award_year
 
 
 @pytest.mark.parametrize("utc_moment, expected_year", [
@@ -33,3 +35,13 @@ def test_uses_toronto_time_not_utc(frozen_time):
     frozen_time("2026-12-01 03:00:00")
 
     assert get_current_award_year() == 2026
+
+
+@pytest.mark.parametrize("utc_moment, expected_year", [
+    (datetime(2026, 6, 15, 12, tzinfo=timezone.utc), 2026),
+    (datetime(2026, 12, 1, 4, 59, 59, tzinfo=timezone.utc), 2026),     # 23:59:59 on November 30 in Toronto
+    (datetime(2026, 12, 1, 5, tzinfo=timezone.utc), 2027),             # midnight on December 1 in Toronto
+    (datetime(2027, 1, 1, 4, 59, tzinfo=timezone.utc), 2027),          # still December 31 in Toronto
+])
+def test_any_moment_gets_the_same_award_year_as_the_clock_would(utc_moment, expected_year):
+    assert award_year_for(utc_moment) == expected_year

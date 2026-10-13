@@ -26,7 +26,7 @@ def get_active_bot_status_db() -> str | None:
         cursor.execute("""
             SELECT status_text, max_duration_days, created_at
             FROM statuses
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC  -- created_at is to the second, so the newest row wins a tie
             LIMIT 1
         """)
 
@@ -45,3 +45,14 @@ def get_active_bot_status_db() -> str | None:
 
         # The latest status has expired
         return None
+
+def was_event_notified_db(event_id: int) -> bool:
+    """True if the reminder thread for this scheduled event has already been posted."""
+    with db_connection(Database.BOT) as conn:
+        row = conn.execute("SELECT 1 FROM notified_events WHERE event_id = ?", (event_id,)).fetchone()
+        return row is not None
+
+def mark_event_notified_db(event_id: int) -> None:
+    """Records that the reminder thread for this scheduled event has been posted."""
+    with db_connection(Database.BOT) as conn:
+        conn.execute("INSERT OR IGNORE INTO notified_events (event_id) VALUES (?)", (event_id,))

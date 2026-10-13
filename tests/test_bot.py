@@ -157,8 +157,9 @@ class TestOnReady:
             monkeypatch.setattr(loop, "is_running", mock.Mock(return_value=False))
             loops[name] = loop
         bot.loops = loops
-        monkeypatch.setattr(bot_module.write_heartbeat, "start", mock.Mock())
-        monkeypatch.setattr(bot_module.write_heartbeat, "is_running", mock.Mock(return_value=False))
+        for loop in (bot_module.write_heartbeat, bot_module.refresh_status):
+            monkeypatch.setattr(loop, "start", mock.Mock())
+            monkeypatch.setattr(loop, "is_running", mock.Mock(return_value=False))
         return bot
 
     async def test_without_a_server_configured_nothing_starts(self, ready, monkeypatch):
@@ -167,6 +168,7 @@ class TestOnReady:
         await ready.on_ready()
 
         assert not any(loop.start.called for loop in ready.loops.values())
+        bot_module.refresh_status.start.assert_not_called()
         ready.change_presence.assert_not_awaited()
 
     async def test_the_heartbeat_starts_even_without_a_server_configured(self, ready, monkeypatch):
@@ -197,28 +199,22 @@ class TestOnReady:
         ready.loops["tournament_resolution_loop"].start.assert_not_called()
         ready.loops["check_upcoming_events"].start.assert_called_once()
 
-    async def test_with_no_saved_status_the_presence_is_plain_online(self, ready):
+    async def test_the_status_refresh_starts_and_its_first_run_shows_the_status(self, ready):
         await ready.on_ready()
 
-        ready.change_presence.assert_awaited_once_with(status=discord.Status.online, activity=None)
+        bot_module.refresh_status.start.assert_called_once_with(ready)
+        ready.change_presence.assert_not_awaited()
 
-    async def test_a_saved_status_is_shown_as_listening(self, ready, execute):
+    async def test_after_a_reconnect_the_saved_status_is_shown_straight_away(self, ready, execute):
+        bot_module.refresh_status.is_running.return_value = True
         save_bot_status_db("Good Day", 7)
         execute(Database.BOT, "UPDATE statuses SET created_at = '2026-03-17 11:00:00'")
 
         await ready.on_ready()
 
+        bot_module.refresh_status.start.assert_not_called()
         kwargs = ready.change_presence.await_args.kwargs
-        assert kwargs["status"] is discord.Status.online
         assert (kwargs["activity"].type, kwargs["activity"].name) == (discord.ActivityType.listening, "Good Day")
-
-    async def test_an_expired_status_is_not_shown(self, ready, execute):
-        save_bot_status_db("Old news", 1)
-        execute(Database.BOT, "UPDATE statuses SET created_at = '2026-03-10 11:00:00'")
-
-        await ready.on_ready()
-
-        assert ready.change_presence.await_args.kwargs["activity"] is None
 
 
 class TestOnMessage:

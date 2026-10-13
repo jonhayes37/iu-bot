@@ -1,25 +1,31 @@
 """Tests for tasks/scheduled_events.py: the thread opened 15 minutes before a community event."""
 
 import logging
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 import discord
 import pytest
 
-from config import Channel
+from config import Channel, Database
+from db.bot import mark_event_notified_db
 from tasks import scheduled_events
-from tasks.scheduled_events import check_upcoming_events, notified_events
+from tasks.scheduled_events import check_upcoming_events
 
 NOW = datetime(2026, 3, 17, 18, 0, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def _fixed_clock(frozen_time):
+def _fixed_clock_and_database(frozen_time, databases):
     frozen_time("2026-03-17 18:00:00")
-    notified_events.clear()
-    yield
-    notified_events.clear()
+    databases(Database.BOT)
+
+
+@pytest.fixture(name="notified")
+def _notified(query):
+    """The IDs of the events whose reminder thread has been recorded as posted."""
+    return lambda: [row["event_id"] for row in query(Database.BOT, "SELECT event_id FROM notified_events")]
 
 
 @pytest.fixture(name="server")
@@ -106,6 +112,33 @@ class TestWhichEventsAreNotified:
         await _tick(server)
 
         assert server.channel.create_thread.await_count == 1
+
+    async def test_an_event_announced_before_a_restart_is_not_announced_again(self, server, make_scheduled_event):
+        event = make_scheduled_event("Watch Party", NOW + timedelta(minutes=5), attendees=(server.fan,))
+        mark_event_notified_db(event.id)       # the thread was posted by the bot before it restarted
+        server.guild.scheduled_events = [event]
+
+        await _tick(server)
+
+        server.channel.create_thread.assert_not_awaited()
+
+    async def test_the_announcement_is_recorded_in_the_database(self, server, make_scheduled_event, notified):
+        event = make_scheduled_event("Watch Party", NOW + timedelta(minutes=5), attendees=(server.fan,))
+        server.guild.scheduled_events = [event]
+
+        await _tick(server)
+
+        assert notified() == [event.id]
+
+    async def test_events_far_off_are_not_looked_up(self, server, make_scheduled_event, monkeypatch):
+        looked_up = mock.Mock(return_value=False)
+        monkeypatch.setattr(scheduled_events, "was_event_notified_db", looked_up)
+        server.guild.scheduled_events = [make_scheduled_event("Later", NOW + timedelta(hours=3),
+                                                              attendees=(server.fan,))]
+
+        await _tick(server)
+
+        looked_up.assert_not_called()
 
     async def test_several_events_are_each_handled(self, server, make_scheduled_event):
         server.guild.scheduled_events = [
@@ -195,7 +228,7 @@ class TestTheThread:
         assert server.thread.send.await_args.kwargs["file"].filename == "iu_event_thread.gif"
 
     async def test_without_the_gif_the_thread_still_gets_its_message(self, server, make_scheduled_event, tmp_path,
-                                                                      monkeypatch, caplog):
+                                                                      monkeypatch, caplog, notified):
         monkeypatch.setattr(scheduled_events, "MEDIA_DIR", tmp_path)
         server.guild.scheduled_events = [make_scheduled_event("Watch Party", NOW + timedelta(minutes=5),
                                                               attendees=(server.fan,))]
@@ -205,14 +238,14 @@ class TestTheThread:
 
         assert "file" not in server.thread.send.await_args.kwargs
         assert "Event GIF not found" in caplog.text
-        assert len(notified_events) == 1
+        assert len(notified()) == 1
 
 
 class TestFailures:
     """A problem with one event must not stop the others or leave it unannounced forever."""
 
     async def test_missing_permissions_are_logged_and_the_event_is_retried_next_tick(
-            self, server, make_scheduled_event, caplog):
+            self, server, make_scheduled_event, caplog, notified):
         server.guild.scheduled_events = [make_scheduled_event("Watch Party", NOW + timedelta(minutes=5),
                                                               attendees=(server.fan,))]
         server.channel.create_thread.side_effect = discord.Forbidden(mock.Mock(status=403, reason="x"), "no")
@@ -221,13 +254,13 @@ class TestFailures:
             await _tick(server)
 
         assert "lacks permissions to create threads" in caplog.text
-        assert not notified_events
+        assert not notified()
         server.channel.create_thread.side_effect = None
         await _tick(server)
-        assert len(notified_events) == 1
+        assert len(notified()) == 1
 
     async def test_an_unexpected_error_is_logged_and_the_next_event_is_still_handled(
-            self, server, make_scheduled_event, caplog):
+            self, server, make_scheduled_event, caplog, notified):
         server.guild.scheduled_events = [
             make_scheduled_event("Broken", NOW + timedelta(minutes=5), attendees=(server.fan,)),
             make_scheduled_event("Fine", NOW + timedelta(minutes=6), attendees=(server.fan,))]
@@ -238,4 +271,18 @@ class TestFailures:
 
         assert "Failed to process event warning for Broken: boom" in caplog.text
         assert server.channel.create_thread.await_count == 2
-        assert len(notified_events) == 1
+        assert len(notified()) == 1
+
+    async def test_a_database_failure_for_one_event_is_logged_and_the_next_event_is_still_handled(
+            self, server, make_scheduled_event, caplog, monkeypatch):
+        monkeypatch.setattr(scheduled_events, "was_event_notified_db",
+                            mock.Mock(side_effect=[sqlite3.OperationalError("locked"), False]))
+        server.guild.scheduled_events = [
+            make_scheduled_event("Broken", NOW + timedelta(minutes=5), attendees=(server.fan,)),
+            make_scheduled_event("Fine", NOW + timedelta(minutes=6), attendees=(server.fan,))]
+
+        with caplog.at_level(logging.ERROR, logger="iu-bot"):
+            await _tick(server)
+
+        assert "Failed to process event warning for Broken: locked" in caplog.text
+        assert [c.kwargs["name"] for c in server.channel.create_thread.await_args_list] == ["Fine"]

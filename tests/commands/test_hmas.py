@@ -84,7 +84,8 @@ class TestSetNominees:
     """/hma-set-nominees sets the final list for a category."""
 
     async def test_saves_the_list_and_confirms_it(self, admin_interaction):
-        await hma_set_nominees.callback(admin_interaction, "soty", "IVE - HEYA | aespa - Supernova | IU - Love wins all ")
+        await hma_set_nominees.callback(admin_interaction, "soty",
+                                        "IVE - HEYA | aespa - Supernova | IU - Love wins all ")
 
         assert get_hma_final_nominees("soty") == ["IU - Love wins all", "IVE - HEYA", "aespa - Supernova"]
         assert admin_interaction.sent[0].content == (

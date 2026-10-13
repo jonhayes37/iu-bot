@@ -6,10 +6,10 @@ import discord
 
 from commands.registry import all_commands
 from config import Channel, guild_id
-from db.bot import get_active_bot_status_db
 from tasks.heartbeat import write_heartbeat
 from tasks.listen_game import check_listen_game_reminders
 from tasks.scheduled_events import check_upcoming_events
+from tasks.status import refresh_status, show_saved_status
 from tasks.tournaments import tournament_resolution_loop
 from triggers.member import add_trainee_role, welcome_member
 from triggers.merch import handle_reaction_add
@@ -116,13 +116,13 @@ class IUBot(discord.Client):
             check_listen_game_reminders.start(self, guild_id())
             logger.info("Listen game reminder task started.")
 
-        # Set the bot's status
-        saved_status = get_active_bot_status_db()
-        if saved_status:
-            activity = discord.Activity(type=discord.ActivityType.listening, name=saved_status)
-            await self.change_presence(status=discord.Status.online, activity=activity)
+        # Show the saved status, and keep it up to date (it goes away when it expires). The loop's first
+        # run shows it; after a reconnect the loop is already running, so show it straight away.
+        if not refresh_status.is_running():
+            refresh_status.start(self)
+            logger.info("Status refresh task started.")
         else:
-            await self.change_presence(status=discord.Status.online, activity=None)
+            await show_saved_status(self)
 
     async def on_message(self, message: discord.Message):
         if message.author == self.user:

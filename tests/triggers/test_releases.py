@@ -1,6 +1,8 @@
 """Tests for triggers/releases.py: YouTube links posted in #new-releases."""
 
+import asyncio
 import logging
+import threading
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -8,7 +10,7 @@ import pytest
 
 from config import EMOJI_IU, Database
 from db.releases import add_new_release, get_playlist_id_for_year, mark_release_processed, save_new_playlist
-from triggers.releases import _process_release_url, get_eligible_year, store_new_release, store_new_releases
+from triggers.releases import _process_release_url, store_new_release, store_new_releases
 
 VIDEO_A, VIDEO_B = "aaaaaaaaaa1", "bbbbbbbbbb2"
 POSTED = datetime(2026, 3, 17, 15, 0, tzinfo=timezone.utc)
@@ -25,6 +27,12 @@ def _snippet(published="2026-03-10T12:00:00Z"):
 @pytest.fixture(autouse=True)
 def _releases_database(databases):
     databases(Database.RELEASES)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_release_lock(monkeypatch):
+    """An asyncio.Lock belongs to the event loop that first waits on it, and each test has its own loop."""
+    monkeypatch.setattr("triggers.releases.RELEASE_LOCK", asyncio.Lock())
 
 
 @pytest.fixture(name="youtube", autouse=True)
@@ -52,14 +60,6 @@ def _post(make_message):
 
 def _rows(query):
     return [(r["video_id"], r["processed"]) for r in query(Database.RELEASES, "SELECT * FROM new_releases")]
-
-
-class TestEligibleYear:
-    """December belongs to the next year's awards."""
-
-    @pytest.mark.parametrize("month, year", [(1, 2026), (6, 2026), (11, 2026), (12, 2027)])
-    def test_by_month(self, month, year):
-        assert get_eligible_year(datetime(2026, month, 15, tzinfo=timezone.utc)) == year
 
 
 class TestStoringALink:
@@ -161,6 +161,43 @@ class TestDuplicatesAndRetries:
         message.add_reaction.assert_not_awaited()
 
 
+    @staticmethod
+    async def _post_while_the_first_is_busy(first, second, slow_call):
+        """Posts `first`, then `second` while `first` is stuck inside slow_call (a YouTube fake)."""
+        started, release = threading.Event(), threading.Event()
+        result = slow_call.return_value
+
+        def slow(*_):
+            started.set()
+            release.wait(timeout=5)
+            return result
+
+        slow_call.side_effect = slow
+        first_post = asyncio.create_task(store_new_release(first))
+        await asyncio.to_thread(started.wait, 5)
+        second_post = asyncio.create_task(store_new_release(second))
+        await asyncio.sleep(0.05)              # give the second post the chance to race the first
+        release.set()
+        await asyncio.gather(first_post, second_post)
+
+    async def test_the_same_video_posted_twice_at_once_is_added_only_once(self, post, query, youtube):
+        """The second post waits for the first to finish, then sees a processed duplicate."""
+        first, second = post(_url(VIDEO_A)), post(_url(VIDEO_A))
+
+        await self._post_while_the_first_is_busy(first, second, youtube.add)
+
+        youtube.add.assert_called_once_with("PL2026", VIDEO_A)
+        assert _rows(query) == [(VIDEO_A, 1)]
+        first.add_reaction.assert_awaited_once_with(EMOJI_IU)
+        second.add_reaction.assert_not_awaited()
+
+    async def test_two_posts_at_once_create_the_years_playlist_only_once(self, post, query, youtube):
+        await self._post_while_the_first_is_busy(post(_url(VIDEO_A)), post(_url(VIDEO_B)), youtube.create)
+
+        youtube.create.assert_called_once_with(2026)
+        assert len(query(Database.RELEASES, "SELECT * FROM youtube_playlists")) == 1
+
+
 class TestWhichVideosCount:
     """Only music from the current awards year is collected."""
 
@@ -211,6 +248,17 @@ class TestWhichVideosCount:
 
         assert "No YouTube client available; skipping 1 release links." in caplog.text
         assert _rows(query) == []
+
+
+    async def test_the_year_turns_over_at_midnight_toronto_time_like_the_awards(self, post, query, youtube):
+        """22:30 on November 30 in Toronto is already December 1 in UTC, but it is still the 2026 awards."""
+        youtube.snippets.side_effect = lambda ids: {i: _snippet("2026-12-01T03:00:00Z") for i in ids}
+        posted = datetime(2026, 12, 1, 3, 30, tzinfo=timezone.utc)
+
+        await store_new_release(post(_url(VIDEO_A), created_at=posted))
+
+        assert _rows(query) == [(VIDEO_A, 1)]
+        youtube.create.assert_called_once_with(2026)
 
 
 class TestBatches:

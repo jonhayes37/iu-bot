@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from config import Database
-from db.bot import get_active_bot_status_db, save_bot_status_db
+from db.bot import get_active_bot_status_db, mark_event_notified_db, save_bot_status_db, was_event_notified_db
 
 
 @pytest.fixture(autouse=True)
@@ -71,3 +71,27 @@ def test_a_status_lasts_as_long_as_asked(execute, frozen_time):
     assert get_active_bot_status_db() == "week"
     frozen_time((created + timedelta(days=8)).strftime("%Y-%m-%d %H:%M:%S"))
     assert get_active_bot_status_db() is None
+
+
+def test_an_event_is_not_notified_until_it_is_marked():
+    assert not was_event_notified_db(111)
+
+    mark_event_notified_db(111)
+
+    assert was_event_notified_db(111)
+    assert not was_event_notified_db(222)
+
+
+def test_marking_an_event_twice_keeps_one_row(query):
+    mark_event_notified_db(111)
+    mark_event_notified_db(111)
+
+    assert len(query(Database.BOT, "SELECT * FROM notified_events")) == 1
+
+
+def test_of_two_statuses_saved_in_the_same_second_the_later_one_wins(execute, frozen_time):
+    frozen_time("2026-03-17 12:30:00")
+    _save_at(execute, "first", 7, "2026-03-17 12:00:00")
+    _save_at(execute, "second", 7, "2026-03-17 12:00:00")
+
+    assert get_active_bot_status_db() == "second"

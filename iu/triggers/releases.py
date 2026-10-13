@@ -12,8 +12,15 @@ from db.releases import AddResult, add_new_release, get_playlist_id_for_year, sa
 from services.youtube import (
     add_video_to_playlist, create_releases_playlist, extract_video_id, get_video_snippets, parse_publish_date
 )
+from utils.end_of_year import award_year_for
 
 logger = logging.getLogger('iu-bot')
+
+# The YouTube work runs in worker threads, so two messages could otherwise be processed at once. One
+# release is handled at a time so that a video posted twice in quick succession sees the first post's
+# finished state (and is a duplicate) instead of being added to the playlist again, and so the year's
+# playlist can't be created twice.
+RELEASE_LOCK = asyncio.Lock()
 
 
 async def store_new_release(message: discord.Message):
@@ -44,18 +51,19 @@ async def store_new_releases(messages: list[discord.Message]):
         return
 
     reacted_messages = {}
-    for message, url, video_id in links:
-        snippet = snippets.get(video_id)
-        if not snippet:
-            logger.warning("Could not fetch publish date for %s. Skipping.", video_id)
-            continue
+    async with RELEASE_LOCK:
+        for message, url, video_id in links:
+            snippet = snippets.get(video_id)
+            if not snippet:
+                logger.warning("Could not fetch publish date for %s. Skipping.", video_id)
+                continue
 
-        processed = await asyncio.to_thread(
-            _process_release_url, url, video_id, str(message.id), message.created_at,
-            get_eligible_year(message.created_at), parse_publish_date(snippet)
-        )
-        if processed:
-            reacted_messages[message.id] = message
+            processed = await asyncio.to_thread(
+                _process_release_url, url, video_id, str(message.id), message.created_at,
+                award_year_for(message.created_at), parse_publish_date(snippet)
+            )
+            if processed:
+                reacted_messages[message.id] = message
 
     for message in reacted_messages.values():
         await message.add_reaction(EMOJI_IU)
@@ -65,7 +73,7 @@ def _process_release_url(url: str, video_id: str, message_id: str, msg_time: dat
     """Synchronous worker: validates, stores, and syncs a single release URL to YouTube."""
     try:
         # If the video isn't from the current year, ignore it
-        video_award_year = get_eligible_year(publish_date)
+        video_award_year = award_year_for(publish_date)
         if video_award_year != award_year:
             logger.info("Skipped %s: Video year (%s) does not match active year (%s).",
                         video_id, video_award_year, award_year)
@@ -98,9 +106,3 @@ def _process_release_url(url: str, video_id: str, message_id: str, msg_time: dat
     except Exception as ex:
         logger.error("Failed to process release %s: %s", video_id, ex)
         return False
-
-def get_eligible_year(timestamp: datetime) -> int:
-    """Calculates the award year (Dec 1st starts the next year)."""
-    if timestamp.month == 12:
-        return timestamp.year + 1
-    return timestamp.year

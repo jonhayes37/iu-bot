@@ -281,4 +281,4 @@ IU adds some extras to Discord's scheduled events:
 
 | Command | Who | Where | Description |
 | --- | --- | --- | --- |
-| `/set-status status_text [days]` | Admin | `#sandbox` | Sets IU's "Listening to" status for a number of days (7 by default) |
+| `/set-status [status_text] [days]` | Admin | `#sandbox` | Sets IU's "Listening to" status (up to 128 characters) for 1 to 365 days (7 by default); it is taken down within an hour of expiring. Leave the text out to clear it |

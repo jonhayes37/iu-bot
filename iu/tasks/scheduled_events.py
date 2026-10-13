@@ -1,5 +1,6 @@
 """A task to enhance Discord scheduled events"""
 
+import asyncio
 import os
 import logging
 from datetime import timedelta
@@ -7,11 +8,10 @@ import discord
 from discord.ext import tasks
 from discord.utils import utcnow
 from config import Channel, MEDIA_DIR
+from db.bot import mark_event_notified_db, was_event_notified_db
 from tasks.common import keep_running
 
 logger = logging.getLogger('iu-bot')
-
-notified_events = set()
 
 @tasks.loop(minutes=1)
 @keep_running
@@ -40,12 +40,13 @@ async def check_upcoming_events(client: discord.Client, guild_id: int):
         if event.status != discord.EventStatus.scheduled:
             continue
 
-        if event.id in notified_events:
-            continue
-
         time_until_start = event.start_time - now
         if time_until_start <= timedelta(minutes=15):
             try:
+                # Stored in the database rather than in memory, so a restart doesn't post the thread again
+                if await asyncio.to_thread(was_event_notified_db, event.id):
+                    continue
+
                 attendees = [user async for user in event.users(limit=50)]
                 logger.debug("Found %d attendees for event: %s", len(attendees), event.name)
                 mentions = " ".join([user.mention for user in attendees if not user.bot])
@@ -70,7 +71,8 @@ async def check_upcoming_events(client: discord.Client, guild_id: int):
                     logger.warning("Event GIF not found at %s. Sending text-only warning.", gif_path)
                     await thread.send(content=msg)
 
-                notified_events.add(event.id)
+                # Recorded after posting: a crash in between means one repeat, never a missed reminder
+                await asyncio.to_thread(mark_event_notified_db, event.id)
                 logger.info("Sent 15-minute warning for event: %s", event.name)
 
             except discord.Forbidden:

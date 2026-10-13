@@ -558,4 +558,4 @@ class TestResolutionLoop:
         with caplog.at_level(logging.ERROR, logger="iu-bot"):
             await self._tick(server)
 
-        assert "Unhandled error in tournament resolution loop" in caplog.text
+        assert "Unhandled error in tournament_resolution_loop; it will run again on the next tick" in caplog.text

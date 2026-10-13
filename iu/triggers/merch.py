@@ -15,6 +15,10 @@ _REMEMBERED_MESSAGES = 2000
 # doesn't cost a fetch per reaction. Both are bounded.
 _reaction_totals: collections.OrderedDict[int, int] = collections.OrderedDict()
 _paid_milestones: collections.OrderedDict[int, bool] = collections.OrderedDict()
+# The people (not bots, not the author) known to have reacted to a message that has enough reactions for
+# the milestone but not from enough different people. Reading who reacted costs a request per emoji, so
+# it is read once and later reactions just add their reactor; it is read again only to confirm a payout.
+_known_reactors: collections.OrderedDict[int, set[int]] = collections.OrderedDict()
 
 
 def _remember(cache: collections.OrderedDict, key: int, value):
@@ -86,31 +90,47 @@ async def handle_reaction_add(payload, client):
         total_reactions = sum(r.count for r in message.reactions)
         _remember(_reaction_totals, payload.message_id, total_reactions)
 
-    if total_reactions >= MILESTONE_REACTIONS:
-        await _check_milestone(message or await _fetch_message(client, payload), jump_url, dispatch_channel)
+    if total_reactions < MILESTONE_REACTIONS:
+        return
+
+    known = _known_reactors.get(payload.message_id)
+    if known is not None:
+        # Already read once: add this reactor, and only read again when that could make 5 people
+        if payload.user_id != payload.message_author_id:
+            known.add(payload.user_id)
+        _remember(_known_reactors, payload.message_id, known)
+        if len(known) < MILESTONE_REACTIONS:
+            return
+
+    await _check_milestone(message or await _fetch_message(client, payload), jump_url, dispatch_channel)
 
 
 async def _check_milestone(message: discord.Message | None, jump_url: str, dispatch_channel):
+    """Reads who has reacted (a fresh read, since reactions can be taken back) and pays if it is 5 people."""
     if not message:
         return
 
     if await asyncio.to_thread(is_milestone_paid, message.id):
         _remember(_paid_milestones, message.id, True)
+        _known_reactors.pop(message.id, None)
         return
 
-    # Count unique users across all emojis
+    # Different people across all emoji; bots and the author's own reactions don't count
     unique_users = set()
     for reaction in message.reactions:
         async for user in reaction.users():
-            if not user.bot:
+            if not user.bot and user.id != message.author.id:
                 unique_users.add(user.id)
 
-    # Process payout
-    if len(unique_users) >= MILESTONE_REACTIONS:
-        if await asyncio.to_thread(process_milestone_award, message.id, message.author.id, jump_url):
-            _remember(_paid_milestones, message.id, True)
-            if dispatch_channel:
-                await dispatch_channel.send(
-                    f"<@{message.author.id}>'s [post]({jump_url}) "
-                    "got reactions from 5 people, and earned 3 hearts!"
-                )
+    if len(unique_users) < MILESTONE_REACTIONS:
+        _remember(_known_reactors, message.id, unique_users)
+        return
+
+    _known_reactors.pop(message.id, None)
+    if await asyncio.to_thread(process_milestone_award, message.id, message.author.id, jump_url):
+        _remember(_paid_milestones, message.id, True)
+        if dispatch_channel:
+            await dispatch_channel.send(
+                f"<@{message.author.id}>'s [post]({jump_url}) "
+                "got reactions from 5 people, and earned 3 hearts!"
+            )
