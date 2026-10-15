@@ -124,6 +124,9 @@ TRIGGER_LIST = {
     'six or seven': [{'filename': 'ive_67.gif', 'skip_url': True}],
     'six or 7': [{'filename': 'ive_67.gif', 'skip_url': True}],
     '6 or seven': [{'filename': 'ive_67.gif', 'skip_url': True}],
+    'absurd': [{'filename': 'tribe_jinha.gif'}],
+    'ludicrous': [{'filename': 'tribe_jinha.gif'}],
+    'unhinged': [{'filename': 'tribe_jinha.gif'}],
 }
 
 async def reply_with_gif(incoming, content, filename):
