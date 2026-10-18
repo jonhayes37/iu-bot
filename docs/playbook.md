@@ -248,9 +248,25 @@ to see every field. The settings that matter:
   missing or wrong, the bot loses its data every time the container is recreated.**
 - **YouTube token:** `token.json` must be inside that data folder (the bot looks for
   `/app/data/token.json`).
-- **Extra Parameters:** `--init --stop-timeout 30`. `--init` makes `docker stop` shut the bot down
-  promptly, and the timeout gives it up to 30 seconds to finish.
-- **Autostart:** turn on so the bot returns after a reboot.
+- **Extra Parameters:** `--init --stop-timeout 30 --restart unless-stopped`. `--init` makes
+  `docker stop` shut the bot down promptly, and the timeout gives it up to 30 seconds to finish.
+  `--restart unless-stopped` makes Docker start the bot again whenever it exits on its own, for
+  example after a crash. It waits a little longer after each failed start, up to a minute between
+  tries. Stopping the container from the Docker tab still keeps it stopped. Unraid sets no restart
+  policy unless you add one *(check)*. After you click **Apply**, confirm it in the Unraid terminal:
+  `docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' <container>` should print `unless-stopped`.
+- **Autostart:** turn on so the bot returns after a reboot. Autostart only starts the container
+  once, when the array starts. Docker's restart policy is what brings the bot back if it exits
+  later.
+
+#### After a power cut
+
+When the power comes back, the NAS often finishes booting before the router has internet. The bot
+handles this itself: before it logs in, it waits until it can look up `discord.com`. Until then it
+logs `Can't look up discord.com yet ... trying again in N seconds`, and it waits longer between
+tries, up to a minute. Once the network is back it logs `The network is up; connecting to Discord.`
+and starts normally. If it fails in some other way while starting, the restart policy above starts
+it again.
 
 ### The container's user
 
