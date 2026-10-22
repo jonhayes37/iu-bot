@@ -81,7 +81,7 @@ per person. Sold-out items (ones you've hit the limit on) are shown struck throu
 | `/view-merch` | Everyone | `#merch-booth` | Lists the perks for sale and what you can still buy |
 | `/purchase item_id` | Everyone | `#merch-booth` | Buys one of an item using its code |
 | `/purchase-history` | Everyone | `#merch-booth` | Shows everything you've bought |
-| `/add-merch item_id name description price [max_per_user]` | Admin | `#dispatch-news` | Adds an item, or updates it if the code already exists |
+| `/add-merch item_id name description price [max_per_user]` | Admin | `#dispatch-news` | Adds an item, or updates it if the code already exists. Codes are up to 32 characters, names 100 and descriptions 500, so the booth always fits on screen |
 | `/modify-balance member amount reason` | Admin | `#dispatch-news` | Adds or removes hearts (use a negative amount to remove) |
 | `/random-award users amount reason` | Admin | `#dispatch-news` | Picks a random winner from the mentioned users and awards them hearts |
 | `/draw-raffle` | Admin | `#dispatch-news` | Draws a winner from everyone holding `RAFFLE` items (more tickets, better odds), announces them, and resets the tickets |
@@ -172,7 +172,7 @@ Listening To Bonus Pick** perk (`WAYLT`) from the Merch Booth, which is used up 
 
 | Command | Who | Description |
 | --- | --- | --- |
-| `/create-list-event event_id event_name [expected_count] [placeholder]` | Admin | Posts the announcement with a **Submit Your List** button in the current channel. The event ID can use letters, numbers, `-` and `_` |
+| `/create-list-event event_id event_name [expected_count] [placeholder]` | Admin | Posts the announcement with a **Submit Your List** button in the current channel. The event ID can use letters, numbers, `-` and `_`; the name and the placeholder are up to 100 characters (Discord's limit for the form's placeholder) |
 | `/close-list-event event_id` | Admin | Closes the event and disables its button |
 | `/export-lists event_id` | Admin | Uploads two text files: the cleaned lists, and a reference sheet of every entry's link with its start time |
 
@@ -193,7 +193,7 @@ also a raffle ticket, and one voter wins 5 hearts when it finishes.
 
 | Command | Who | Description |
 | --- | --- | --- |
-| `/new-tournament title description entrants [days_per_round]` | Admin | Creates the tournament. Entrants are separated by `\|`, from seed 1 to the lowest seed |
+| `/new-tournament title description entrants [days_per_round]` | Admin | Creates the tournament. Entrants are separated by `\|`, from seed 1 to the lowest seed. The title is up to 100 characters and the description up to 1500, so the start announcement always fits |
 | `/force-close-round tournament_id` | Admin | Ends the current round's polls early so IU resolves them on her next check (within about 5 minutes) |
 
 ## End of year: Top 25, Hall of Fame and HMAs
@@ -242,9 +242,9 @@ Show off your favourites with a card once an admin has set yours up.
 | --- | --- | --- |
 | `/my-ultimate-bias [member]` | Everyone | Shows your ultimate bias card (name, group, position, birthday, hometown and why), or another member's |
 | `/my-bias-group [member]` | Everyone | Shows your bias group card (group info, your bias, title track, B-track, album and why), or another member's |
-| `/create-ultimate-bias member ...` | Admin | Creates a member's ultimate bias card |
+| `/create-ultimate-bias member ...` | Admin | Creates a member's ultimate bias card. Each detail is up to 100 characters and the reason up to 3000, so the whole card fits |
 | `/update-ultimate-bias member ...` | Admin | Changes selected fields on a member's ultimate bias card |
-| `/create-bias-group member ...` | Admin | Creates a member's bias group card |
+| `/create-bias-group member ...` | Admin | Creates a member's bias group card. Details are up to 100 characters (members 300, tracks and album 200) and the reason up to 2000, so the whole card fits |
 | `/update-bias-group member ...` | Admin | Changes selected fields on a member's bias group card |
 
 If a member's card doesn't exist yet, IU says they haven't unlocked one.

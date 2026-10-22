@@ -108,4 +108,5 @@ async def random_award(interaction: discord.Interaction, users: str, amount: int
     embed.add_field(name="Reason", value=reason, inline=True)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
 
-    await interaction.response.send_message(embed=embed)
+    # Mentions inside an embed don't notify anyone, so the winner is also tagged in the message itself
+    await interaction.response.send_message(f"Congratulations <@{winner_id}>!", embed=embed)

@@ -28,21 +28,46 @@ from ui.lists import SubmitListButton
 logger = logging.getLogger('iu-bot')
 
 
+COMMAND_OUT_OF_DATE = (
+    "⚠️ Discord's copy of this command is out of date, so it couldn't run and nothing was changed. Try again "
+    "in a minute; if it keeps happening, reload Discord (Ctrl+R, or close and reopen the app)."
+)
+
+
+def _explain_refusal(error: discord.app_commands.AppCommandError) -> str | None:
+    """
+    What to tell the user when a command was refused before it ran (a check or an option failed, or
+    Discord's list of commands doesn't match the bot's), or None if the command itself failed.
+    """
+    if isinstance(error, discord.app_commands.MissingRole):
+        return f"❌ You must have the '{error.missing_role}' role to use this command."
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        return "❌ Only server administrators can use this command."
+    if isinstance(error, discord.app_commands.TransformerError):
+        if error.type is discord.AppCommandOptionType.user:
+            # A member option names someone who has left the server since (Discord still offers them)
+            who = getattr(error.value, "mention", "That person")
+            return f"❌ {who} isn't in the server any more, so this command can't be used on them."
+        return f"❌ I couldn't understand one of the options you gave (`{error.value}`). Check it and try again."
+    if isinstance(error, (discord.app_commands.CommandNotFound, discord.app_commands.CommandSignatureMismatch)):
+        # Usually a command sync that failed or hasn't reached this member's Discord yet
+        logger.warning("Discord's command list doesn't match the bot's: %s", error)
+        return COMMAND_OUT_OF_DATE
+    return None
+
+
 async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
     """Reports a failed slash command to the user instead of leaving the interaction hanging."""
-    # Check for missing role
-    if isinstance(error, discord.app_commands.errors.MissingRole):
-        await interaction.response.send_message(
-            f"❌ You must have the '{error.missing_role}' role to use this command.",
-            ephemeral=True
-        )
-    elif isinstance(error, discord.app_commands.errors.MissingPermissions):
-        await interaction.response.send_message(
-            "❌ Only server administrators can use this command.", ephemeral=True
-        )
-    else:
+    text = _explain_refusal(error)
+    if text is None:
         # Logs the traceback and tells the user (database failures get their own message)
         await report_interaction_error(interaction, error)
+        return
+
+    try:
+        await interaction.response.send_message(text, ephemeral=True)
+    except discord.HTTPException as ex:
+        logger.warning("Could not tell the user why a command was refused: %s", ex)
 
 
 class IUBot(discord.Client):

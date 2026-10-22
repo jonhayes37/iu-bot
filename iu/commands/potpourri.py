@@ -9,11 +9,17 @@ from services.youtube import (
     create_playlist,
     add_video_to_playlist,
     extract_video_id,
-    QuotaExceededError
+    QuotaExceededError,
+    YouTubeUnavailableError
 )
 from utils.validation import admin_only
 
 logger = logging.getLogger('iu-bot')
+
+YOUTUBE_UNAVAILABLE = (
+    "❌ The bot can't reach YouTube right now, so no playlist was created. Try again in a few minutes. If it "
+    "keeps happening, the bot's YouTube login may need renewing (the bot's logs say why)."
+)
 
 @app_commands.command(name='create-potpourri-playlist',
                       description="[Admin] Upload a CSV to generate the potpourri YouTube playlist.")
@@ -80,7 +86,11 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
                     active_users.remove(user)
 
         # Create the Playlist
-        playlist_id = await asyncio.to_thread(create_playlist, playlist_title, "K-Potpourri Playlist")
+        try:
+            playlist_id = await asyncio.to_thread(create_playlist, playlist_title, "K-Potpourri Playlist")
+        except YouTubeUnavailableError:
+            await interaction.followup.send(YOUTUBE_UNAVAILABLE)
+            return
         if not playlist_id:
             await interaction.followup.send(
                 "❌ Failed to create the YouTube playlist. Check your API Quota and bot logs.")
@@ -96,7 +106,7 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
                     added_count += 1
                 else:
                     failed_urls.append(item["url"])
-            except QuotaExceededError:
+            except (QuotaExceededError, YouTubeUnavailableError) as ex:
                 failed_urls.append(item["url"])
 
                 # Build a safe error list for Quota hits
@@ -111,9 +121,13 @@ async def create_potpourri_playlist(interaction: discord.Interaction, file: disc
                         failed_text += f"\n*...and {unattempted} more unattempted videos.*"
 
                 url = f"https://www.youtube.com/playlist?list={playlist_id}"
+                if isinstance(ex, QuotaExceededError):
+                    stopped = "**Quota Exceeded mid-process!**", "hitting the YouTube API limit"
+                else:
+                    stopped = "**Lost the connection to YouTube mid-process!**", "YouTube stopped responding"
                 await interaction.followup.send(
-                    f"⚠️ **Quota Exceeded mid-process!**\n"
-                    f"Added {added_count} out of {len(ordered_videos)} videos before hitting the YouTube API limit.\n"
+                    f"⚠️ {stopped[0]}\n"
+                    f"Added {added_count} out of {len(ordered_videos)} videos before {stopped[1]}.\n"
                     f"🔗 {url}{failed_text}"
                 )
                 return

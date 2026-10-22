@@ -14,10 +14,26 @@ from utils.validation import admin_only, parse_colour
 IMAGES_DIR = MEDIA_DIR / "images"
 BAD_COLOUR_TEXT = "Invalid hex colour. Please use a format like `ff4980`, `#ff4980`, or `0xff4980`."
 
+# A profile is shown as the embed's description, which Discord limits to 4096 characters. These option
+# limits keep the longest possible profile (every field at its limit, plus the labels) inside it.
+EMBED_DESCRIPTION_LIMIT = 4096
+Short = app_commands.Range[str, 1, 100]
+Members = app_commands.Range[str, 1, 300]
+Track = app_commands.Range[str, 1, 200]  # a song or album, perhaps with a link
+UltimateReason = app_commands.Range[str, 1, 3000]
+GroupReason = app_commands.Range[str, 1, 2000]
+
 
 def _image_exists(filename: str) -> bool:
     """True if the name is a plain file name inside the images folder (no folders, no `..`)."""
     return Path(filename).name == filename and (IMAGES_DIR / filename).is_file()
+
+
+def _fit_description(text: str) -> str:
+    """Shortens a profile saved before the option limits existed, so it can still be shown."""
+    if len(text) <= EMBED_DESCRIPTION_LIMIT:
+        return text
+    return text[:EMBED_DESCRIPTION_LIMIT - 1] + "…"
 
 
 def _image_file(filename: str) -> discord.File | None:
@@ -88,19 +104,19 @@ async def ultimate_bias(interaction: discord.Interaction, member: typing.Optiona
     embed = discord.Embed(
         title=f"{target_user.display_name}'s Ultimate Bias",
         type='rich',
-        color=bias_info['colour']
+        color=bias_info['colour'],
+        description=_fit_description('\n'.join([
+            f'**Name:** {bias_info["name"]}',
+            f'**Birth Name:** {bias_info["birth_name"]}',
+            f'**Group:** {bias_info["group_name"]}',
+            f'**Position:** {bias_info["position"]}',
+            f'**Birthday:** {bias_info["birthday"]}',
+            f'**Hometown:** {bias_info["hometown"]}',
+            f'\n**Why {bias_info["name"]}?**',
+            bias_info['reason']
+        ]))
     )
     embed.set_image(url=f"attachment://{filename}")
-    embed.add_field(name="", value='\n'.join([
-        f'**Name:** {bias_info["name"]}',
-        f'**Birth Name:** {bias_info["birth_name"]}',
-        f'**Group:** {bias_info["group_name"]}',
-        f'**Position:** {bias_info["position"]}',
-        f'**Birthday:** {bias_info["birthday"]}',
-        f'**Hometown:** {bias_info["hometown"]}',
-        f'\n**Why {bias_info["name"]}?**',
-        bias_info['reason']
-    ]))
 
     await _send_with_image(interaction, embed, bias_image)
 
@@ -121,15 +137,15 @@ async def ultimate_bias(interaction: discord.Interaction, member: typing.Optiona
 async def create_ultimate_bias(
     interaction: discord.Interaction,
     member: discord.Member,
-    name: str,
-    birth_name: str,
-    group_name: str,
-    position: str,
-    birthday: str,
-    hometown: str,
+    name: Short,
+    birth_name: Short,
+    group_name: Short,
+    position: Short,
+    birthday: Short,
+    hometown: Short,
     colour_hex: str,
     image_filename: str,
-    reason: str
+    reason: UltimateReason
 ):
     """Creates a new ultimate bias entry directly from command arguments."""
 
@@ -180,15 +196,15 @@ async def create_ultimate_bias(
 async def update_ultimate_bias(
     interaction: discord.Interaction,
     member: discord.Member,
-    name: typing.Optional[str] = None,
-    birth_name: typing.Optional[str] = None,
-    group_name: typing.Optional[str] = None,
-    position: typing.Optional[str] = None,
-    birthday: typing.Optional[str] = None,
-    hometown: typing.Optional[str] = None,
+    name: typing.Optional[Short] = None,
+    birth_name: typing.Optional[Short] = None,
+    group_name: typing.Optional[Short] = None,
+    position: typing.Optional[Short] = None,
+    birthday: typing.Optional[Short] = None,
+    hometown: typing.Optional[Short] = None,
     colour_hex: typing.Optional[str] = None,
     image_filename: typing.Optional[str] = None,
-    reason: typing.Optional[str] = None
+    reason: typing.Optional[UltimateReason] = None
 ):
     """Updates an existing ultimate bias entry. Only provided fields are changed."""
     provided_args = {
@@ -247,17 +263,17 @@ async def update_ultimate_bias(
 async def create_bias_group(
     interaction: discord.Interaction,
     member: discord.Member,
-    name: str,
-    members: str,
-    label: str,
-    debut_date: str,
-    bias: str,
-    title_track: str,
-    b_track: str,
-    album: str,
+    name: Short,
+    members: Members,
+    label: Short,
+    debut_date: Short,
+    bias: Short,
+    title_track: Track,
+    b_track: Track,
+    album: Track,
     colour_hex: str,
     image_filename: str,
-    reason: str
+    reason: GroupReason
 ):
     ok, colour_int = await _check_style(interaction, colour_hex, image_filename)
     if not ok:
@@ -297,17 +313,17 @@ async def create_bias_group(
 async def update_bias_group(
     interaction: discord.Interaction,
     member: discord.Member,
-    name: typing.Optional[str] = None,
-    members: typing.Optional[str] = None,
-    label: typing.Optional[str] = None,
-    debut_date: typing.Optional[str] = None,
-    bias: typing.Optional[str] = None,
-    title_track: typing.Optional[str] = None,
-    b_track: typing.Optional[str] = None,
-    album: typing.Optional[str] = None,
+    name: typing.Optional[Short] = None,
+    members: typing.Optional[Members] = None,
+    label: typing.Optional[Short] = None,
+    debut_date: typing.Optional[Short] = None,
+    bias: typing.Optional[Short] = None,
+    title_track: typing.Optional[Track] = None,
+    b_track: typing.Optional[Track] = None,
+    album: typing.Optional[Track] = None,
     colour_hex: typing.Optional[str] = None,
     image_filename: typing.Optional[str] = None,
-    reason: typing.Optional[str] = None
+    reason: typing.Optional[GroupReason] = None
 ):
     provided_args = {
         'name': name, 'members': members, 'label': label, 'debut_date': debut_date,
@@ -363,22 +379,22 @@ async def bias_group(interaction: discord.Interaction, member: typing.Optional[d
     embed = discord.Embed(
         title=f"{target_user.display_name}'s Bias Group",
         type='rich',
-        color=bias_info['colour']
+        color=bias_info['colour'],
+        description=_fit_description('\n'.join([
+            '**Group Info**',
+            f"**Name:** {bias_info['name']}",
+            f"**Members:** {bias_info['members']}",
+            f"**Label:** {bias_info['label']}",
+            f"**Debut Date:** {bias_info['debut_date']}",
+            f"\n**{target_user.display_name}'s Favourites**",
+            f"**Bias:** {bias_info['bias']}",
+            f"**Title Track:** {bias_info['title_track']}",
+            f"**B Track:** {bias_info['b_track']}",
+            f"**Album:** {bias_info['album']}",
+            f"\n**Why {bias_info['name']}?**",
+            f"{bias_info['reason']}",
+        ]))
     )
     embed.set_image(url=f"attachment://{filename}")
-    embed.add_field(name="", value='\n'.join([
-        '**Group Info**',
-        f"**Name:** {bias_info['name']}",
-        f"**Members:** {bias_info['members']}",
-        f"**Label:** {bias_info['label']}",
-        f"**Debut Date:** {bias_info['debut_date']}",
-        f"\n**{target_user.display_name}'s Favourites**",
-        f"**Bias:** {bias_info['bias']}",
-        f"**Title Track:** {bias_info['title_track']}",
-        f"**B Track:** {bias_info['b_track']}",
-        f"**Album:** {bias_info['album']}",
-        f"\n**Why {bias_info['name']}?**",
-        f"{bias_info['reason']}",
-    ]))
 
     await _send_with_image(interaction, embed, bias_image)

@@ -10,9 +10,9 @@ from db.listen_game import (
     RoundStatus, close_round_db, get_current_round_db, get_round_db, get_user_submission_db, save_ranking_pick_db,
     set_round_theme_db, update_round_ruleset_message_db, update_round_status_message_db, upsert_submission_db
 )
-from services.listen_game import YOUTUBE_QUOTA_USED_UP
+from services.listen_game import YOUTUBE_QUOTA_USED_UP, YOUTUBE_UNAVAILABLE
 from services.listen_game_playlist import PlaylistOutcome
-from services.youtube import QuotaExceededError
+from services.youtube import QuotaExceededError, YouTubeUnavailableError
 from testsupport.listen_game import reveal_ready_round, start_game
 from ui.listen_game import ListenGameRankingView, SetThemeModal
 
@@ -372,6 +372,34 @@ class TestSubmitSongWhenYouTubeIsOverQuota(_SubmitSongSetup):
         await submit_song.callback(interaction, URL)
 
         assert "sync-playlist" not in listen_server.dms(1)[-1]
+
+
+class TestSubmitSongWhenYouTubeCannotBeReached(_SubmitSongSetup):
+    """/listen-game-submit-song when the bot's YouTube login is broken or the network is down."""
+
+    async def test_it_says_youtube_is_unreachable_instead_of_blaming_the_video(self, listen_server, youtube):
+        _, round_id = self._open_round()
+        youtube.title.side_effect = YouTubeUnavailableError("invalid_grant: Token has been expired or revoked.")
+        interaction = listen_server.interaction(102)
+
+        await submit_song.callback(interaction, URL)
+
+        assert _reply(interaction) == YOUTUBE_UNAVAILABLE
+        assert "private or deleted" not in YOUTUBE_UNAVAILABLE
+        assert get_user_submission_db(round_id, 102) is None
+        youtube.put.assert_not_called()
+        assert listen_server.dms(1) == []
+
+    async def test_losing_youtube_while_adding_to_the_playlist_saves_nothing(self, listen_server, youtube):
+        _, round_id = self._open_round()
+        youtube.put.return_value = (PlaylistOutcome.YOUTUBE_UNAVAILABLE, "PLround")
+        interaction = listen_server.interaction(102)
+
+        await submit_song.callback(interaction, URL)
+
+        assert _reply(interaction) == YOUTUBE_UNAVAILABLE
+        assert get_user_submission_db(round_id, 102) is None
+        assert listen_server.dms(1) == []
 
 
 class TestSubmitRanking:

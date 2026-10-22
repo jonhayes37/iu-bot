@@ -18,6 +18,10 @@ YOUTUBE_QUOTA_USED_UP = (
     "❌ The bot has used up today's YouTube allowance, so it can't look up songs right now. Nothing was "
     "submitted. Please try again after it resets at midnight Pacific time."
 )
+YOUTUBE_UNAVAILABLE = (
+    "❌ The bot can't reach YouTube right now, so nothing was submitted. Please try again in a few minutes, "
+    "and let the GM know if it keeps happening (the bot's YouTube login may need renewing)."
+)
 
 
 @dataclass

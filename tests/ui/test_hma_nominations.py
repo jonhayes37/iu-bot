@@ -64,8 +64,8 @@ class TestBallotSetup:
         interaction.response.defer.assert_awaited_once()
         assert interaction.sent == []
 
-    async def test_the_view_times_out_after_15_minutes(self):
-        assert MultiNominationView("x").timeout == 900
+    async def test_the_menu_never_expires_so_a_slow_submit_still_works(self):
+        assert MultiNominationView("x").timeout is None
 
 
 class TestSubmitNominations:

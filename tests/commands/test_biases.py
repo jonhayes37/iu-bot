@@ -1,9 +1,11 @@
 """Tests for commands/biases.py: showing members' bias cards."""
 
+import discord
 import pytest
 
 from commands.biases import (
-    bias_group, create_bias_group, create_ultimate_bias, ultimate_bias, update_bias_group, update_ultimate_bias
+    EMBED_DESCRIPTION_LIMIT, bias_group, create_bias_group, create_ultimate_bias, ultimate_bias, update_bias_group,
+    update_ultimate_bias
 )
 from config import Database
 from db.biases import create_artist_bias_db, create_ultimate_bias_db, get_artist_bias, get_ultimate_bias
@@ -260,3 +262,58 @@ class TestUpdateBiasGroup:
         await update_bias_group.callback(admin_interaction, make_member(user_id=50), bias="Rei", colour_hex="nope")
 
         assert get_artist_bias(50)["bias"] == "Wonyoung"
+
+
+def _longest_allowed(command, field):
+    """The longest text the command's option accepts, so a test can fill a profile to its limits."""
+    return "x" * next(p for p in command.parameters if p.name == field).max_value
+
+
+class TestProfilesFitInTheCard:
+    """A card shows the profile as the embed's description, which Discord caps at 4096 characters."""
+
+    @pytest.mark.parametrize("command", [create_ultimate_bias, update_ultimate_bias, create_bias_group,
+                                         update_bias_group])
+    def test_every_text_option_has_a_length_limit(self, command):
+        texts = [p for p in command.parameters
+                 if p.type is discord.AppCommandOptionType.string and p.name not in ("colour_hex", "image_filename")]
+
+        assert texts and all(p.max_value for p in texts)
+
+    async def test_an_ultimate_bias_at_every_limit_still_fits_with_its_whole_reason(self, interaction):
+        fields = ("name", "birth_name", "birthday", "group_name", "hometown", "position", "reason")
+        longest = {f: _longest_allowed(create_ultimate_bias, f) for f in fields}
+        create_ultimate_bias_db(interaction.user.id, colour=0, image_filename=IMAGE, **longest)
+
+        await ultimate_bias.callback(interaction)
+
+        description = interaction.sent[0].embed.description
+        assert len(description) <= EMBED_DESCRIPTION_LIMIT
+        assert description.endswith(longest["reason"])
+
+    async def test_a_bias_group_at_every_limit_still_fits_with_its_whole_reason(self, interaction):
+        fields = ("name", "album", "b_track", "bias", "debut_date", "label", "members", "reason", "title_track")
+        longest = {f: _longest_allowed(create_bias_group, f) for f in fields}
+        create_artist_bias_db(interaction.user.id, colour=0, image_filename=IMAGE, **longest)
+
+        await bias_group.callback(interaction)
+
+        description = interaction.sent[0].embed.description
+        assert len(description) <= EMBED_DESCRIPTION_LIMIT
+        assert description.endswith(longest["reason"])
+
+    @pytest.mark.parametrize("command, make", [(ultimate_bias, create_ultimate_bias_db),
+                                               (bias_group, create_artist_bias_db)])
+    async def test_a_profile_saved_before_the_limits_is_shortened_instead_of_failing(self, interaction, command,
+                                                                                     make):
+        if make is create_ultimate_bias_db:
+            make(interaction.user.id, "Seohyun", "Seo Juhyun", "June 28, 1991", 0, "SNSD", "Seoul", IMAGE,
+                 "Maknae", "y" * 5000)
+        else:
+            make(interaction.user.id, "IVE", "a", "b", "c", 0, "d", IMAGE, "e", "f", "y" * 5000, "g")
+
+        await command.callback(interaction)
+
+        description = interaction.sent[0].embed.description
+        assert len(description) == EMBED_DESCRIPTION_LIMIT
+        assert description.endswith("y…")

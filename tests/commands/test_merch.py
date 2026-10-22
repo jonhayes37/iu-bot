@@ -6,7 +6,10 @@ import random
 import discord
 import pytest
 
-from commands.merch import add_merch, draw_raffle, purchase, purchase_history, view_merch
+from commands.merch import (
+    MAX_DESCRIPTION_LENGTH, MAX_ITEM_ID_LENGTH, MAX_NAME_LENGTH, add_merch, draw_raffle, purchase, purchase_history,
+    view_merch
+)
 from config import DEFAULT_ADMIN_USER_ID, Channel, Database
 from db.merch import get_all_item_owners, get_user_balance, modify_db_balance, upsert_merch_item
 
@@ -138,6 +141,45 @@ class TestViewMerch:
         await view_merch.callback(booth)
 
         assert "SOLD OUT" not in booth.sent[0].embed.fields[0].name
+
+
+class TestItemsAlwaysFitInTheBooth:
+    """
+    Each item is an embed field: Discord allows 256 characters in its name and 1024 in its value, and one
+    item over that would stop the whole booth showing for everyone.
+    """
+
+    def test_the_options_are_limited(self):
+        options = {p.name: p for p in add_merch.parameters}
+
+        assert [options[name].max_value for name in ("item_id", "name", "description")] == \
+            [MAX_ITEM_ID_LENGTH, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH]
+
+    async def test_an_item_at_every_limit_fits_in_the_booth_and_the_history(self, booth, execute):
+        upsert_merch_item("I" * MAX_ITEM_ID_LENGTH, "N" * MAX_NAME_LENGTH, "D" * MAX_DESCRIPTION_LENGTH,
+                          10 ** 15, 10 ** 15)
+        execute(Database.MERCH, "INSERT INTO user_inventory VALUES (?, ?, 1)", booth.user.id, "I" * MAX_ITEM_ID_LENGTH)
+
+        await view_merch.callback(booth)
+        await purchase_history.callback(booth)
+
+        for reply in booth.sent:
+            [field] = reply.embed.fields
+            assert len(field.name) <= 256 and len(field.value) <= 1024
+            assert "D" * MAX_DESCRIPTION_LENGTH in field.value
+
+    async def test_text_saved_before_the_limits_is_shortened_instead_of_breaking_the_booth(self, booth, execute):
+        upsert_merch_item("OLD", "N" * 300, "D" * 2000, 5, 1)
+        upsert_merch_item("SOLD", "Sold", "S" * 2000, 5, 1)
+        execute(Database.MERCH, "INSERT INTO user_inventory VALUES (?, 'SOLD', 1)", booth.user.id)
+
+        await view_merch.callback(booth)
+        await purchase_history.callback(booth)
+
+        fields = [f for reply in booth.sent for f in reply.embed.fields]
+        assert len(fields) == 3          # both items in the booth (one sold out), and the one bought
+        assert all(len(f.name) <= 256 and len(f.value) <= 1024 for f in fields)
+        assert all("…" in f.value for f in fields)
 
 
 class TestPurchase:

@@ -9,12 +9,14 @@ from datetime import datetime, timezone
 from unittest import mock
 
 import pytest
+from google.auth.exceptions import RefreshError
+from httplib2 import ServerNotFoundError
 
 from services.youtube import get_yt_service as real_get_yt_service
 from services.youtube import (
-    VIDEOS_PER_REQUEST, QuotaExceededError, _YouTubeServiceCache, add_video_to_playlist, contains_youtube_url,
-    create_listen_game_playlist, create_playlist, create_releases_playlist, extract_video_id, get_playlist_video_ids,
-    get_video_snippets, get_video_title, parse_publish_date, remove_video_from_playlist
+    VIDEOS_PER_REQUEST, QuotaExceededError, YouTubeUnavailableError, _YouTubeServiceCache, add_video_to_playlist,
+    contains_youtube_url, create_listen_game_playlist, create_playlist, create_releases_playlist, extract_video_id,
+    get_playlist_video_ids, get_video_snippets, get_video_title, parse_publish_date, remove_video_from_playlist
 )
 
 VIDEO = "dQw4w9WgXcQ"
@@ -111,16 +113,27 @@ class TestServiceCache:
         monkeypatch.setattr("services.youtube.build", build)
         return credentials, build
 
-    def test_without_a_token_path_there_is_no_client(self, caplog):
-        with caplog.at_level(logging.ERROR, logger="iu-bot"):
-            assert _YouTubeServiceCache().get() is None
+    def test_without_a_token_path_youtube_is_unavailable(self, caplog):
+        with caplog.at_level(logging.ERROR, logger="iu-bot"), pytest.raises(YouTubeUnavailableError):
+            _YouTubeServiceCache().get()
 
         assert "token.json missing" in caplog.text
 
-    def test_a_token_path_that_does_not_exist_is_no_client(self, tmp_path, monkeypatch, google):
+    def test_a_token_path_that_does_not_exist_is_unavailable(self, tmp_path, monkeypatch, google):
         monkeypatch.setenv("TOKEN_DIR", str(tmp_path / "missing.json"))
 
-        assert _YouTubeServiceCache().get() is None
+        with pytest.raises(YouTubeUnavailableError, match="token.json missing"):
+            _YouTubeServiceCache().get()
+        google[1].assert_not_called()
+
+    @pytest.mark.usefixtures("token")
+    def test_a_token_file_that_cannot_be_used_is_unavailable(self, google, caplog):
+        google[0].from_authorized_user_file.side_effect = ValueError("missing fields refresh_token")
+
+        with caplog.at_level(logging.ERROR, logger="iu-bot"), pytest.raises(YouTubeUnavailableError):
+            _YouTubeServiceCache().get()
+
+        assert "missing fields refresh_token" in caplog.text
         google[1].assert_not_called()
 
     def test_builds_a_youtube_v3_client_from_the_token(self, token, google):
@@ -163,7 +176,8 @@ class TestServiceCache:
         cache = _YouTubeServiceCache()
         path = tmp_path / "token.json"
         monkeypatch.setenv("TOKEN_DIR", str(path))
-        assert cache.get() is None
+        with pytest.raises(YouTubeUnavailableError):
+            cache.get()
 
         path.write_text("{}")
 
@@ -172,11 +186,6 @@ class TestServiceCache:
 
 class TestCreatePlaylist:
     """Playlists are created unlisted."""
-
-    def test_no_client_means_no_playlist(self, monkeypatch):
-        monkeypatch.setattr("services.youtube.get_yt_service", lambda: None)
-
-        assert create_playlist("Title") is None
 
     def test_returns_the_new_playlist_id_and_sends_the_right_request(self, youtube_client):
         youtube_client.playlists.return_value.insert.return_value.execute.return_value = {"id": "PL123"}
@@ -239,11 +248,6 @@ class TestGetVideoSnippets:
 
         youtube_client.videos.return_value.list.side_effect = list_videos
 
-    def test_no_client_is_none(self, monkeypatch):
-        monkeypatch.setattr("services.youtube.get_yt_service", lambda: None)
-
-        assert get_video_snippets(["a"]) is None
-
     def test_returns_snippets_keyed_by_video_id(self, youtube_client):
         self._respond(youtube_client, {"a": {"title": "A"}, "b": {"title": "B"}})
 
@@ -255,7 +259,7 @@ class TestGetVideoSnippets:
         assert get_video_snippets(["a", "gone"]) == {"a": {"title": "A"}}
 
     def test_no_videos_makes_no_request(self, youtube_client):
-        assert get_video_snippets([]) == {}
+        assert not get_video_snippets([])
 
         youtube_client.videos.return_value.list.assert_not_called()
 
@@ -303,7 +307,7 @@ class TestGetVideoSnippets:
         youtube_client.videos.return_value.list.return_value.execute.side_effect = http_error("backendError")
 
         with caplog.at_level(logging.ERROR, logger="iu-bot"):
-            assert get_video_snippets(["a"]) == {}
+            assert not get_video_snippets(["a"])
 
         assert "error fetching details for 1 videos" in caplog.text
 
@@ -313,19 +317,9 @@ class TestGetVideoSnippets:
         assert get_video_title("a") == "IU - Good Day"
         assert get_video_title("missing") is None
 
-    def test_get_video_title_without_a_client_is_none(self, monkeypatch):
-        monkeypatch.setattr("services.youtube.get_yt_service", lambda: None)
-
-        assert get_video_title("a") is None
-
 
 class TestRemoveVideoFromPlaylist:
     """Removing looks up the item first, since YouTube deletes by playlist item id."""
-
-    def test_no_client_is_false(self, monkeypatch):
-        monkeypatch.setattr("services.youtube.get_yt_service", lambda: None)
-
-        assert remove_video_from_playlist("PL", "vid") is False
 
     def test_finds_the_item_and_deletes_it(self, youtube_client):
         items = youtube_client.playlistItems.return_value
@@ -353,6 +347,11 @@ class TestRemoveVideoFromPlaylist:
 
         assert "Failed to remove video vid" in caplog.text
 
+    def test_a_used_up_quota_is_false_like_any_other_refusal(self, youtube_client, http_error):
+        youtube_client.playlistItems.return_value.list.return_value.execute.side_effect = http_error("quotaExceeded")
+
+        assert remove_video_from_playlist("PL", "vid") is False
+
     def test_a_failure_while_deleting_is_false(self, youtube_client, http_error):
         items = youtube_client.playlistItems.return_value
         items.list.return_value.execute.return_value = {"items": [{"id": "ITEM1"}]}
@@ -367,11 +366,6 @@ class TestGetPlaylistVideoIds:
     @staticmethod
     def _page(*video_ids):
         return {"items": [{"snippet": {"resourceId": {"videoId": v}}} for v in video_ids]}
-
-    def test_no_client_is_none(self, monkeypatch):
-        monkeypatch.setattr("services.youtube.get_yt_service", lambda: None)
-
-        assert get_playlist_video_ids("PL") is None
 
     def test_returns_the_video_ids(self, youtube_client):
         items = youtube_client.playlistItems.return_value
@@ -413,11 +407,6 @@ class TestGetPlaylistVideoIds:
 class TestAddVideoToPlaylist:
     """Adding a song, and telling the caller why it didn't work."""
 
-    def test_no_client_is_false(self, monkeypatch):
-        monkeypatch.setattr("services.youtube.get_yt_service", lambda: None)
-
-        assert add_video_to_playlist("PL", "vid") is False
-
     def test_sends_the_video_to_the_playlist(self, youtube_client):
         assert add_video_to_playlist("PL", "vid") is True
 
@@ -448,3 +437,69 @@ class TestAddVideoToPlaylist:
             assert add_video_to_playlist("PL", "vid") is False
 
         assert "Failed to add video vid" in caplog.text
+
+
+EVERY_CALL = {
+    "create_playlist": lambda: create_playlist("Title"),
+    "get_video_snippets": lambda: get_video_snippets(["a"]),
+    "get_video_title": lambda: get_video_title("a"),
+    "remove_video_from_playlist": lambda: remove_video_from_playlist("PL", "vid"),
+    "get_playlist_video_ids": lambda: get_playlist_video_ids("PL"),
+    "add_video_to_playlist": lambda: add_video_to_playlist("PL", "vid"),
+}
+
+
+class TestYouTubeUnavailable:
+    """
+    A broken login or connection is raised as YouTubeUnavailableError by every call, so it can't be
+    mistaken for a private video, a missing playlist or a refused song.
+    """
+
+    @staticmethod
+    def _fail_every_request(client, error):
+        for request in (client.playlists.return_value.insert.return_value,
+                        client.videos.return_value.list.return_value,
+                        client.playlistItems.return_value.list.return_value,
+                        client.playlistItems.return_value.insert.return_value):
+            request.execute.side_effect = error
+
+    @pytest.mark.parametrize("call", EVERY_CALL.values(), ids=EVERY_CALL.keys())
+    @pytest.mark.parametrize("error", [
+        RefreshError("invalid_grant: Token has been expired or revoked."),
+        TimeoutError("timed out"),
+        ConnectionResetError("connection reset"),
+        ServerNotFoundError("Unable to find the server at youtube.googleapis.com"),
+    ], ids=["dead token", "timeout", "connection reset", "no DNS"])
+    def test_connection_and_login_failures(self, youtube_client, call, error):
+        self._fail_every_request(youtube_client, error)
+
+        with pytest.raises(YouTubeUnavailableError) as raised:
+            call()
+
+        assert raised.value.__cause__ is error
+
+    @pytest.mark.parametrize("call", EVERY_CALL.values(), ids=EVERY_CALL.keys())
+    @pytest.mark.parametrize("status", [401, 500, 503])
+    def test_a_rejected_login_or_a_failing_youtube(self, youtube_client, http_error, call, status):
+        self._fail_every_request(youtube_client, http_error("backendError", status))
+
+        with pytest.raises(YouTubeUnavailableError):
+            call()
+
+    @pytest.mark.parametrize("call", EVERY_CALL.values(), ids=EVERY_CALL.keys())
+    def test_no_usable_token(self, monkeypatch, call):
+        def no_token():
+            raise YouTubeUnavailableError("token.json missing at None")
+
+        monkeypatch.setattr("services.youtube.get_yt_service", no_token)
+
+        with pytest.raises(YouTubeUnavailableError):
+            call()
+
+    def test_the_cause_is_logged_for_whoever_fixes_it(self, youtube_client, caplog):
+        self._fail_every_request(youtube_client, RefreshError("invalid_grant"))
+
+        with caplog.at_level(logging.ERROR, logger="iu-bot"), pytest.raises(YouTubeUnavailableError):
+            add_video_to_playlist("PL", "vid")
+
+        assert "Could not reach YouTube while adding a video: invalid_grant" in caplog.text

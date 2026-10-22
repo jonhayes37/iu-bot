@@ -7,7 +7,8 @@ from unittest import mock
 import pytest
 
 from commands.tournaments import (
-    MAX_DAYS_PER_ROUND, MAX_ENTRANT_NAME_LENGTH, force_close_round, new_tournament
+    MAX_DAYS_PER_ROUND, MAX_DESCRIPTION_LENGTH, MAX_ENTRANT_NAME_LENGTH, MAX_TITLE_LENGTH, force_close_round,
+    new_tournament
 )
 from config import Channel, Database
 from db.tournaments import create_tournament, get_expired_unresolved_matches
@@ -165,6 +166,18 @@ class TestNewTournament:
         announcement = admin.guild.text_channels[1].sent[0]
         assert announcement.content.endswith("\n\n*(The bracket image couldn't be generated this time.)*")
         assert announcement.kwargs["file"] is None
+
+    async def test_the_longest_title_and_description_still_fit_in_the_announcement(self, admin, bracket):
+        # The announcement is posted after the tournament is saved, so it must never be too long to send
+        options = {p.name: p for p in new_tournament.parameters}
+        assert (options["title"].max_value, options["description"].max_value) == \
+            (MAX_TITLE_LENGTH, MAX_DESCRIPTION_LENGTH)
+        bracket.side_effect = None
+        bracket.return_value = None          # the longest announcement adds the note about the picture
+
+        await new_tournament.callback(admin, "T" * MAX_TITLE_LENGTH, "D" * MAX_DESCRIPTION_LENGTH, FOUR)
+
+        assert len(admin.guild.text_channels[1].sent[0].content) <= 2000
 
     async def test_launches_the_round_one_polls(self, admin):
         await new_tournament.callback(admin, "T", "d", FOUR, 4)

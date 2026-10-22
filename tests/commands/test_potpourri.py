@@ -6,8 +6,8 @@ from unittest import mock
 import discord
 import pytest
 
-from commands.potpourri import create_potpourri_playlist
-from services.youtube import QuotaExceededError
+from commands.potpourri import YOUTUBE_UNAVAILABLE, create_potpourri_playlist
+from services.youtube import QuotaExceededError, YouTubeUnavailableError
 
 VIDEO_A1, VIDEO_A2, VIDEO_A3 = "aaaaaaaaaa1", "aaaaaaaaaa2", "aaaaaaaaaa3"
 VIDEO_B1, VIDEO_C1 = "bbbbbbbbbb1", "cccccccccc1"
@@ -181,3 +181,22 @@ class TestOutcome:
         assert f"• <{_url(VIDEO_B1)}>" in text                   # the one that hit the limit
         assert "*...and 1 more unattempted videos.*" in text     # the one never tried
         assert youtube.add.call_count == 2                        # it stopped trying
+
+    async def test_youtube_being_unreachable_creates_nothing_and_says_why(self, admin_interaction, youtube):
+        youtube.create.side_effect = YouTubeUnavailableError("invalid_grant")
+
+        text = await _run(admin_interaction, _csv(("Jo", _url(VIDEO_A1))))
+
+        assert text == YOUTUBE_UNAVAILABLE
+        youtube.add.assert_not_called()
+
+    async def test_losing_youtube_mid_way_stops_and_reports_progress(self, admin_interaction, youtube):
+        youtube.add.side_effect = [True, YouTubeUnavailableError("timed out")]
+
+        text = await _run(admin_interaction, _csv(
+            ("Jo", _url(VIDEO_A1)), ("Sam", _url(VIDEO_B1)), ("Kit", _url(VIDEO_C1))))
+
+        assert text.startswith("⚠️ **Lost the connection to YouTube mid-process!**\n"
+                               "Added 1 out of 3 videos before YouTube stopped responding.")
+        assert "🔗 https://www.youtube.com/playlist?list=PLnew" in text
+        assert youtube.add.call_count == 2

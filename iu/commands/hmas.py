@@ -33,6 +33,8 @@ async def hma_nomination(interaction: discord.Interaction,
 @admin_only
 async def hma_nomination_export(interaction: discord.Interaction, year: int = None):
     """The Discord command logic for exporting the year's nominations."""
+    # Uploading the file can take longer than the 3 seconds Discord allows for a first response
+    await interaction.response.defer(ephemeral=True)
 
     # Fallback to current year if the admin didn't specify one
     target_year = year or get_current_award_year()
@@ -40,10 +42,7 @@ async def hma_nomination_export(interaction: discord.Interaction, year: int = No
     data = get_yearly_export_data(target_year)
 
     if not data:
-        await interaction.response.send_message(
-            f"No nominations found for the {target_year} awards yet.",
-            ephemeral=True
-        )
+        await interaction.followup.send(f"No nominations found for the {target_year} awards yet.", ephemeral=True)
         return
 
     # Build the text file content string
@@ -70,7 +69,7 @@ async def hma_nomination_export(interaction: discord.Interaction, year: int = No
     file_bytes = io.BytesIO(file_content.encode('utf-8'))
     discord_file = discord.File(fp=file_bytes, filename=f"{target_year}_hma_nominations.txt")
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         content=f"Here is the organized raw data export for the **{target_year} HMAs**:",
         file=discord_file,
         ephemeral=True

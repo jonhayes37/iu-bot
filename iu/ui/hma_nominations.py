@@ -9,7 +9,9 @@ class MultiNominationView(SafeView):
     """View for multi-select for nominations"""
 
     def __init__(self, nominee: str):
-        super().__init__(timeout=900) # 15 minute timeout
+        # No timeout: an expired menu would make Submit show "This interaction failed" and lose the
+        # choices (see eoy_voting.BALLOT_TIMEOUT)
+        super().__init__(timeout=None)
         self.nominee = nominee
 
         # Build options for Daesangs

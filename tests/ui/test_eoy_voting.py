@@ -200,9 +200,6 @@ class TestHoFVotingView:
 
         assert interaction.sent[0].content == DATABASE_ERROR
 
-    async def test_the_ballot_times_out_after_15_minutes(self):
-        assert HoFVotingView(2026, NOMINEES).timeout == 900
-
 
 class TestHMABallotView:
     """The ballot for a single HMA category, which returns to the category list."""
@@ -374,3 +371,13 @@ class TestHMACategoryDropdown:
 
         ballot = interaction.sent[0].kwargs["view"]
         assert (ballot.def1, ballot.def2, ballot.def3) == ("B", "C", "D")
+
+
+@pytest.mark.parametrize("make_view", [
+    lambda: HoFVotingView(2026, NOMINEES),
+    lambda: HMABallotView(2026, 5, "soty", "Song of the Year", NOMINEES),
+    lambda: HMACategorySelectView(2026, 5),
+], ids=["hall of fame", "hma ballot", "hma categories"])
+async def test_ballots_never_expire_so_a_slow_voter_can_still_submit(make_view):
+    # An expired view makes Discord show "This interaction failed" and the vote is lost
+    assert make_view().timeout is None

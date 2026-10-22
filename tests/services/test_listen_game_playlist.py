@@ -10,7 +10,7 @@ from db.listen_game import Round, RoundStatus
 from services.listen_game_playlist import (
     SUBMISSION_LOCK, PlaylistOutcome, get_host_name, put_song_in_round_playlist
 )
-from services.youtube import QuotaExceededError
+from services.youtube import QuotaExceededError, YouTubeUnavailableError
 
 
 @pytest.fixture(name="youtube")
@@ -120,6 +120,15 @@ class TestPutSongInRoundPlaylist:
 
         assert outcome == (PlaylistOutcome.QUOTA_EXCEEDED, "PLold")
         youtube.add.assert_not_called()
+
+    @pytest.mark.parametrize("step", ["create", "add", "remove"])
+    def test_youtube_being_unreachable_at_any_step_is_reported(self, youtube, step):
+        getattr(youtube, step).side_effect = YouTubeUnavailableError("network down")
+        playlist = None if step == "create" else "PLold"
+
+        outcome = put_song_in_round_playlist("Jo", _round(playlist), "new", previous_video_id="old")
+
+        assert outcome == (PlaylistOutcome.YOUTUBE_UNAVAILABLE, playlist)
 
 
 class TestGetHostName:

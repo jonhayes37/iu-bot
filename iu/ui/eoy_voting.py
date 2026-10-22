@@ -10,6 +10,10 @@ from db.hmas import (
 
 logger = logging.getLogger('iu-bot')
 
+# The ballots never time out. A ballot that expired while someone was deciding would make their Submit
+# click show "This interaction failed" and lose the vote. They are private (ephemeral) messages, and
+# each click on one is a new interaction, so they keep working for as long as the bot is running.
+BALLOT_TIMEOUT = None
 
 
 class HallOfFameVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_vote_hof_(?P<year>\d+)"):
@@ -78,7 +82,7 @@ class EOYVotingHub(discord.ui.View):
 class HoFVotingView(SafeView):
     """The interactive ranked voting ballot for the Hall of Fame."""
     def __init__(self, year: int, nominees: list[str], existing_vote: dict = None):
-        super().__init__(timeout=900) # 15 min timeout
+        super().__init__(timeout=BALLOT_TIMEOUT)
         self.year = year
 
         # Determine defaults if they are editing a previous vote
@@ -155,7 +159,7 @@ class HMABallotView(SafeView):
     """The interactive ranked ballot for a single HMA category."""
     def __init__(self, year: int, user_id: int, category_id: str, category_name: str,
                  nominees: list[str], existing_vote: dict = None):
-        super().__init__(timeout=900)
+        super().__init__(timeout=BALLOT_TIMEOUT)
         self.year = year
         self.user_id = user_id
         self.category_id = category_id
@@ -248,7 +252,7 @@ class HMACategoryDropdown(discord.ui.Select):
 class HMACategorySelectView(SafeView):
     """The dynamic router view that sorts ⏰ and ✅ categories and handles pagination."""
     def __init__(self, year: int, user_id: int):
-        super().__init__(timeout=900)
+        super().__init__(timeout=BALLOT_TIMEOUT)
         self.year = year
         self.user_id = user_id
 

@@ -148,6 +148,7 @@ class TestRandomAward:
             "Random Award: Watch Party Attendee"
         [reply] = interaction.sent
         assert not reply.ephemeral
+        assert reply.content == f"Congratulations <@{winner}>!"     # outside the embed, so the winner is pinged
         embed = reply.embed
         assert embed.title == "Random Award Winner!"
         assert [(f.name, f.value) for f in embed.fields] == [

@@ -14,6 +14,18 @@ from utils.validation import admin_only, validate_channel
 
 logger = logging.getLogger('iu-bot')
 
+# Each item is one embed field in /view-merch and /purchase-history. Discord allows 256 characters in a
+# field's name (which holds the price, name and code) and 1024 in its value (the description and stock
+# line), and one oversized item would make the whole booth fail to show, so items are kept well inside.
+MAX_ITEM_ID_LENGTH = 32
+MAX_NAME_LENGTH = 100
+MAX_DESCRIPTION_LENGTH = 500
+
+
+def _shorten(text: str, limit: int) -> str:
+    """Cuts down text saved before the limits existed, so the booth can still be shown."""
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
 @discord.app_commands.command(name='add-merch', description="[Admin] Add or update an item in the Merch Booth.")
 @discord.app_commands.describe(
     item_id="A short, unique code (e.g., CUSTEMOJI)",
@@ -25,9 +37,9 @@ logger = logging.getLogger('iu-bot')
 @admin_only
 async def add_merch(
     interaction: discord.Interaction,
-    item_id: str,
-    name: str,
-    description: str,
+    item_id: discord.app_commands.Range[str, 1, MAX_ITEM_ID_LENGTH],
+    name: discord.app_commands.Range[str, 1, MAX_NAME_LENGTH],
+    description: discord.app_commands.Range[str, 1, MAX_DESCRIPTION_LENGTH],
     price: int,
     max_per_user: typing.Optional[int]
 ):
@@ -159,8 +171,8 @@ async def purchase_history(interaction: discord.Interaction):
     for name, item_id, description, quantity in inventory:
         quantity_text = f"Owned: **{quantity}**"
         embed.add_field(
-            name=f"{name} (`{item_id}`)",
-            value=f"{description}\n*{quantity_text}*",
+            name=f"{_shorten(name, MAX_NAME_LENGTH)} (`{_shorten(item_id, MAX_ITEM_ID_LENGTH)}`)",
+            value=f"{_shorten(description, MAX_DESCRIPTION_LENGTH)}\n*{quantity_text}*",
             inline=False
         )
 
@@ -171,9 +183,9 @@ def _add_items_to_embed(embed, items):
     available_items = []
     sold_out_items = []
 
-    for item in items:
-        # Unpack the tuple
-        item_id, name, description, price, max_per_user, quantity_owned = item
+    for item_id, name, description, price, max_per_user, quantity_owned in items:
+        item = (_shorten(item_id, MAX_ITEM_ID_LENGTH), _shorten(name, MAX_NAME_LENGTH),
+                _shorten(description, MAX_DESCRIPTION_LENGTH), price, max_per_user, quantity_owned)
 
         # Determine if it's sold out for this specific user
         if max_per_user is not None and quantity_owned >= max_per_user:

@@ -6,7 +6,10 @@ from unittest import mock
 import discord
 import pytest
 
-from commands.lists import _process_export_data, close_list_event, create_list_event, export_lists
+from commands.lists import (
+    MAX_EVENT_NAME_LENGTH, MAX_PLACEHOLDER_LENGTH, _process_export_data, close_list_event, create_list_event,
+    export_lists
+)
 from config import Database
 from db.lists import close_event, create_new_event, get_event_details, save_submission, set_event_message_id
 from ui.lists import SubmitListButton
@@ -67,6 +70,14 @@ class TestCreateListEvent:
 
         admin.response.defer.assert_awaited_once_with(ephemeral=True)
         admin.delete_original_response.assert_awaited_once()
+
+    def test_the_name_and_placeholder_are_limited_so_the_form_always_opens(self):
+        options = {p.name: p for p in create_list_event.parameters}
+
+        assert options["event_name"].max_value == MAX_EVENT_NAME_LENGTH
+        # Discord refuses to open a form with a longer placeholder, so every Submit click would fail
+        assert options["placeholder"].max_value == MAX_PLACEHOLDER_LENGTH == 100
+        assert len(options["placeholder"].default) <= MAX_PLACEHOLDER_LENGTH
 
     async def test_the_expected_count_defaults_to_no_fixed_size(self, admin):
         await create_list_event.callback(admin, "mid_2026", "Mid-year List")

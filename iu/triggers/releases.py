@@ -10,8 +10,8 @@ import discord
 from config import EMOJI_IU
 from db.releases import AddResult, add_new_release, get_playlist_id_for_year, save_new_playlist, mark_release_processed
 from services.youtube import (
-    QuotaExceededError, add_video_to_playlist, create_releases_playlist, extract_video_id, get_video_snippets,
-    parse_publish_date
+    QuotaExceededError, YouTubeUnavailableError, add_video_to_playlist, create_releases_playlist, extract_video_id,
+    get_video_snippets, parse_publish_date
 )
 from utils.end_of_year import award_year_for
 
@@ -52,8 +52,9 @@ async def store_new_releases(messages: list[discord.Message]):
         logger.warning("YouTube quota used up; skipping %d release links. Run /backfill-new-releases for them "
                        "after it resets.", len(links))
         return
-    if snippets is None:
-        logger.warning("No YouTube client available; skipping %d release links.", len(links))
+    except YouTubeUnavailableError:
+        logger.warning("YouTube can't be reached; skipping %d release links. Run /backfill-new-releases for them "
+                       "once it can.", len(links))
         return
 
     reacted_messages = {}

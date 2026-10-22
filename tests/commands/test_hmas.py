@@ -42,6 +42,18 @@ class TestNomination:
 class TestNominationExport:
     """/hma-nomination-export attaches every nomination for a year."""
 
+    async def test_it_answers_privately_before_uploading_the_file(self, admin_interaction):
+        # The upload can take longer than the 3 seconds Discord allows for a first response
+        add_nominations(11, ["soty"], "IVE - HEYA")
+        order = []
+        admin_interaction.response.defer.side_effect = lambda *a, **k: order.append(("defer", k))
+        admin_interaction.followup.send.side_effect = lambda *a, **k: order.append(("upload", {}))
+
+        await hma_nomination_export.callback(admin_interaction)
+
+        assert order == [("defer", {"ephemeral": True}), ("upload", {})]
+        admin_interaction.response.send_message.assert_not_awaited()
+
     async def test_nothing_nominated_yet(self, admin_interaction):
         await hma_nomination_export.callback(admin_interaction)
 

@@ -6,7 +6,9 @@ import logging
 import threading
 from typing import Any
 from datetime import datetime
+from google.auth.exceptions import GoogleAuthError
 from google.oauth2.credentials import Credentials
+from httplib2 import HttpLib2Error
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -28,9 +30,42 @@ class QuotaExceededError(Exception):
         super().__init__(ex_str)
 
 
+class YouTubeUnavailableError(Exception):
+    """
+    The bot can't talk to YouTube at all: token.json is missing or no longer valid (it needs renewing,
+    see docs/youtube.md), the network is down, or YouTube itself is failing. Raised instead of a
+    "nothing found" result, so it isn't mistaken for a private video or an empty playlist.
+    """
+
+
+# Failures that say nothing about the request itself: the login or the connection is broken
+_CONNECTION_ERRORS = (GoogleAuthError, HttpLib2Error, OSError)
+
+
 def _error_reason(ex: HttpError) -> str:
     """Why the YouTube API refused a request, e.g. "quotaExceeded" or "videoNotFound"."""
     return ex.error_details[0].get('reason') if ex.error_details else "Unknown"
+
+
+def _execute(request: Any, doing: str) -> dict:
+    """
+    Sends one API request. Raises QuotaExceededError when the daily quota is used up and
+    YouTubeUnavailableError when YouTube can't be reached or won't accept the bot's login; any other
+    refusal (a private video, a missing playlist) is raised as the HttpError for the caller to handle.
+    """
+    try:
+        return request.execute()
+    except HttpError as ex:
+        if _error_reason(ex) == "quotaExceeded":
+            logger.warning("YouTube API quota exceeded while %s!", doing)
+            raise QuotaExceededError(ex) from ex
+        if ex.resp.status == 401 or ex.resp.status >= 500:
+            logger.error("YouTube is unavailable (HTTP %s) while %s: %s", ex.resp.status, doing, ex)
+            raise YouTubeUnavailableError(ex) from ex
+        raise
+    except _CONNECTION_ERRORS as ex:
+        logger.error("Could not reach YouTube while %s: %s", doing, ex)
+        raise YouTubeUnavailableError(ex) from ex
 
 
 class _YouTubeServiceCache:
@@ -52,9 +87,13 @@ class _YouTubeServiceCache:
         token_path = youtube_token_path()
         if not token_path or not os.path.exists(token_path):
             logger.error("token.json missing at %s! Cannot authenticate.", token_path)
-            return None
+            raise YouTubeUnavailableError(f"token.json missing at {token_path}")
 
-        creds = Credentials.from_authorized_user_file(token_path, ['https://www.googleapis.com/auth/youtube'])
+        try:
+            creds = Credentials.from_authorized_user_file(token_path, ['https://www.googleapis.com/auth/youtube'])
+        except ValueError as ex:  # not a usable token file (e.g. no refresh token)
+            logger.error("token.json at %s can't be used: %s", token_path, ex)
+            raise YouTubeUnavailableError(f"token.json at {token_path} can't be used: {ex}") from ex
         service = build('youtube', 'v3', credentials=creds)
         self._local.service = service
         return service
@@ -62,15 +101,18 @@ class _YouTubeServiceCache:
 _yt_service_cache = _YouTubeServiceCache()
 
 def get_yt_service() -> Any:
-    """Returns this thread's YouTube API client, building it on first use."""
+    """
+    Returns this thread's YouTube API client, building it on first use. Raises
+    YouTubeUnavailableError if there is no usable token.json.
+    """
     return _yt_service_cache.get()
 
 def create_playlist(title: str, description: str = "") -> str | None:
-    """Creates an unlisted YouTube playlist with a custom title and returns its ID."""
+    """
+    Creates an unlisted YouTube playlist with a custom title and returns its ID, or None if YouTube
+    refused. Raises QuotaExceededError or YouTubeUnavailableError (see _execute).
+    """
     youtube = get_yt_service()
-    if not youtube:
-        return None
-
     body = {
         "snippet": {"title": title, "description": description},
         "status": {"privacyStatus": "unlisted"}
@@ -78,14 +120,10 @@ def create_playlist(title: str, description: str = "") -> str | None:
 
     try:
         req = youtube.playlists().insert(part="snippet,status", body=body) # pylint: disable=no-member
-        response = req.execute()
+        response = _execute(req, "creating a playlist")
         logger.info("Created playlist '%s' with ID %s", title, response.get("id"))
         return response.get("id")
     except HttpError as ex:
-        error_reason = _error_reason(ex)
-        if error_reason == "quotaExceeded":
-            logger.warning("YouTube API Quota exceeded during playlist creation!")
-            raise QuotaExceededError(ex) from ex
         logger.error("Failed to create custom YouTube playlist: %s", ex)
         return None
 
@@ -105,32 +143,26 @@ def create_listen_game_playlist(host_name: str) -> str | None:
 # videos.list accepts up to 50 ids per request and costs 1 quota unit per request either way
 VIDEOS_PER_REQUEST = 50
 
-def get_video_snippets(video_ids: list[str]) -> dict[str, dict] | None:
+def get_video_snippets(video_ids: list[str]) -> dict[str, dict]:
     """
     Looks up the title, publish date and other details of many videos at once, 50 per request.
 
     Returns {video_id: snippet}. Videos that are private or deleted are missing from the result, and
-    so are the videos of a request that failed (it is logged). Returns None if there is no YouTube
-    client, e.g. because token.json is missing. Raises QuotaExceededError when the daily quota is used
-    up, so that isn't mistaken for the videos being private or deleted.
+    so are the videos of a request YouTube refused (it is logged). Raises QuotaExceededError when the
+    daily quota is used up and YouTubeUnavailableError when YouTube can't be reached, so neither is
+    mistaken for the videos being private or deleted.
     """
     youtube = get_yt_service()
-    if not youtube:
-        return None
-
     unique_ids = list(dict.fromkeys(video_ids))
     snippets = {}
     for start in range(0, len(unique_ids), VIDEOS_PER_REQUEST):
         batch = unique_ids[start:start + VIDEOS_PER_REQUEST]
         try:
             # Cost: 1 Quota Unit for the whole batch
-            response = youtube.videos().list(part="snippet", id=",".join(batch)).execute() # pylint: disable=no-member
-        except HttpError as ex:
-            if _error_reason(ex) == "quotaExceeded":
-                logger.warning("YouTube API Quota exceeded while looking up videos!")
-                raise QuotaExceededError(ex) from ex
-            logger.error("YouTube API error fetching details for %d videos: %s", len(batch), ex)
-            continue
+            request = youtube.videos().list(part="snippet", id=",".join(batch)) # pylint: disable=no-member
+            response = _execute(request, "looking up videos")
+        except (QuotaExceededError, YouTubeUnavailableError):
+            raise
         except Exception as ex:
             logger.error("YouTube API error fetching details for %d videos: %s", len(batch), ex)
             continue
@@ -147,17 +179,18 @@ def parse_publish_date(snippet: dict) -> datetime:
 def get_video_title(video_id: str) -> str | None:
     """
     Fetches the title of a YouTube video, or None if it is private, deleted or can't be read.
-    Raises QuotaExceededError when the daily quota is used up.
+    Raises QuotaExceededError when the daily quota is used up and YouTubeUnavailableError when
+    YouTube can't be reached.
     """
-    snippet = (get_video_snippets([video_id]) or {}).get(video_id)
+    snippet = get_video_snippets([video_id]).get(video_id)
     return snippet["title"] if snippet else None
 
 def remove_video_from_playlist(playlist_id: str, video_id: str) -> bool:
-    """Finds and removes a specific video from a playlist."""
+    """
+    Finds and removes a specific video from a playlist. Returns False if YouTube refused (including a
+    used-up quota); raises YouTubeUnavailableError when YouTube can't be reached.
+    """
     youtube = get_yt_service()
-    if not youtube:
-        return False
-
     try:
         # Ask YouTube for the playlistItemId of this specific video
         request = youtube.playlistItems().list( # pylint: disable=no-member
@@ -165,7 +198,7 @@ def remove_video_from_playlist(playlist_id: str, video_id: str) -> bool:
             playlistId=playlist_id,
             videoId=video_id
         )
-        response = request.execute()
+        response = _execute(request, "finding a video in a playlist")
         items = response.get("items", [])
 
         if not items:
@@ -174,9 +207,9 @@ def remove_video_from_playlist(playlist_id: str, video_id: str) -> bool:
         playlist_item_id = items[0]["id"]
 
         # Delete the item using that ID
-        youtube.playlistItems().delete(id=playlist_item_id).execute() # pylint: disable=no-member
+        _execute(youtube.playlistItems().delete(id=playlist_item_id), "removing a video") # pylint: disable=no-member
         return True
-    except HttpError as ex:
+    except (HttpError, QuotaExceededError) as ex:
         logger.error("Failed to remove video %s from playlist: %s", video_id, ex)
         return False
 
@@ -193,12 +226,10 @@ def get_playlist_video_ids(playlist_id: str) -> set[str] | None:
     Fetches all video IDs currently present in a YouTube playlist.
 
     Returns None if the playlist couldn't be read, so a failure can't be mistaken for an empty
-    playlist. Raises QuotaExceededError when the daily API quota is used up.
+    playlist. Raises QuotaExceededError when the daily API quota is used up and
+    YouTubeUnavailableError when YouTube can't be reached.
     """
     youtube = get_yt_service()
-    if not youtube:
-        return None
-
     video_ids = set()
     try:
         # maxResults=50 is the maximum allowed per page by the YouTube API
@@ -209,7 +240,7 @@ def get_playlist_video_ids(playlist_id: str) -> set[str] | None:
         )
 
         while request is not None:
-            response = request.execute()
+            response = _execute(request, f"reading playlist {playlist_id}")
             for item in response.get("items", []):
                 video_ids.add(item["snippet"]["resourceId"]["videoId"])
 
@@ -218,19 +249,15 @@ def get_playlist_video_ids(playlist_id: str) -> set[str] | None:
 
         return video_ids
     except HttpError as ex:
-        error_reason = _error_reason(ex)
-        if error_reason == "quotaExceeded":
-            logger.warning("YouTube API Quota exceeded while reading playlist %s!", playlist_id)
-            raise QuotaExceededError(ex) from ex
         logger.error("Failed to fetch playlist items for %s: %s", playlist_id, ex)
         return None
 
 def add_video_to_playlist(playlist_id: str, video_id: str) -> bool:
-    """Adds a video to the specified playlist. Returns True if successful."""
+    """
+    Adds a video to the specified playlist. Returns True if successful, False if YouTube refused.
+    Raises QuotaExceededError or YouTubeUnavailableError (see _execute).
+    """
     youtube = get_yt_service()
-    if not youtube:
-        return False
-
     body = {
         "snippet": {
             "playlistId": playlist_id,
@@ -240,14 +267,10 @@ def add_video_to_playlist(playlist_id: str, video_id: str) -> bool:
 
     try:
         req = youtube.playlistItems().insert(part="snippet", body=body) # pylint: disable=no-member
-        req.execute()
+        _execute(req, "adding a video")
         return True
     except HttpError as ex:
-        error_reason = _error_reason(ex)
-        if error_reason == "quotaExceeded":
-            logger.warning("YouTube API Quota exceeded during video addition!")
-            raise QuotaExceededError(ex) from ex
-        if error_reason == "videoNotFound":
+        if _error_reason(ex) == "videoNotFound":
             logger.warning("Video %s cannot be added (it may be private or deleted).", video_id)
         else:
             logger.error("Failed to add video %s: %s", video_id, ex)

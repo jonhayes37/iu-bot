@@ -25,7 +25,7 @@ from services.listen_game_playlist import (
 )
 from services.youtube import (
     get_playlist_video_ids, add_video_to_playlist, remove_video_from_playlist,
-    extract_video_id, get_video_title, QuotaExceededError
+    extract_video_id, get_video_title, QuotaExceededError, YouTubeUnavailableError
 )
 from ui.listen_game import JoinGameView
 from utils.strings import generate_leaderboard_text
@@ -38,6 +38,13 @@ ROUND_ALREADY_MOVED_ON = "⚠️ The round has already moved on, so nothing was 
 # The reason is DMed to the player inside a message that must stay under Discord's 2000 characters
 MAX_REASON_LENGTH = 1000
 Reason = app_commands.Range[str, 1, MAX_REASON_LENGTH]
+YOUTUBE_UNAVAILABLE = (
+    "❌ The bot can't reach YouTube right now, so nothing was changed. Try again in a few minutes. If it keeps "
+    "happening, the bot's YouTube login may need renewing (the bot's logs say why)."
+)
+NOT_REMOVED_FROM_PLAYLIST = (
+    "\n⚠️ The song couldn't be taken out of the round's YouTube playlist, so remove it there by hand."
+)
 LEDGER_SENT = (
     "\n\n📋 Everyone remaining has now submitted, so the submission ledger has been DMed to the GM running "
     "this round. Run `/listen-game-gm-approve-playlist` once it looks right."
@@ -179,6 +186,9 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
         await interaction.followup.send(
             "❌ **YouTube API Quota Exceeded.** Nothing was changed. Please run this command again tomorrow.")
         return
+    except YouTubeUnavailableError:
+        await interaction.followup.send(YOUTUBE_UNAVAILABLE)
+        return
 
     if existing_yt_vids is None:
         # Don't guess: treating an unreadable playlist as empty would re-add every song
@@ -192,7 +202,7 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
         await interaction.followup.send("✅ The YouTube playlist is completely up to date with the database!")
         return
 
-    added_count, failed_count, quota_hit = await asyncio.to_thread(
+    added_count, failed_count, stopped_by = await asyncio.to_thread(
         _sync_missing_videos, playlist_id, missing_vids
     )
 
@@ -200,7 +210,13 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
     if failed_count > 0:
         msg += f"\n⚠️ Failed to add {failed_count} videos (they may be private or deleted)."
 
-    if quota_hit:
+    if isinstance(stopped_by, YouTubeUnavailableError):
+        msg += ("\n\n❌ **Sync halted: the bot lost its connection to YouTube.**\n"
+                "Run this command again in a few minutes to add the rest.")
+        await interaction.followup.send(msg)
+        return
+
+    if stopped_by:
         msg += "\n\n❌ **Sync halted: YouTube API Quota Exceeded.**\nPlease run this command again tomorrow."
         await interaction.followup.send(msg)
 
@@ -215,24 +231,35 @@ async def listen_game_gm_sync_playlist(interaction: discord.Interaction):
 
     await interaction.followup.send(msg)
 
-def _sync_missing_videos(playlist_id: str, missing_vids: list[Submission]) -> tuple[int, int, bool]:
-    """Synchronous worker: adds each missing video to the YouTube playlist."""
+def _sync_missing_videos(
+    playlist_id: str, missing_vids: list[Submission]
+) -> tuple[int, int, QuotaExceededError | YouTubeUnavailableError | None]:
+    """
+    Synchronous worker: adds each missing video to the YouTube playlist. Returns how many were added
+    and how many YouTube refused, and the error that stopped it early (used-up quota or no connection).
+    """
     added_count = 0
     failed_count = 0
-    quota_hit = False
 
     for sub in missing_vids:
         try:
             success = add_video_to_playlist(playlist_id, sub.video_id)
-            if success:
-                added_count += 1
-            else:
-                failed_count += 1
-        except QuotaExceededError:
-            quota_hit = True
-            break
+        except (QuotaExceededError, YouTubeUnavailableError) as ex:
+            return added_count, failed_count, ex
+        if success:
+            added_count += 1
+        else:
+            failed_count += 1
 
-    return added_count, failed_count, quota_hit
+    return added_count, failed_count, None
+
+
+async def _remove_from_playlist(playlist_id: str, video_id: str) -> bool:
+    """Takes a song out of a round's playlist. False (already logged) if YouTube refused or can't be reached."""
+    try:
+        return await asyncio.to_thread(remove_video_from_playlist, playlist_id, video_id)
+    except YouTubeUnavailableError:
+        return False
 
 @app_commands.command(name="listen-game-gm-reject-song", description="[GM] Reject a player's submission.")
 @app_commands.describe(
@@ -262,8 +289,9 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
         delete_submission_db(ctx.round.round_id, player.id)
 
         # Delete from YouTube
+        yt_removed = True
         if ctx.round.playlist_id:
-            yt_removed = await asyncio.to_thread(remove_video_from_playlist, ctx.round.playlist_id, submission.video_id)
+            yt_removed = await _remove_from_playlist(ctx.round.playlist_id, submission.video_id)
             if not yt_removed:
                 logger.warning("Failed to remove video %s from YT playlist during GM rejection.", submission.video_id)
 
@@ -282,7 +310,8 @@ async def listen_game_gm_reject_song(interaction: discord.Interaction, player: d
         "Player has DMs disabled. You will need to ping them in the channel manually."
 
     # Acknowledge GM
-    await interaction.followup.send(f"✅ **Success!** Removed `{submission.raw_title}`. {dm_status}")
+    await interaction.followup.send(f"✅ **Success!** Removed `{submission.raw_title}`. {dm_status}"
+                                    + ("" if yt_removed else NOT_REMOVED_FROM_PLAYLIST))
 
 @app_commands.command(name="listen-game-gm-skip-turn", description="[GM] Forcefully skip the current listener's turn.")
 @app_commands.describe(
@@ -388,11 +417,12 @@ async def listen_game_gm_remove_player(interaction: discord.Interaction, player:
     # While submissions are open, their song must go too: it would otherwise stay in the playlist and
     # count towards the round being complete
     submissions_open = active_round is not None and active_round.status == RoundStatus.SUBMITTING
+    yt_removed = True
     if submissions_open:
         async with SUBMISSION_LOCK:
             submission = get_user_submission_db(active_round.round_id, player.id)
             if submission and delete_submission_db(active_round.round_id, player.id) and active_round.playlist_id:
-                await asyncio.to_thread(remove_video_from_playlist, active_round.playlist_id, submission.video_id)
+                yt_removed = await _remove_from_playlist(active_round.playlist_id, submission.video_id)
 
     # Notify the player
     dm_sent = await send_dm(
@@ -412,6 +442,8 @@ async def listen_game_gm_remove_player(interaction: discord.Interaction, player:
 
     # Acknowledge the GM and announce in channel
     reply = f"✅ **Success!** {player.display_name} has been removed from the game. {dm_status}"
+    if not yt_removed:
+        reply += NOT_REMOVED_FROM_PLAYLIST
     await interaction.followup.send(reply + (LEDGER_SENT if ledger_sent else ""))
     await interaction.channel.send(f"The Game Master has removed {player.display_name} from the game.")
 
@@ -523,6 +555,9 @@ async def _process_forced_submission(interaction: discord.Interaction, player: d
     except QuotaExceededError:
         await interaction.followup.send(YOUTUBE_QUOTA_USED_UP)
         return
+    except YouTubeUnavailableError:
+        await interaction.followup.send(YOUTUBE_UNAVAILABLE)
+        return
     if not video_title:
         await interaction.followup.send("❌ Could not fetch that video. It may be private or deleted.")
         return
@@ -542,6 +577,10 @@ async def _process_forced_submission(interaction: discord.Interaction, player: d
 
     if outcome is PlaylistOutcome.ADD_FAILED:
         await interaction.followup.send("❌ Failed to add video to the playlist. It may be blocked or private.")
+        return
+
+    if outcome is PlaylistOutcome.YOUTUBE_UNAVAILABLE:
+        await interaction.followup.send(YOUTUBE_UNAVAILABLE)
         return
 
     upsert_submission_db(active_round.round_id, player.id, video_id, video_title)

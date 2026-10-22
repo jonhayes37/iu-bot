@@ -118,7 +118,9 @@ increase form linked from that page.
 | --- | --- | --- |
 | `token.json missing at ...` | The file isn't at the `TOKEN_DIR` path | Put `token.json` in the mapped data folder and restart |
 | `invalid_grant` or other authentication errors | The refresh token is dead | Renew it, above |
-| `YouTube API Quota exceeded` | The day's quota is used up | Wait for midnight Pacific; sync afterwards |
+| `Could not reach YouTube while ...` | The login failed (the error after the colon says why, e.g. `invalid_grant`) or the network is down. Players are told the bot can't reach YouTube | Renew the token if it is `invalid_grant`; otherwise check the server's network |
+| `YouTube is unavailable (HTTP 5xx) while ...` | YouTube itself is failing (or HTTP 401: it refused the login) | Wait and retry; renew the token on a 401 that keeps happening |
+| `YouTube API quota exceeded` | The day's quota is used up | Wait for midnight Pacific; sync afterwards |
 | `The request cannot be completed because you have exceeded your quota` (HTTP 403) | Same as above | Same as above |
 | Songs saved but not on the playlist | A quota hit or a private or deleted video | `/listen-game-gm-sync-playlist` |
 

@@ -23,13 +23,14 @@ DATABASE_ERROR = (
 
 
 async def report_interaction_error(interaction: discord.Interaction, error: Exception,
-                                   keep_text: dict[str, str] | None = None):
+                                   keep_text: dict[str, str] | None = None, next_step: str | None = None):
     """
     Logs an error (with its traceback) and tells the user something went wrong. This is the one
     place database failures are reported; db/ functions raise instead of swallowing them.
 
     keep_text is for forms: text the user typed ({file name: text}), attached to the reply so a
-    failure never costs them what they wrote.
+    failure never costs them what they wrote. next_step tells them how to carry on (e.g. which
+    command to run again), for flows that can be resumed.
     """
     original = getattr(error, "original", error)  # discord.py wraps command errors in CommandInvokeError
     if isinstance(original, InvalidStateError):
@@ -45,6 +46,8 @@ async def report_interaction_error(interaction: discord.Interaction, error: Exce
     files = [text_file(content, name) for name, content in (keep_text or {}).items() if content.strip()]
     if files:
         text += "\nWhat you typed is attached so you don't lose it."
+    if next_step:
+        text += f"\n{next_step}"
 
     try:
         if interaction.response.is_done():

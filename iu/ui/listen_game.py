@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import discord
 from discord.ui import Select, TextInput, Button
-from ui.base import SafeModal, SafeView
+from ui.base import SafeModal, SafeView, report_interaction_error
 from config import Role
 from db.listen_game import (
     Game, GameStatus, RankingPick, RoundResult, SaveResult, Submission, clear_ranking_picks_db,
@@ -189,6 +189,14 @@ class SetThemeModal(SafeModal, title='Set Listen Game Ruleset'):
             # Save it to the DB
             update_round_status_message_db(self.round_id, tracker_msg.id)
 
+    # pylint: disable=arguments-differ
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        # Hand the ruleset back so a failure never costs the listener what they wrote. Running the
+        # command again opens the form with whatever was saved, and posts it if it wasn't posted yet.
+        await report_interaction_error(
+            interaction, error, keep_text={"ruleset.txt": self.theme_text.value},
+            next_step="Run `/listen-game-post-ruleset` again to try once more.")
+
 
 @dataclass
 class RankedSong:
@@ -219,16 +227,26 @@ class CommentaryModal(SafeModal):
     async def on_submit(self, interaction: discord.Interaction):
         await self.view_instance.rank_song(interaction, self.selected_song, self.commentary.value)
 
+    # pylint: disable=arguments-differ
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        # Picks are saved as they are made, so the ranking command picks up from the last saved one.
+        # The message on screen may no longer match what was saved, so it is reopened rather than reused.
+        await report_interaction_error(
+            interaction, error, keep_text={"commentary.txt": self.commentary.value},
+            next_step="Run `/listen-game-submit-ranking` again to carry on: the songs you've already ranked are saved.")
+
 
 class RankingSelect(Select):
     """UI for the selector to choose songs to rank"""
 
     def __init__(self, unranked_submissions: list[Submission], current_rank: int):
+        # Each player has one song, but a GM's force-submit can give two players the same video, and
+        # Discord rejects a menu whose options share a value, so the options are the players
         options = []
         for sub in unranked_submissions:
             options.append(discord.SelectOption(
                 label=sub.raw_title[:100],
-                value=sub.video_id
+                value=str(sub.user_id)
             ))
 
         super().__init__(
@@ -239,8 +257,8 @@ class RankingSelect(Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        selected_video_id = self.values[0]
-        selected_song = next(s for s in self.view.unranked_submissions if s.video_id == selected_video_id)
+        selected_user_id = int(self.values[0])
+        selected_song = next(s for s in self.view.unranked_submissions if s.user_id == selected_user_id)
 
         # Launch the modal to get their commentary
         modal = CommentaryModal(self.view, selected_song, self.view.current_rank)
@@ -378,7 +396,7 @@ class ListenGameRankingView(SafeView):
         save_ranking_pick_db(self.round_id, song.user_id, self.current_rank, commentary)
 
         self.ranked_submissions.append(RankedSong(song, self.current_rank, commentary))
-        self.unranked_submissions = [s for s in self.unranked_submissions if s.video_id != song.video_id]
+        self.unranked_submissions = [s for s in self.unranked_submissions if s.user_id != song.user_id]
         self.current_rank -= 1
         await self.update_ui(interaction)
 

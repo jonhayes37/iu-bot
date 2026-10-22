@@ -11,6 +11,10 @@ from utils.validation import admin_only
 # Discord's limits for a poll: 55 characters per answer, and a poll can run for at most 32 days
 MAX_ENTRANT_NAME_LENGTH = 55
 MAX_DAYS_PER_ROUND = 32
+# The title and description are posted together in the start announcement, which must fit in Discord's
+# 2000 characters; it is sent after the tournament is saved, so a longer one would leave it without polls
+MAX_TITLE_LENGTH = 100
+MAX_DESCRIPTION_LENGTH = 1500
 
 @discord.app_commands.command(name="new-tournament", description="[Admin] Creates a new bracket tournament.")
 @discord.app_commands.describe(
@@ -20,7 +24,9 @@ MAX_DAYS_PER_ROUND = 32
     days_per_round="How long each voting round lasts (default 2)"
 )
 @admin_only
-async def new_tournament(interaction: discord.Interaction, title: str, description: str,
+async def new_tournament(interaction: discord.Interaction,
+                         title: discord.app_commands.Range[str, 1, MAX_TITLE_LENGTH],
+                         description: discord.app_commands.Range[str, 1, MAX_DESCRIPTION_LENGTH],
                          entrants: str, days_per_round: int = 2):
     await interaction.response.defer(ephemeral=True)
 

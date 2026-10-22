@@ -12,8 +12,8 @@ import pytest
 from commands.listen_game_gm import (
     listen_game_create, listen_game_gm_approve_playlist, listen_game_gm_force_start_round,
     listen_game_gm_force_submit, listen_game_gm_reject_song, listen_game_gm_remove_player, LEDGER_SENT,
-    MAX_REASON_LENGTH, listen_game_gm_skip_turn, listen_game_gm_swap_players, listen_game_gm_sync_playlist,
-    listen_game_start
+    MAX_REASON_LENGTH, NOT_REMOVED_FROM_PLAYLIST, listen_game_gm_skip_turn, listen_game_gm_swap_players,
+    listen_game_gm_sync_playlist, listen_game_start
 )
 from config import Database
 from db.listen_game import (
@@ -21,6 +21,7 @@ from db.listen_game import (
     get_registered_players_db, get_round_db, get_user_submission_db, register_player_db,
     update_game_start_message_db, update_round_status_message_db, upsert_submission_db
 )
+from services.youtube import YouTubeUnavailableError
 from testsupport.listen_game import GM, SUB_GM, reveal_ready_round, start_game, submitting_round
 from ui.listen_game import JoinGameView
 
@@ -334,6 +335,22 @@ class TestRemovePlayer:
 
         assert get_user_submission_db(round_id, 103) is None
         youtube.assert_called_once_with("PLround", "vidC")
+        assert NOT_REMOVED_FROM_PLAYLIST not in _last_reply(interaction)
+
+    @pytest.mark.parametrize("youtube_result", [
+        {"return_value": False}, {"side_effect": YouTubeUnavailableError("network down")}])
+    async def test_a_song_left_in_the_playlist_is_flagged_but_the_player_is_still_removed(
+            self, listen_server, youtube, youtube_result):
+        game_id, round_id = submitting_round()
+        upsert_submission_db(round_id, 103, "vidC", "Song C")
+        youtube.configure_mock(**youtube_result)
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_remove_player.callback(interaction, listen_server.members[103], "gone")
+
+        assert 103 not in get_registered_players_db(game_id)
+        assert get_user_submission_db(round_id, 103) is None
+        assert _last_reply(interaction).endswith(NOT_REMOVED_FROM_PLAYLIST)
 
     async def test_removing_the_last_missing_player_sends_the_gm_the_ledger_to_review(self, listen_server):
         _, round_id = submitting_round()

@@ -9,7 +9,7 @@ import pytest
 from discord import app_commands
 
 import bot as bot_module
-from bot import IUBot, on_app_command_error
+from bot import COMMAND_OUT_OF_DATE, IUBot, on_app_command_error
 from commands.registry import all_commands
 from config import Channel, Database
 from db.bot import save_bot_status_db
@@ -63,6 +63,44 @@ class TestCommandErrors:
 
         assert (interaction.sent[0].content, interaction.sent[0].ephemeral) == (
             "❌ Only server administrators can use this command.", True)
+
+    async def test_a_member_who_has_left_is_named_instead_of_an_unexpected_error(self, interaction, make_member):
+        gone = make_member(user_id=42, name="Gone")
+        error = app_commands.TransformerError(gone, discord.AppCommandOptionType.user, mock.Mock())
+
+        await on_app_command_error(interaction, error)
+
+        [reply] = interaction.sent
+        assert (reply.content, reply.ephemeral) == (
+            f"❌ {gone.mention} isn't in the server any more, so this command can't be used on them.", True)
+
+    async def test_an_option_that_could_not_be_read_says_so(self, interaction):
+        error = app_commands.TransformerError("abc", discord.AppCommandOptionType.channel, mock.Mock())
+
+        await on_app_command_error(interaction, error)
+
+        assert interaction.sent[0].content == \
+            "❌ I couldn't understand one of the options you gave (`abc`). Check it and try again."
+
+    @pytest.mark.parametrize("error", [
+        app_commands.CommandNotFound("old-command", []),
+        app_commands.CommandSignatureMismatch(all_commands()[0]),
+    ], ids=["removed command", "changed command"])
+    async def test_a_command_list_out_of_step_with_discord_is_explained_and_logged(self, interaction, caplog, error):
+        with caplog.at_level(logging.WARNING, logger="iu-bot"):
+            await on_app_command_error(interaction, error)
+
+        [reply] = interaction.sent
+        assert (reply.content, reply.ephemeral) == (COMMAND_OUT_OF_DATE, True)
+        assert "Discord's command list doesn't match the bot's" in caplog.text
+
+    async def test_failing_to_explain_a_refusal_is_logged_not_raised(self, interaction, caplog):
+        interaction.response.send_message.side_effect = discord.NotFound(mock.Mock(status=404, reason="x"), "Unknown")
+
+        with caplog.at_level(logging.WARNING, logger="iu-bot"):
+            await on_app_command_error(interaction, app_commands.MissingPermissions(["administrator"]))
+
+        assert "Could not tell the user why a command was refused" in caplog.text
 
     async def test_anything_else_goes_to_the_shared_reporter(self, interaction):
         wrapped = app_commands.CommandInvokeError(mock.Mock(), sqlite3.OperationalError("locked"))

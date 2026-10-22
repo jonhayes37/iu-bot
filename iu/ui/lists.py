@@ -11,6 +11,9 @@ from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
 
+# Discord refuses to open a form whose placeholder is longer than this
+MAX_PLACEHOLDER_LENGTH = 100
+
 class DynamicListModal(SafeModal):
     """
     A dynamic modal for list submissions that adjusts its placeholder
@@ -29,7 +32,8 @@ class DynamicListModal(SafeModal):
         self.submission_text = discord.ui.TextInput(
             label='Your List',
             style=discord.TextStyle.paragraph,
-            placeholder=placeholder_format,
+            # Events made before /create-list-event limited it could have a longer one
+            placeholder=placeholder_format[:MAX_PLACEHOLDER_LENGTH],
             default=default_text,
             required=True,
             max_length=4000

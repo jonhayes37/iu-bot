@@ -52,6 +52,11 @@ class TestListModalSetup:
         assert modal.submission_text.default == "1. old // list"
         assert modal.submission_text.required is True
 
+    async def test_a_placeholder_saved_before_the_limit_is_cut_so_the_form_still_opens(self):
+        modal = DynamicListModal("old", "Old event", 3, "p" * 250)
+
+        assert modal.submission_text.placeholder == "p" * 100
+
 
 class TestListModalSubmit:
     """Submitting a list validates it, saves it and tells the admin."""

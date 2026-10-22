@@ -12,6 +12,11 @@ logger = logging.getLogger('iu-bot')
 
 # The event ID is part of the button's ID, which Discord limits to 100 characters
 EVENT_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]{1,64}')
+# The name heads the announcement (and the form, cut to Discord's 45 characters for a form title), and
+# Discord refuses to open a form whose placeholder is over 100 characters, so every Submit click would fail
+MAX_EVENT_NAME_LENGTH = 100
+MAX_PLACEHOLDER_LENGTH = 100
+DEFAULT_PLACEHOLDER = "1. Berry Good // Don't Believe\n2. IVE // All Night (https://youtu.be/xU8mQMLx0tk?t=27)\n..."
 
 @discord.app_commands.command(name='create-list-event', description="[Admin] Start a new list submission event.")
 @discord.app_commands.describe(
@@ -24,9 +29,9 @@ EVENT_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]{1,64}')
 async def create_list_event(
     interaction: discord.Interaction,
     event_id: str,
-    event_name: str,
+    event_name: discord.app_commands.Range[str, 1, MAX_EVENT_NAME_LENGTH],
     expected_count: int = 0,
-    placeholder: str = "1. Berry Good // Don't Believe\n2. IVE // All Night (https://youtu.be/xU8mQMLx0tk?t=27)\n..."
+    placeholder: discord.app_commands.Range[str, 1, MAX_PLACEHOLDER_LENGTH] = DEFAULT_PLACEHOLDER
 ):
     """Creates the event in the DB and posts a clean button."""
     await interaction.response.defer(ephemeral=True)

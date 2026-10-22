@@ -302,6 +302,21 @@ class TestSetThemeModal:
         assert interaction.sent[0].content.startswith("⚠️ The ruleset was saved, but the original message was deleted")
         assert interaction.sent[0].ephemeral
 
+    async def test_a_failure_hands_the_ruleset_back_and_says_how_to_try_again(self, interaction, execute, round_ids):
+        execute(Database.LISTEN_GAME, "DROP TABLE listen_rounds")
+        modal = self._modal(round_ids)
+        fill(modal.theme_text, "Songs about rain")
+
+        with pytest.raises(sqlite3.Error) as caught:
+            await modal.on_submit(interaction)
+        await modal.on_error(interaction, caught.value)
+
+        [reply] = interaction.sent
+        assert reply.content.startswith(DATABASE_ERROR)
+        assert reply.content.endswith("Run `/listen-game-post-ruleset` again to try once more.")
+        [attachment] = reply.kwargs["files"]
+        assert (attachment.filename, attachment.fp.read()) == ("ruleset.txt", b"Songs about rain")
+
     async def test_a_round_that_is_past_submissions_refuses_the_ruleset(self, interaction, make_guild, round_ids):
         interaction.guild = make_guild()
         set_round_theme_db(round_ids[1], "Old rules")
@@ -383,6 +398,22 @@ class TestCommentaryModal:
 
         view.rank_song.assert_awaited_once_with(interaction, song, "Loved the bridge")
 
+    async def test_a_failure_hands_the_commentary_back_and_says_the_ranking_carries_on(self, interaction):
+        view = mock.Mock(rank_song=mock.AsyncMock(side_effect=sqlite3.OperationalError("locked")))
+        modal = CommentaryModal(view, _submissions("Song")[0], 2)
+        fill(modal.commentary, "Loved the bridge")
+
+        with pytest.raises(sqlite3.Error) as caught:
+            await modal.on_submit(interaction)
+        await modal.on_error(interaction, caught.value)
+
+        [reply] = interaction.sent
+        assert reply.content.startswith(DATABASE_ERROR)
+        assert reply.content.endswith(
+            "Run `/listen-game-submit-ranking` again to carry on: the songs you've already ranked are saved.")
+        [attachment] = reply.kwargs["files"]
+        assert (attachment.filename, attachment.fp.read()) == ("commentary.txt", b"Loved the bridge")
+
 
 @pytest.fixture(name="ranking")
 def _ranking_round():
@@ -444,6 +475,17 @@ class TestRankingViewSetup:
         assert [type(c) for c in view.children] == [ConfirmRankingButton, StartOverButton]
         assert view.build_embed().description.startswith("✅ **All songs ranked!**")
 
+    async def test_two_players_with_the_same_video_can_both_be_ranked(self, interaction, ranking):
+        # A GM's force-submit can give two players the same video; Discord rejects a menu whose options
+        # share a value, so the options are the players
+        songs = [Submission(ranking[1], 102, "samevideo01", "Same Song"),
+                 Submission(ranking[1], 103, "samevideo01", "Same Song")]
+        view = _view(ranking, songs=songs)
+
+        assert [o.value for o in view.children[0].options] == ["102", "103"]
+        await view.rank_song(interaction, songs[1], "second copy")
+        assert [s.user_id for s in view.unranked_submissions] == [102]
+
     async def test_the_embed_shows_the_picks_so_far(self, ranking):
         view = _view(ranking, saved=[RankingPick(103, 2, "worst")])
 
@@ -473,7 +515,7 @@ class TestRankingProgress:
     async def test_the_select_menu_opens_the_commentary_form_for_the_chosen_song(self, interaction, ranking):
         view = _view(ranking)
         select = view.children[0]
-        setattr(select, "_values", ["vid103"])
+        setattr(select, "_values", ["103"])
 
         await select.callback(interaction)
 

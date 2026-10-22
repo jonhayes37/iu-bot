@@ -95,6 +95,13 @@ class TestReportInteractionError:
         assert reply.kwargs["files"] == []
         assert reply.content == GENERIC_ERROR
 
+    async def test_a_next_step_tells_them_how_to_carry_on_after_the_attachment_note(self, interaction):
+        await report_interaction_error(interaction, sqlite3.Error("x"), keep_text={"a.txt": "one"},
+                                       next_step="Run `/thing` again.")
+
+        assert interaction.sent[0].content == (
+            DATABASE_ERROR + "\nWhat you typed is attached so you don't lose it.\nRun `/thing` again.")
+
     async def test_a_failure_to_reply_is_logged_not_raised(self, interaction, caplog):
         interaction.response.send_message.side_effect = discord.HTTPException(
             mock.Mock(status=500, reason="Server Error"), "boom")

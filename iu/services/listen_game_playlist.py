@@ -8,7 +8,8 @@ import discord
 
 from db.listen_game import Round, update_round_playlist_db
 from services.youtube import (
-    QuotaExceededError, add_video_to_playlist, create_listen_game_playlist, remove_video_from_playlist
+    QuotaExceededError, YouTubeUnavailableError, add_video_to_playlist, create_listen_game_playlist,
+    remove_video_from_playlist
 )
 
 logger = logging.getLogger('iu-bot')
@@ -25,6 +26,7 @@ class PlaylistOutcome(enum.Enum):
     QUOTA_EXCEEDED = "quota_exceeded"
     CREATE_FAILED = "create_failed"
     ADD_FAILED = "add_failed"
+    YOUTUBE_UNAVAILABLE = "youtube_unavailable"
 
 
 def get_host_name(guild: discord.Guild, host_id: int) -> str:
@@ -61,5 +63,7 @@ def put_song_in_round_playlist(
 
     except QuotaExceededError:
         return PlaylistOutcome.QUOTA_EXCEEDED, playlist_id
+    except YouTubeUnavailableError:
+        return PlaylistOutcome.YOUTUBE_UNAVAILABLE, playlist_id
 
     return PlaylistOutcome.ADDED, playlist_id

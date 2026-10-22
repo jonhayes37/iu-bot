@@ -10,7 +10,7 @@ import pytest
 
 from commands.listen_game_gm import (
     _sync_missing_videos, listen_game_gm_force_submit, listen_game_gm_reject_song, LEDGER_SENT,
-    listen_game_gm_sync_playlist
+    NOT_REMOVED_FROM_PLAYLIST, YOUTUBE_UNAVAILABLE, listen_game_gm_sync_playlist
 )
 from config import Database
 from db.listen_game import (
@@ -19,7 +19,7 @@ from db.listen_game import (
 )
 from services.listen_game import YOUTUBE_QUOTA_USED_UP
 from services.listen_game_playlist import PlaylistOutcome
-from services.youtube import QuotaExceededError
+from services.youtube import QuotaExceededError, YouTubeUnavailableError
 from testsupport.listen_game import GM, start_game, submitting_round
 
 VIDEO = "dQw4w9WgXcQ"
@@ -135,6 +135,27 @@ class TestSyncPlaylist:
         assert "Nothing was changed. Please run this command again tomorrow." in _last_reply(interaction)
         youtube.add.assert_not_called()
 
+    async def test_youtube_unreachable_when_reading_the_playlist_changes_nothing(self, listen_server, youtube):
+        self._songs("vidA")
+        youtube.playlist_ids.side_effect = YouTubeUnavailableError("network down")
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_sync_playlist.callback(interaction)
+
+        assert _last_reply(interaction) == YOUTUBE_UNAVAILABLE
+        youtube.add.assert_not_called()
+
+    async def test_losing_youtube_mid_sync_reports_what_was_added_and_to_run_it_again(self, listen_server, youtube):
+        self._songs("vidA", "vidB")
+        youtube.add.side_effect = [True, YouTubeUnavailableError("network down")]
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_sync_playlist.callback(interaction)
+
+        assert "Added 1 missing videos" in _last_reply(interaction)
+        assert "**Sync halted: the bot lost its connection to YouTube.**" in _last_reply(interaction)
+        assert listen_server.dms(1) == []      # nothing to wait for until tomorrow, unlike the quota
+
     async def test_an_unreadable_playlist_is_not_treated_as_empty(self, listen_server, youtube):
         self._songs("vidA")
         youtube.playlist_ids.return_value = None
@@ -145,8 +166,9 @@ class TestSyncPlaylist:
         assert "nothing was changed" in _last_reply(interaction)
         youtube.add.assert_not_called()
 
-    def test_the_worker_reports_added_failed_and_quota(self, monkeypatch):
-        outcomes = iter([True, False, QuotaExceededError(RuntimeError("limit")), True])
+    @pytest.mark.parametrize("stop", [QuotaExceededError(RuntimeError("limit")), YouTubeUnavailableError("down")])
+    def test_the_worker_reports_added_failed_and_what_stopped_it(self, monkeypatch, stop):
+        outcomes = iter([True, False, stop, True])
 
         def add(*_):
             result = next(outcomes)
@@ -157,10 +179,10 @@ class TestSyncPlaylist:
         monkeypatch.setattr("commands.listen_game_gm.add_video_to_playlist", add)
         songs = [Submission(1, i, f"v{i}", "t") for i in range(4)]
 
-        assert _sync_missing_videos("PL", songs) == (1, 1, True)      # it stops at the quota error
+        assert _sync_missing_videos("PL", songs) == (1, 1, stop)      # it stops at the error
 
     def test_the_worker_with_nothing_to_do(self):
-        assert _sync_missing_videos("PL", []) == (0, 0, False)
+        assert _sync_missing_videos("PL", []) == (0, 0, None)
 
 
 class TestRejectSong:
@@ -249,6 +271,20 @@ class TestRejectSong:
 
         assert "Failed to remove video vidA from YT playlist" in caplog.text
         assert get_user_submission_db(round_id, 102) is None
+        assert _last_reply(interaction).endswith(NOT_REMOVED_FROM_PLAYLIST)    # so the GM can take it out by hand
+
+    async def test_youtube_being_unreachable_still_rejects_and_tells_the_player(self, listen_server, youtube):
+        _, round_id = submitting_round()
+        upsert_submission_db(round_id, 102, "vidA", "Song A")
+        youtube.side_effect = YouTubeUnavailableError("network down")
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_reject_song.callback(interaction, listen_server.members[102], "dupe")
+
+        assert get_user_submission_db(round_id, 102) is None
+        assert len(listen_server.dms(102)) == 1
+        assert _last_reply(interaction) == \
+            "✅ **Success!** Removed `Song A`. Player was DMed the reason." + NOT_REMOVED_FROM_PLAYLIST
 
 
 class TestForceSubmit:
@@ -306,6 +342,27 @@ class TestForceSubmit:
         await listen_game_gm_force_submit.callback(interaction, listen_server.members[102], self.URL)
 
         assert _last_reply(interaction) == YOUTUBE_QUOTA_USED_UP
+        assert get_user_submission_db(round_id, 102) is None
+
+    async def test_youtube_being_unreachable_says_so_instead_of_blaming_the_video(self, listen_server, youtube):
+        _, round_id = submitting_round()
+        youtube.title.side_effect = YouTubeUnavailableError("invalid_grant")
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_force_submit.callback(interaction, listen_server.members[102], self.URL)
+
+        assert _last_reply(interaction) == YOUTUBE_UNAVAILABLE
+        assert get_user_submission_db(round_id, 102) is None
+        youtube.put.assert_not_called()
+
+    async def test_losing_youtube_while_adding_to_the_playlist_saves_nothing(self, listen_server, youtube):
+        _, round_id = submitting_round()
+        youtube.put.return_value = (PlaylistOutcome.YOUTUBE_UNAVAILABLE, "PLround")
+        interaction = listen_server.interaction(1)
+
+        await listen_game_gm_force_submit.callback(interaction, listen_server.members[102], self.URL)
+
+        assert _last_reply(interaction) == YOUTUBE_UNAVAILABLE
         assert get_user_submission_db(round_id, 102) is None
 
     async def test_submits_the_song_for_the_player_and_tells_them(self, listen_server):

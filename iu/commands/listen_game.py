@@ -8,12 +8,14 @@ from db.listen_game import (
     RoundStatus, get_active_gm_id, get_ranking_picks_db, get_round_submissions_db, get_user_submission_db,
     is_round_complete_db, is_video_claimed_by_other_db, upsert_submission_db
 )
-from services.listen_game import YOUTUBE_QUOTA_USED_UP, after_submissions_changed, require_active_round, send_dm
+from services.listen_game import (
+    YOUTUBE_QUOTA_USED_UP, YOUTUBE_UNAVAILABLE, after_submissions_changed, require_active_round, send_dm
+)
 from services.listen_game_playlist import (
     SUBMISSION_LOCK, PlaylistOutcome, get_host_name, put_song_in_round_playlist
 )
 from services.listen_game_reveal import start_reveal
-from services.youtube import QuotaExceededError, get_video_title, extract_video_id
+from services.youtube import QuotaExceededError, YouTubeUnavailableError, get_video_title, extract_video_id
 from ui.listen_game import SetThemeModal, ListenGameRankingView
 from utils.validation import validate_channel
 
@@ -102,6 +104,9 @@ async def _process_submission(interaction: discord.Interaction, url: str):
     except QuotaExceededError:
         await interaction.followup.send(YOUTUBE_QUOTA_USED_UP)
         return
+    except YouTubeUnavailableError:
+        await interaction.followup.send(YOUTUBE_UNAVAILABLE)
+        return
     if not video_title:
         await interaction.followup.send("❌ Could not fetch that video. It may be private or deleted.")
         return
@@ -129,6 +134,10 @@ async def _process_submission(interaction: discord.Interaction, url: str):
 
     if outcome is PlaylistOutcome.ADD_FAILED:
         await interaction.followup.send("❌ Failed to add video to the playlist. It may be blocked or private.")
+        return
+
+    if outcome is PlaylistOutcome.YOUTUBE_UNAVAILABLE:
+        await interaction.followup.send(YOUTUBE_UNAVAILABLE)
         return
 
     upsert_submission_db(active_round.round_id, user.id, video_id, video_title)
