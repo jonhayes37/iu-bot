@@ -16,6 +16,7 @@ from db.bot import save_bot_status_db
 from ui.base import DATABASE_ERROR
 from ui.eoy_nominations import HallOfFameNominationButton, Top25Button
 from ui.eoy_voting import HallOfFameVoteButton, HMAVoteButton
+from ui.hma_nominations import HMANominationsButton, NominationPageButton
 from ui.hma_suggestions import HMASuggestButton
 from ui.listen_game import JoinGameView
 from ui.lists import SubmitListButton
@@ -43,7 +44,7 @@ class TestCreation:
 
     async def test_every_command_in_the_commands_package_is_registered(self, bot):
         assert {c.name for c in bot.tree.get_commands()} == {c.name for c in all_commands()}
-        assert len(bot.tree.get_commands()) == 52
+        assert len(bot.tree.get_commands()) == 51
 
     async def test_command_errors_are_reported_by_the_shared_handler(self, bot):
         assert bot.tree.on_error is on_app_command_error
@@ -145,7 +146,7 @@ class TestStartup:
 
         assert set(started.add_dynamic_items.call_args.args) == {
             SubmitListButton, Top25Button, HallOfFameNominationButton, HallOfFameVoteButton, HMAVoteButton,
-            HMASuggestButton, SecretVoteButton}
+            HMASuggestButton, SecretVoteButton, HMANominationsButton, NominationPageButton}
 
     async def test_the_join_button_survives_a_restart(self, started):
         await started.setup_hook()

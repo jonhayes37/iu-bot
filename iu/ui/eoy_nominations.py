@@ -4,6 +4,7 @@ import logging
 import discord
 from ui.base import SafeModal, report_interaction_error, reports_errors
 from ui.end_of_year import refuse_if_closed
+from ui.hma_nominations import HMANominationsButton
 from db.hall_of_fame import save_hof_nomination, get_hof_nomination
 from db.top_songs import save_top_songs, get_user_top_songs
 from utils.discord_files import text_file
@@ -197,6 +198,6 @@ class EOYNominationsHub(discord.ui.View):
 
     def __init__(self, year: int, closed: bool = False):
         super().__init__(timeout=None)
-        for button in (Top25Button(year), HallOfFameNominationButton(year)):
+        for button in (Top25Button(year), HallOfFameNominationButton(year), HMANominationsButton(year)):
             button.item.disabled = closed
             self.add_item(button)

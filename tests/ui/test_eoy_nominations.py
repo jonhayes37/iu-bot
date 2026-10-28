@@ -246,4 +246,4 @@ async def test_the_hub_holds_both_buttons_and_never_times_out():
     hub = EOYNominationsHub(2026)
 
     assert hub.timeout is None
-    assert button_labels(hub) == ["Submit 2026 Top 25 Songs", "2026 HallyU Hall of Fame"]
+    assert button_labels(hub) == ["Submit 2026 Top 25 Songs", "2026 HallyU Hall of Fame", "2026 HMA Nominations"]

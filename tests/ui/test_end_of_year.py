@@ -5,12 +5,15 @@ import pytest
 from config import Database
 from db.bot import close_end_of_year
 from db.hall_of_fame import get_all_hof_nominations, get_hof_ballots, set_hof_final_nominees
-from db.hmas import get_all_category_suggestions, get_hma_ballots, get_yearly_export_data, set_final_nominees
+from db.hmas import (
+    get_active_hma_categories, get_all_category_suggestions, get_hma_ballots, get_yearly_export_data,
+    set_final_nominees
+)
 from db.top_songs import get_all_top_songs
 from ui.end_of_year import closed_message, refuse_if_closed
 from ui.eoy_nominations import EOYNominationsHub, HallOfFameNominationButton, HoFModal, Top25Button, Top25Modal
 from ui.eoy_voting import EOYVotingHub, HallOfFameVoteButton, HMABallotView, HMAVoteButton, HoFVotingView
-from ui.hma_nominations import MultiNominationView
+from ui.hma_nominations import HMANominationsButton, NominationPageButton, NominationPageModal, nomination_pages
 from ui.hma_suggestions import HMACategorySuggestionModal, HMASuggestButton, HMASuggestionsHub
 from testsupport.ui import choose, fill
 
@@ -61,10 +64,11 @@ async def _hma_ballot(interaction):
     await view.btn_save.callback(interaction)
 
 
-async def _hma_nomination(interaction):
-    view = MultiNominationView(2026, "IVE - HEYA")
-    choose(view.daesang_select, "soty")
-    await view.submit_btn.callback(interaction)
+async def _hma_nomination_form(interaction):
+    pages = nomination_pages(get_active_hma_categories())
+    modal = NominationPageModal(2026, pages[0], len(pages), {})
+    fill(modal.boxes["soty"], "IVE - HEYA")
+    await modal.on_submit(interaction)
 
 
 EVERY_WAY_IN = {
@@ -78,7 +82,9 @@ EVERY_WAY_IN = {
     "hall of fame ballot": _hof_ballot,
     "hma vote button": lambda i: HMAVoteButton(2026).callback(i),
     "hma ballot": _hma_ballot,
-    "hma nomination menu": _hma_nomination,
+    "hma nominations button": lambda i: HMANominationsButton(2026).callback(i),
+    "hma nomination page button": lambda i: NominationPageButton(2026, 1).callback(i),
+    "hma nomination form": _hma_nomination_form,
 }
 
 

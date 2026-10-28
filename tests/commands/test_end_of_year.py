@@ -42,7 +42,10 @@ class TestNominationsHub:
         assert "**2. HallyU Hall of Fame:** Nominate the K-Pop legends who deserve to be in our 2026 class of " \
             "inductees!" in hub.embed.description
         assert isinstance(hub.kwargs["view"], EOYNominationsHub)
-        assert button_labels(hub.kwargs["view"]) == ["Submit 2026 Top 25 Songs", "2026 HallyU Hall of Fame"]
+        assert button_labels(hub.kwargs["view"]) == ["Submit 2026 Top 25 Songs", "2026 HallyU Hall of Fame",
+                                                     "2026 HMA Nominations"]
+        assert "**3. HallyU Music Awards:** Nominate as many as you like in each award category." \
+            in hub.embed.description
 
     async def test_in_december_it_is_still_for_the_year_being_celebrated(self, admin_interaction, frozen_time):
         frozen_time("2026-12-02 12:00:00")
@@ -202,7 +205,7 @@ class TestClose:
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         assert interaction.sent[0].content == (
             "🔒 The **2026** end of year festivities are closed.\n"
-            "Anyone who presses an old button, sends a form or runs `/hma-nomination` is told they're closed.\n"
+            "Anyone who presses an old button or sends a form is told they're closed.\n"
             "Buttons greyed out on **3** posts.\n"
             "Run `/end-of-year-results` for the winners.")
 

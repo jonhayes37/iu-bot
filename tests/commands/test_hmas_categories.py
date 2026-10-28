@@ -7,7 +7,7 @@ from commands.hmas import (
     CATEGORY_ID_PATTERN, FAMILY_CHOICES, active_category_autocomplete, add_hma_category, remove_hma_category
 )
 from config import Database
-from db.hmas import MAX_CATEGORIES_PER_FAMILY, get_active_hma_categories, get_family_choices, remove_category
+from db.hmas import MAX_CATEGORIES_PER_FAMILY, get_active_hma_categories, remove_category
 
 DAESANG, BONSANG, FUN = FAMILY_CHOICES
 
@@ -21,13 +21,17 @@ def _active_ids():
     return {c["category_id"] for c in get_active_hma_categories()}
 
 
+def _family(display_name):
+    return [(c["category_id"], c["name"]) for c in get_active_hma_categories() if c["family"] == display_name]
+
+
 class TestAddCategory:
     """/add-hma-category adds a category to a family, or restores a removed one."""
 
     async def test_adds_it_and_says_what_to_do_next(self, admin_interaction):
         await add_hma_category.callback(admin_interaction, "best_fancam", FUN, "Best Fancam")
 
-        assert ("best_fancam", "Best Fancam") in get_family_choices("fun")
+        assert ("best_fancam", "Best Fancam") in _family("Fun")
         [reply] = admin_interaction.sent
         assert reply.ephemeral
         assert reply.content.startswith("✅ Added **Best Fancam** (`best_fancam`) to the Fun awards.")
@@ -36,7 +40,7 @@ class TestAddCategory:
     async def test_the_id_is_tidied_and_the_name_trimmed(self, admin_interaction):
         await add_hma_category.callback(admin_interaction, "  Best_Fancam ", FUN, "  Best Fancam  ")
 
-        assert ("best_fancam", "Best Fancam") in get_family_choices("fun")
+        assert ("best_fancam", "Best Fancam") in _family("Fun")
 
     @pytest.mark.parametrize("category_id", ["best fancam", "best-fancam", "émoji", "x" * 31, ""])
     async def test_an_id_that_is_not_short_lowercase_and_plain_is_refused(self, admin_interaction, category_id):
@@ -70,7 +74,7 @@ class TestAddCategory:
         assert "`/hma-set-nominees`" not in reply.content
 
     async def test_a_full_family_is_refused(self, admin_interaction):
-        for i in range(MAX_CATEGORIES_PER_FAMILY - len(get_family_choices("fun"))):
+        for i in range(MAX_CATEGORIES_PER_FAMILY - len(_family("Fun"))):
             await add_hma_category.callback(admin_interaction, f"fun_{i}", FUN, f"Fun {i}")
 
         await add_hma_category.callback(admin_interaction, "one_more", FUN, "One more")
@@ -83,10 +87,10 @@ class TestAddCategory:
 
         assert [c.value for c in family.choices] == ["daesang", "bonsang", "fun"]
 
-    def test_the_name_fits_in_a_menu(self):
+    def test_the_name_fits_a_nomination_box_title(self):
         name = next(p for p in add_hma_category.parameters if p.name == "name")
 
-        assert (name.min_value, name.max_value) == (1, 100)
+        assert (name.min_value, name.max_value) == (1, 45)
 
 
 class TestRemoveCategory:

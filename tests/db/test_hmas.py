@@ -11,16 +11,25 @@ from config import Database
 from db.initialize import initialize_databases
 from db.hmas import (
     MAX_CATEGORIES_PER_FAMILY, AddCategoryResult, RemoveCategoryResult,
-    add_category, add_nominations, get_active_hma_categories, get_all_category_suggestions,
-    get_current_categories_by_family, get_family_choices, get_hma_ballots, get_hma_final_nominees,
-    get_user_category_suggestion, get_user_hma_votes, get_yearly_export_data, remove_category,
-    save_category_suggestion, save_hma_vote, set_final_nominees
+    add_category, get_active_hma_categories, get_all_category_suggestions,
+    get_current_categories_by_family, get_hma_ballots, get_hma_final_nominees,
+    get_user_category_suggestion, get_user_hma_votes, get_user_nominations, get_yearly_export_data, remove_category,
+    replace_user_nominations, save_category_suggestion, save_hma_vote, set_final_nominees
 )
 
 
 @pytest.fixture(autouse=True)
 def _hmas_database(databases):
     databases(Database.HMAS)
+
+
+def _family(display_name):
+    """A family's active categories as (category_id, name), sorted by name."""
+    return [(c["category_id"], c["name"]) for c in get_active_hma_categories() if c["family"] == display_name]
+
+
+def _nominate(year, user_id, category_ids, text):
+    replace_user_nominations(year, user_id, {category_id: [text] for category_id in category_ids})
 
 
 class TestSeedData:
@@ -32,7 +41,7 @@ class TestSeedData:
         assert families == {"daesang", "bonsang", "fun"}
 
     def test_the_daesangs_are_the_four_big_awards(self):
-        names = [name for _, name in get_family_choices("daesang")]
+        names = [name for _, name in _family("Daesang")]
 
         assert names == ["Album of the Year", "Artist of the Year", "Music Video of the Year", "Song of the Year"]
 
@@ -49,51 +58,53 @@ class TestSeedData:
 
         assert len(query(Database.HMAS, "SELECT * FROM hma_categories")) == before
 
-    def test_no_family_has_more_categories_than_a_dropdown_holds(self):
-        # A Discord select menu shows at most 25 options
-        for family in ("daesang", "bonsang", "fun"):
-            assert 0 < len(get_family_choices(family)) <= 25
+    def test_no_family_has_more_categories_than_the_most_allowed(self):
+        for family in ("Daesang", "Bonsang", "Fun"):
+            assert 0 < len(_family(family)) <= MAX_CATEGORIES_PER_FAMILY
 
 
-class TestFamilyChoices:
-    """get_family_choices fills the nomination dropdowns."""
+class TestUserNominations:
+    """A member's nominations: any number per category, replaced a category at a time."""
 
-    def test_returns_id_and_name_pairs_sorted_by_name(self):
-        choices = get_family_choices("daesang")
+    def test_none_yet(self):
+        assert not get_user_nominations(2026, 1)
 
-        assert choices[0] == ("aoty", "Album of the Year")
-        assert [name for _, name in choices] == sorted(name for _, name in choices)
+    def test_saved_nominations_come_back_by_category_in_order(self, query):
+        replace_user_nominations(2026, 1, {"soty": ["IVE - HEYA", "aespa - Supernova"], "aoty": ["IU - The Winning"]})
 
-    def test_retired_categories_are_left_out(self, execute):
-        execute(Database.HMAS, "UPDATE hma_categories SET is_active = 0 WHERE category_id = 'aoty'")
+        assert get_user_nominations(2026, 1) == {"soty": ["IVE - HEYA", "aespa - Supernova"],
+                                                 "aoty": ["IU - The Winning"]}
+        assert {row["award_year"] for row in query(Database.HMAS, "SELECT award_year FROM hma_nominations")} == {2026}
 
-        assert "aoty" not in [category_id for category_id, _ in get_family_choices("daesang")]
+    def test_saving_a_category_again_replaces_only_that_category(self):
+        replace_user_nominations(2026, 1, {"soty": ["A", "B"], "aoty": ["C"]})
 
-    def test_an_unknown_family_is_empty(self):
-        assert get_family_choices("nope") == []
+        replace_user_nominations(2026, 1, {"soty": ["D"]})
 
+        assert get_user_nominations(2026, 1) == {"soty": ["D"], "aoty": ["C"]}
 
-class TestAddNominations:
-    """One nominee can be put forward for several categories at once."""
+    def test_an_empty_list_clears_the_category(self):
+        replace_user_nominations(2026, 1, {"soty": ["A"], "aoty": ["C"]})
 
-    def test_saves_one_row_per_category_for_the_year(self, query):
-        add_nominations(2026, 1, ["soty", "aoty"], "IVE - HEYA")
+        replace_user_nominations(2026, 1, {"soty": []})
 
-        rows = query(Database.HMAS, "SELECT * FROM hma_nominations ORDER BY category_id")
-        assert [(r["category_id"], r["user_id"], r["nomination_text"], r["award_year"]) for r in rows] == \
-            [("aoty", 1, "IVE - HEYA", 2026), ("soty", 1, "IVE - HEYA", 2026)]
+        assert get_user_nominations(2026, 1) == {"aoty": ["C"]}
+
+    def test_members_and_years_are_kept_apart(self):
+        replace_user_nominations(2026, 1, {"soty": ["mine"]})
+        replace_user_nominations(2026, 2, {"soty": ["theirs"]})
+        replace_user_nominations(2025, 1, {"soty": ["last year"]})
+
+        replace_user_nominations(2026, 1, {"soty": ["changed"]})
+
+        assert get_user_nominations(2026, 2) == {"soty": ["theirs"]}
+        assert get_user_nominations(2025, 1) == {"soty": ["last year"]}
 
     def test_an_unknown_category_saves_nothing_at_all(self, query):
         with pytest.raises(sqlite3.IntegrityError):
-            add_nominations(2026, 1, ["soty", "not_a_category"], "IVE - HEYA")
+            replace_user_nominations(2026, 1, {"soty": ["IVE - HEYA"], "not_a_category": ["x"]})
 
         assert query(Database.HMAS, "SELECT * FROM hma_nominations") == []
-
-    def test_the_same_person_can_nominate_several_times(self, query):
-        add_nominations(2026, 1, ["soty"], "first")
-        add_nominations(2026, 1, ["soty"], "second")
-
-        assert len(query(Database.HMAS, "SELECT * FROM hma_nominations")) == 2
 
 
 class TestYearlyExport:
@@ -103,8 +114,8 @@ class TestYearlyExport:
         assert not get_yearly_export_data(2026)
 
     def test_groups_by_family_and_category_with_who_nominated(self):
-        add_nominations(2026, 1, ["soty", "best_gg"], "IVE - HEYA")
-        add_nominations(2026, 2, ["soty"], "aespa - Supernova")
+        _nominate(2026, 1, ["soty", "best_gg"], "IVE - HEYA")
+        _nominate(2026, 2, ["soty"], "aespa - Supernova")
 
         data = get_yearly_export_data(2026)
 
@@ -112,14 +123,14 @@ class TestYearlyExport:
         assert data["Bonsang"]["Best Girl Group"] == [(1, "IVE - HEYA")]
 
     def test_only_the_requested_year_is_returned(self):
-        add_nominations(2026, 1, ["soty"], "this year")
-        add_nominations(2027, 2, ["soty"], "next year")
+        _nominate(2026, 1, ["soty"], "this year")
+        _nominate(2027, 2, ["soty"], "next year")
 
         assert get_yearly_export_data(2026)["Daesang"]["Song of the Year"] == [(1, "this year")]
         assert get_yearly_export_data(2027)["Daesang"]["Song of the Year"] == [(2, "next year")]
 
     def test_a_year_with_nothing_is_empty(self):
-        add_nominations(2026, 1, ["soty"], "x")
+        _nominate(2026, 1, ["soty"], "x")
 
         assert not get_yearly_export_data(2020)
 
@@ -288,7 +299,7 @@ class TestAddCategory:
 
         [row] = query(Database.HMAS, "SELECT * FROM hma_categories WHERE category_id = 'best_fancam'")
         assert (row["family_id"], row["name"], row["is_active"]) == ("fun", "Best Fancam", 1)
-        assert ("best_fancam", "Best Fancam") in get_family_choices("fun")
+        assert ("best_fancam", "Best Fancam") in _family("Fun")
 
     def test_a_removed_category_is_restored_with_the_new_name_and_family(self, query):
         remove_category("best_band")
@@ -299,7 +310,7 @@ class TestAddCategory:
         assert (row["family_id"], row["name"], row["is_active"]) == ("fun", "Best Band (Fun)", 1)
 
     def test_restoring_brings_back_the_earlier_nominations(self):
-        add_nominations(2026, 1, ["best_band"], "DAY6")
+        _nominate(2026, 1, ["best_band"], "DAY6")
         remove_category("best_band")
 
         add_category("best_band", "bonsang", "Best Band")
@@ -321,12 +332,12 @@ class TestAddCategory:
         assert add_category("song", "daesang", "Song of the Year") is AddCategoryResult.ADDED
 
     def test_a_full_family_is_refused(self):
-        free = MAX_CATEGORIES_PER_FAMILY - len(get_family_choices("fun"))
+        free = MAX_CATEGORIES_PER_FAMILY - len(_family("Fun"))
         for i in range(free):
             assert add_category(f"fun_{i}", "fun", f"Fun {i}") is AddCategoryResult.ADDED
 
         assert add_category("one_more", "fun", "One more") is AddCategoryResult.FAMILY_FULL
-        assert len(get_family_choices("fun")) == MAX_CATEGORIES_PER_FAMILY
+        assert len(_family("Fun")) == MAX_CATEGORIES_PER_FAMILY
 
     def test_an_unknown_family_is_rejected_by_the_database(self):
         with pytest.raises(sqlite3.IntegrityError):
@@ -339,11 +350,11 @@ class TestRemoveCategory:
     def test_removing_hides_it_from_the_nomination_menus(self, query):
         assert remove_category("soty") is RemoveCategoryResult.REMOVED
 
-        assert "soty" not in [category_id for category_id, _ in get_family_choices("daesang")]
+        assert "soty" not in [category_id for category_id, _ in _family("Daesang")]
         assert query(Database.HMAS, "SELECT is_active FROM hma_categories WHERE category_id = 'soty'")[0][0] == 0
 
     def test_the_nominations_finalists_and_votes_are_kept(self, query):
-        add_nominations(2026, 1, ["soty"], "IVE - HEYA")
+        _nominate(2026, 1, ["soty"], "IVE - HEYA")
         set_final_nominees(2026, "soty", ["A", "B", "C"])
         save_hma_vote(2026, 1, "soty", "A", "B", "C")
 

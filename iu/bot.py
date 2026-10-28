@@ -22,6 +22,7 @@ from triggers.scheduled_events import process_event
 from ui.base import report_interaction_error
 from ui.eoy_nominations import HallOfFameNominationButton, Top25Button
 from ui.eoy_voting import HallOfFameVoteButton, HMAVoteButton
+from ui.hma_nominations import HMANominationsButton, NominationPageButton
 from ui.hma_suggestions import HMASuggestButton
 from ui.listen_game import JoinGameView
 from ui.lists import SubmitListButton
@@ -101,7 +102,8 @@ class IUBot(discord.Client):
         """
         self.add_dynamic_items(
             SubmitListButton, Top25Button, HallOfFameNominationButton,
-            HallOfFameVoteButton, HMAVoteButton, HMASuggestButton, SecretVoteButton
+            HallOfFameVoteButton, HMAVoteButton, HMASuggestButton, SecretVoteButton,
+            HMANominationsButton, NominationPageButton
         )
         self.add_view(JoinGameView())
         logger.info("Persistent buttons registered.")

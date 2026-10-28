@@ -28,28 +28,33 @@ class RemoveCategoryResult(enum.Enum):
 
 
 
-def get_family_choices(family_id: str) -> list[tuple[str, str]]:
-    """Fetches active categories for a specific family to populate Discord dropdowns."""
+def get_user_nominations(award_year: int, user_id: int) -> dict[str, list[str]]:
+    """A member's nominations for the year, by category ID, in the order they were entered."""
     with db_connection(Database.HMAS) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT category_id, name
-            FROM hma_categories
-            WHERE is_active = 1 AND family_id = ?
-            ORDER BY name
-        """, (family_id,))
-        return cursor.fetchall()
+        rows = conn.execute("""
+            SELECT category_id, nomination_text FROM hma_nominations
+            WHERE award_year = ? AND user_id = ?
+            ORDER BY id
+        """, (award_year, user_id)).fetchall()
 
-def add_nominations(award_year: int, user_id: int, category_ids: list[str], text: str):
+    nominations: dict[str, list[str]] = {}
+    for category_id, text in rows:
+        nominations.setdefault(category_id, []).append(text)
+    return nominations
+
+def replace_user_nominations(award_year: int, user_id: int, nominations: dict[str, list[str]]):
     """
-    Saves one nomination for each category, all in one transaction (so a failure saves none of
-    them).
+    Replaces a member's nominations in the given categories (an empty list clears one), all in one
+    transaction. Their nominations in other categories are left alone.
     """
     with db_connection(Database.HMAS) as conn:
-        conn.executemany("""
-            INSERT INTO hma_nominations (award_year, category_id, user_id, nomination_text)
-            VALUES (?, ?, ?, ?)
-        """, [(award_year, category_id, user_id, text) for category_id in category_ids])
+        for category_id, texts in nominations.items():
+            conn.execute("DELETE FROM hma_nominations WHERE award_year = ? AND user_id = ? AND category_id = ?",
+                         (award_year, user_id, category_id))
+            conn.executemany("""
+                INSERT INTO hma_nominations (award_year, category_id, user_id, nomination_text)
+                VALUES (?, ?, ?, ?)
+            """, [(award_year, category_id, user_id, text) for text in texts])
 
 def get_yearly_export_data(award_year: int) -> dict[str, dict[str, list[tuple[int, str]]]]:
     """Returns a nested dictionary grouping nominations by Family, then Category."""

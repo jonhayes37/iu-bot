@@ -2,16 +2,13 @@
 
 import pytest
 
-from commands.hmas import (
-    MAX_NOMINEE_LENGTH, end_of_year_hma_suggestions, hma_nomination,
-    hma_nomination_export, hma_set_nominees, hma_suggestions_export
-)
+from commands.hmas import end_of_year_hma_suggestions, hma_nomination_export, hma_set_nominees, hma_suggestions_export
 from config import Database
 from db.bot import EndOfYearPost, EndOfYearPostKind, close_end_of_year, get_end_of_year_posts
 from db.hmas import (
-    add_nominations, get_hma_final_nominees, remove_category, save_category_suggestion, set_final_nominees
+    get_hma_final_nominees, remove_category, replace_user_nominations, save_category_suggestion,
+    set_final_nominees
 )
-from ui.hma_nominations import MultiNominationView
 from ui.hma_suggestions import HMASuggestionsHub
 from utils.validation import MAX_BALLOT_NOMINEES, MAX_BALLOT_NOMINEE_LENGTH
 
@@ -22,46 +19,12 @@ def _hmas_database(databases, frozen_time):
     frozen_time("2026-10-15 12:00:00")
 
 
-class TestNomination:
-    """/hma-nomination starts a nomination for the member."""
-
-    async def test_shows_the_category_picker_privately(self, interaction):
-        await hma_nomination.callback(interaction, "IVE - HEYA")
-
-        [reply] = interaction.sent
-        assert reply.content == "Nominating **IVE - HEYA**\nSelect all award categories below:"
-        assert reply.ephemeral
-        assert isinstance(reply.kwargs["view"], MultiNominationView)
-        assert (reply.kwargs["view"].year, reply.kwargs["view"].nominee) == (2026, "IVE - HEYA")
-
-    async def test_a_nomination_on_december_1_is_for_the_year_being_celebrated(self, interaction, frozen_time):
-        frozen_time("2026-12-01 23:00:00")
-
-        await hma_nomination.callback(interaction, "IVE - HEYA")
-
-        assert interaction.sent[0].kwargs["view"].year == 2026
-
-    async def test_once_the_year_is_closed_nominating_is_refused(self, interaction):
-        close_end_of_year(2026)
-
-        await hma_nomination.callback(interaction, "IVE - HEYA")
-
-        [reply] = interaction.sent
-        assert reply.content.startswith("🔒 The 2026 end of year festivities are closed")
-        assert reply.ephemeral and "view" not in reply.kwargs
-
-    def test_the_nominee_text_is_limited_in_length(self):
-        nominee = next(p for p in hma_nomination.parameters if p.name == "nominee")
-
-        assert (nominee.min_value, nominee.max_value) == (1, MAX_NOMINEE_LENGTH)
-
-
 class TestNominationExport:
     """/hma-nomination-export attaches every nomination for a year."""
 
     async def test_it_answers_privately_before_uploading_the_file(self, admin_interaction):
         # The upload can take longer than the 3 seconds Discord allows for a first response
-        add_nominations(2026, 11, ["soty"], "IVE - HEYA")
+        replace_user_nominations(2026, 11, {"soty": ["IVE - HEYA"]})
         order = []
         admin_interaction.response.defer.side_effect = lambda *a, **k: order.append(("defer", k))
         admin_interaction.followup.send.side_effect = lambda *a, **k: order.append(("upload", {}))
@@ -78,8 +41,8 @@ class TestNominationExport:
         assert (reply.content, reply.ephemeral) == ("No nominations found for the 2026 awards yet.", True)
 
     async def test_attaches_the_nominations_grouped_by_family_and_category(self, admin_interaction):
-        add_nominations(2026, 11, ["soty", "best_gg"], "IVE - HEYA")
-        add_nominations(2026, 22, ["soty"], "aespa - Supernova")
+        replace_user_nominations(2026, 11, {"soty": ["IVE - HEYA"], "best_gg": ["IVE - HEYA"]})
+        replace_user_nominations(2026, 22, {"soty": ["aespa - Supernova"]})
 
         await hma_nomination_export.callback(admin_interaction)
 
@@ -96,7 +59,7 @@ class TestNominationExport:
         assert "### Best Girl Group ###\n- IVE - HEYA (Submitted by ID: 11)" in text
 
     async def test_another_year_can_be_asked_for(self, admin_interaction, frozen_time):
-        add_nominations(2026, 11, ["soty"], "Last year's pick")
+        replace_user_nominations(2026, 11, {"soty": ["Last year's pick"]})
         frozen_time("2027-03-01 12:00:00")
 
         await hma_nomination_export.callback(admin_interaction, 2026)
@@ -104,7 +67,7 @@ class TestNominationExport:
         assert admin_interaction.sent[0].kwargs["file"].filename == "2026_hma_nominations.txt"
 
     async def test_in_december_it_exports_the_year_being_celebrated(self, admin_interaction, frozen_time):
-        add_nominations(2026, 11, ["soty"], "IVE - HEYA")
+        replace_user_nominations(2026, 11, {"soty": ["IVE - HEYA"]})
         frozen_time("2026-12-02 12:00:00")
 
         await hma_nomination_export.callback(admin_interaction)
