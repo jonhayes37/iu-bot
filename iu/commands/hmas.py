@@ -8,7 +8,7 @@ from db.hmas import (
 )
 from ui.hma_nominations import MultiNominationView
 from ui.hma_suggestions import HMASuggestionsHub
-from utils.end_of_year import get_current_award_year
+from utils.end_of_year import get_festivities_year
 from utils.validation import admin_only, ballot_nominees_problem
 
 # Long enough for a song title, artist and a YouTube link; the nominee is echoed in messages and embed fields
@@ -23,13 +23,13 @@ async def hma_nomination(interaction: discord.Interaction,
                          nominee: discord.app_commands.Range[str, 1, MAX_NOMINEE_LENGTH]):
     """The Discord command logic for multi-category HMA nominations."""
 
-    view = MultiNominationView(nominee)
+    view = MultiNominationView(get_festivities_year(), nominee)
     msg = f"Nominating **{nominee}**\nSelect all award categories below:"
     await interaction.response.send_message(content=msg, view=view, ephemeral=True)
 
 @discord.app_commands.command(name='hma-nomination-export',
                               description="[Admin] Export all HMA nominations to a text file.")
-@discord.app_commands.describe(year="The award year to export (defaults to the current active year)")
+@discord.app_commands.describe(year="The award year to export (defaults to this year's festivities)")
 @admin_only
 async def hma_nomination_export(interaction: discord.Interaction, year: int = None):
     """The Discord command logic for exporting the year's nominations."""
@@ -37,7 +37,7 @@ async def hma_nomination_export(interaction: discord.Interaction, year: int = No
     await interaction.response.defer(ephemeral=True)
 
     # Fallback to current year if the admin didn't specify one
-    target_year = year or get_current_award_year()
+    target_year = year or get_festivities_year()
 
     data = get_yearly_export_data(target_year)
 
@@ -97,8 +97,8 @@ async def hma_set_nominees(interaction: discord.Interaction, category_id: str, n
         await interaction.followup.send(problem)
         return
 
-    year = set_final_nominees(category_id, nominees)
-    if year is None:
+    year = get_festivities_year()
+    if not set_final_nominees(year, category_id, nominees):
         await interaction.followup.send(
             f"❌ There is no category called `{category_id}`. Category IDs are listed in the "
             "`hma_categories` table.")
@@ -116,7 +116,7 @@ async def hma_set_nominees(interaction: discord.Interaction, category_id: str, n
 @admin_only
 async def end_of_year_hma_suggestions(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    year = get_current_award_year()
+    year = get_festivities_year()
 
     # Fetch and format the current awards
     categories_by_family = get_current_categories_by_family()
@@ -149,8 +149,8 @@ async def end_of_year_hma_suggestions(interaction: discord.Interaction):
 async def hma_suggestions_export(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
-    year = get_current_award_year()
-    suggestions = get_all_category_suggestions()
+    year = get_festivities_year()
+    suggestions = get_all_category_suggestions(year)
 
     if not suggestions:
         await interaction.followup.send("No suggestions have been submitted yet.")

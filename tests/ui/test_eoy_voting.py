@@ -42,7 +42,7 @@ class TestHallOfFameVoteButton:
 
     @pytest.mark.parametrize("nominees", [[], ["BTS"], ["BTS", "IU"]])
     async def test_fewer_than_three_nominees_means_voting_has_not_started(self, interaction, nominees):
-        set_hof_final_nominees(nominees)
+        set_hof_final_nominees(2026, nominees)
 
         await HallOfFameVoteButton(2026).callback(interaction)
 
@@ -51,7 +51,7 @@ class TestHallOfFameVoteButton:
         assert reply.ephemeral and "view" not in reply.kwargs
 
     async def test_opens_a_private_ballot_listing_the_nominees(self, interaction):
-        set_hof_final_nominees(NOMINEES)
+        set_hof_final_nominees(2026, NOMINEES)
 
         await HallOfFameVoteButton(2026).callback(interaction)
 
@@ -63,8 +63,8 @@ class TestHallOfFameVoteButton:
         assert [o.value for o in view.first_select.options] == sorted(NOMINEES)
 
     async def test_an_earlier_vote_is_preselected(self, interaction):
-        set_hof_final_nominees(NOMINEES)
-        save_hof_vote(interaction.user.id, "IU", "BTS", "EXO")
+        set_hof_final_nominees(2026, NOMINEES)
+        save_hof_vote(2026, interaction.user.id, "IU", "BTS", "EXO")
 
         await HallOfFameVoteButton(2026).callback(interaction)
 
@@ -140,7 +140,7 @@ class TestHoFVotingView:
 
         await view.btn_submit.callback(interaction)
 
-        assert get_user_hof_vote(interaction.user.id) == {
+        assert get_user_hof_vote(2026, interaction.user.id) == {
             "first_choice": "IU", "second_choice": "BTS", "third_choice": "EXO"}
         [reply] = interaction.sent
         assert reply.via == "edit" and reply.kwargs["view"] is None
@@ -157,7 +157,7 @@ class TestHoFVotingView:
         [reply] = interaction.sent
         assert reply.content == "❌ **Incomplete Ballot:** You must select a 1st, 2nd, and 3rd choice."
         assert reply.ephemeral
-        assert get_user_hof_vote(interaction.user.id) is None
+        assert get_user_hof_vote(2026, interaction.user.id) is None
 
     async def test_voting_for_the_same_nominee_twice_is_refused(self, interaction):
         view = HoFVotingView(2026, NOMINEES)
@@ -168,7 +168,7 @@ class TestHoFVotingView:
         await view.btn_submit.callback(interaction)
 
         assert interaction.sent[0].content.startswith("❌ **Invalid Ballot:** You cannot vote for the same nominee")
-        assert get_user_hof_vote(interaction.user.id) is None
+        assert get_user_hof_vote(2026, interaction.user.id) is None
 
     async def test_unchanged_menus_keep_the_earlier_choices(self, interaction):
         # Only the 2nd choice is changed; the other two menus still show the earlier vote
@@ -177,7 +177,7 @@ class TestHoFVotingView:
 
         await view.btn_submit.callback(interaction)
 
-        assert get_user_hof_vote(interaction.user.id) == {
+        assert get_user_hof_vote(2026, interaction.user.id) == {
             "first_choice": "IU", "second_choice": "Big Bang", "third_choice": "EXO"}
 
     async def test_a_change_that_duplicates_an_earlier_choice_is_refused(self, interaction):
@@ -223,7 +223,7 @@ class TestHMABallotView:
 
         await view.btn_save.callback(interaction)
 
-        assert get_user_hma_votes(interaction.user.id)["soty"]["first_choice"] == "IU"
+        assert get_user_hma_votes(2026, interaction.user.id)["soty"]["first_choice"] == "IU"
         [reply] = interaction.sent
         assert reply.via == "edit"
         assert reply.content == ("✅ Saved vote for **Song of the Year**!\n\n**HallyU Music Awards Ballot**\n"
@@ -248,7 +248,7 @@ class TestHMABallotView:
         await view.btn_save.callback(interaction)
 
         assert interaction.sent[0].content == "❌ **Incomplete:** Select a 1st, 2nd, and 3rd choice."
-        assert get_user_hma_votes(interaction.user.id) == {}
+        assert get_user_hma_votes(2026, interaction.user.id) == {}
 
     async def test_a_duplicate_choice_is_refused(self, interaction):
         view = self._view()
@@ -258,7 +258,7 @@ class TestHMABallotView:
         await view.btn_save.callback(interaction)
 
         assert interaction.sent[0].content == "❌ **Duplicate:** You cannot vote for the same nominee more than once."
-        assert get_user_hma_votes(interaction.user.id) == {}
+        assert get_user_hma_votes(2026, interaction.user.id) == {}
 
     async def test_unchanged_menus_keep_the_earlier_choices(self, interaction):
         view = self._view({"first_choice": "IU", "second_choice": "BTS", "third_choice": "EXO"})
@@ -266,7 +266,7 @@ class TestHMABallotView:
 
         await view.btn_save.callback(interaction)
 
-        vote = get_user_hma_votes(interaction.user.id)["soty"]
+        vote = get_user_hma_votes(2026, interaction.user.id)["soty"]
         assert (vote["first_choice"], vote["second_choice"], vote["third_choice"]) == ("IU", "BTS", "Big Bang")
 
     async def test_going_back_saves_nothing(self, interaction):
@@ -279,7 +279,7 @@ class TestHMABallotView:
         [reply] = interaction.sent
         assert reply.via == "edit" and reply.content == CATEGORY_LIST_MESSAGE
         assert isinstance(reply.kwargs["view"], HMACategorySelectView)
-        assert get_user_hma_votes(interaction.user.id) == {}
+        assert get_user_hma_votes(2026, interaction.user.id) == {}
 
     async def test_choosing_in_a_menu_only_acknowledges_it(self, interaction):
         await self._view().first_select.callback(interaction)
@@ -291,7 +291,7 @@ class TestHMACategorySelectView:
     """The category picker: unvoted categories first, in menus of at most 25."""
 
     async def test_every_category_is_offered_unvoted_first_with_their_status(self, interaction):
-        save_hma_vote(interaction.user.id, "soty", "A", "B", "C")
+        save_hma_vote(2026, interaction.user.id, "soty", "A", "B", "C")
 
         view = HMACategorySelectView(2026, interaction.user.id)
 
@@ -319,7 +319,7 @@ class TestHMACategorySelectView:
         assert len(long_option.label) == 95
 
     async def test_votes_from_other_members_do_not_count(self, interaction):
-        save_hma_vote(999, "soty", "A", "B", "C")
+        save_hma_vote(2026, 999, "soty", "A", "B", "C")
 
         view = HMACategorySelectView(2026, interaction.user.id)
 
@@ -338,7 +338,7 @@ class TestHMACategoryDropdown:
     async def test_a_category_without_enough_nominees_is_not_ready(self, interaction):
         dropdown = self._dropdown(interaction.user.id)
         choose(dropdown, "soty")
-        set_final_nominees("soty", ["A", "B"])
+        set_final_nominees(2026, "soty", ["A", "B"])
 
         await dropdown.callback(interaction)
 
@@ -347,7 +347,7 @@ class TestHMACategoryDropdown:
         assert reply.ephemeral
 
     async def test_a_ready_category_opens_its_ballot_in_place(self, interaction):
-        set_final_nominees("soty", ["A", "B", "C", "D"])
+        set_final_nominees(2026, "soty", ["A", "B", "C", "D"])
         dropdown = self._dropdown(interaction.user.id)
         choose(dropdown, "soty")
 
@@ -362,8 +362,8 @@ class TestHMACategoryDropdown:
         assert [o.value for o in ballot.first_select.options] == ["A", "B", "C", "D"]
 
     async def test_an_earlier_vote_in_the_category_is_preselected(self, interaction):
-        set_final_nominees("soty", ["A", "B", "C", "D"])
-        save_hma_vote(interaction.user.id, "soty", "B", "C", "D")
+        set_final_nominees(2026, "soty", ["A", "B", "C", "D"])
+        save_hma_vote(2026, interaction.user.id, "soty", "B", "C", "D")
         dropdown = self._dropdown(interaction.user.id)
         choose(dropdown, "soty")
 
@@ -381,3 +381,49 @@ class TestHMACategoryDropdown:
 async def test_ballots_never_expire_so_a_slow_voter_can_still_submit(make_view):
     # An expired view makes Discord show "This interaction failed" and the vote is lost
     assert make_view().timeout is None
+
+
+class TestVotingInDecember:
+    """Voting runs in December, after the awards year has turned over, so it uses the hub's year."""
+
+    @pytest.fixture(autouse=True)
+    def _december(self, frozen_time):
+        frozen_time("2026-12-05 12:00:00")
+
+    async def test_the_hall_of_fame_ballot_uses_the_hubs_nominees_and_saves_for_its_year(self, interaction):
+        set_hof_final_nominees(2026, NOMINEES)
+        save_hof_vote(2025, interaction.user.id, "Old", "Older", "Oldest")
+
+        await HallOfFameVoteButton(2026).callback(interaction)
+        view = interaction.sent[0].kwargs["view"]
+        for select, name in zip(_selects(view), ("IU", "BTS", "EXO")):
+            choose(select, name)
+        await view.btn_submit.callback(interaction)
+
+        assert (view.def1, view.def2, view.def3) == (None, None, None)     # last year's ballot isn't offered
+        assert get_user_hof_vote(2026, interaction.user.id)["first_choice"] == "IU"
+        assert get_user_hof_vote(2027, interaction.user.id) is None
+
+    async def test_an_hma_vote_uses_the_hubs_nominees_and_saves_for_its_year(self, interaction):
+        set_final_nominees(2026, "soty", ["A", "B", "C"])
+        dropdown = HMACategoryDropdown([discord.SelectOption(label="Song of the Year", value="soty")],
+                                       2026, interaction.user.id)
+        choose(dropdown, "soty")
+
+        await dropdown.callback(interaction)
+        ballot = interaction.sent[0].kwargs["view"]
+        for select, name in zip(_selects(ballot), ("A", "B", "C")):
+            choose(select, name)
+        await ballot.btn_save.callback(interaction)
+
+        assert get_user_hma_votes(2026, interaction.user.id)["soty"]["first_choice"] == "A"
+        assert get_user_hma_votes(2027, interaction.user.id) == {}
+
+    async def test_the_category_list_only_ticks_votes_from_the_hubs_year(self, interaction):
+        save_hma_vote(2025, interaction.user.id, "soty", "A", "B", "C")
+        save_hma_vote(2026, interaction.user.id, "aoty", "A", "B", "C")
+
+        view = HMACategorySelectView(2026, interaction.user.id)
+
+        ticked = [o.value for d in view.children for o in d.options if o.emoji.name == "✅"]
+        assert ticked == ["aoty"]

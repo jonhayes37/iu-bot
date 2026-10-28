@@ -25,20 +25,20 @@ class TestBallotSetup:
     """The three dropdowns list the active categories of each family."""
 
     async def test_has_a_dropdown_per_family_and_a_submit_button(self):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
 
         assert [s.placeholder for s in (view.daesang_select, view.bonsang_select, view.fun_select)] == \
             ["Select Daesangs...", "Select Bonsangs...", "Select Fun Awards..."]
         assert button_labels(view) == ["Submit Nominations"]
 
     async def test_the_daesang_dropdown_lists_the_daesangs_by_name(self):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
 
         assert {(o.value, o.label) for o in view.daesang_select.options} >= {
             ("soty", "Song of the Year"), ("aoty", "Album of the Year")}
 
     async def test_any_number_of_categories_can_be_ticked_including_none(self):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
 
         for select in (view.daesang_select, view.bonsang_select, view.fun_select):
             assert select.min_values == 0
@@ -47,17 +47,17 @@ class TestBallotSetup:
     async def test_a_retired_category_is_not_offered(self, execute):
         execute(Database.HMAS, "UPDATE hma_categories SET is_active = 0 WHERE category_id = 'soty'")
 
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
 
         assert "soty" not in [o.value for o in view.daesang_select.options]
 
     async def test_no_dropdown_exceeds_discords_limit_of_25_options(self):
-        view = MultiNominationView("x")
+        view = MultiNominationView(2026, "x")
 
         assert all(0 < len(s.options) <= 25 for s in (view.daesang_select, view.bonsang_select, view.fun_select))
 
     async def test_picking_in_a_dropdown_only_acknowledges_it(self, interaction):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
 
         await view.daesang_select.callback(interaction)
 
@@ -65,14 +65,14 @@ class TestBallotSetup:
         assert interaction.sent == []
 
     async def test_the_menu_never_expires_so_a_slow_submit_still_works(self):
-        assert MultiNominationView("x").timeout is None
+        assert MultiNominationView(2026, "x").timeout is None
 
 
 class TestSubmitNominations:
     """Pressing Submit saves one nomination per ticked category."""
 
     async def test_nominations_are_saved_for_every_ticked_category_across_dropdowns(self, interaction):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
         choose(view.daesang_select, "soty")
         choose(view.bonsang_select, "best_gg", "best_collab")
 
@@ -85,7 +85,7 @@ class TestSubmitNominations:
         assert sum(len(c) for c in export.values()) == 3
 
     async def test_the_confirmation_replaces_the_dropdowns_and_lists_the_categories(self, interaction):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
         choose(view.daesang_select, "soty")
         choose(view.bonsang_select, "best_gg")
 
@@ -100,17 +100,18 @@ class TestSubmitNominations:
         assert fields["Nominee"] == "**IVE - HEYA**"
         assert fields["Categories"] == "• Song of the Year\n• Best Girl Group"
 
-    async def test_a_december_nomination_is_for_next_years_awards(self, interaction, frozen_time):
-        frozen_time("2026-12-03 12:00:00")
-        view = MultiNominationView("IVE - HEYA")
+    async def test_the_nominations_are_saved_for_the_menus_year(self, interaction):
+        view = MultiNominationView(2025, "IVE - HEYA")
         choose(view.daesang_select, "soty")
 
         await _press_submit(interaction, view)
 
-        assert "**2027 HallyU Music Awards**" in interaction.sent[0].embed.description
+        assert get_yearly_export_data(2025)["Daesang"]["Song of the Year"] == [(interaction.user.id, "IVE - HEYA")]
+        assert not get_yearly_export_data(2026)
+        assert "**2025 HallyU Music Awards**" in interaction.sent[0].embed.description
 
     async def test_ticking_nothing_is_refused_privately(self, interaction):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
 
         await _press_submit(interaction, view)
 
@@ -120,7 +121,7 @@ class TestSubmitNominations:
 
     @pytest.mark.parametrize("category", ["best_dance_cover", "best_vocal_cover"])
     async def test_cover_categories_need_a_youtube_link_in_the_nominee(self, interaction, category):
-        view = MultiNominationView("Some dance cover")
+        view = MultiNominationView(2026, "Some dance cover")
         choose(view.bonsang_select, category)
 
         await _press_submit(interaction, view)
@@ -131,7 +132,7 @@ class TestSubmitNominations:
 
     @pytest.mark.parametrize("category", ["best_dance_cover", "best_vocal_cover"])
     async def test_a_cover_with_a_link_is_accepted(self, interaction, category):
-        view = MultiNominationView(f"My cover {VIDEO_URL}")
+        view = MultiNominationView(2026, f"My cover {VIDEO_URL}")
         choose(view.bonsang_select, category)
 
         await _press_submit(interaction, view)
@@ -139,7 +140,7 @@ class TestSubmitNominations:
         assert interaction.sent[0].embed.title == "🏆 Nominations Submitted!"
 
     async def test_other_categories_do_not_need_a_link(self, interaction):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
         choose(view.bonsang_select, "best_gg")
 
         await _press_submit(interaction, view)
@@ -147,7 +148,7 @@ class TestSubmitNominations:
         assert interaction.sent[0].embed is not None
 
     async def test_one_cover_category_among_others_still_needs_the_link(self, interaction):
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
         choose(view.daesang_select, "soty")
         choose(view.bonsang_select, "best_dance_cover")
 
@@ -158,7 +159,7 @@ class TestSubmitNominations:
 
     async def test_a_database_failure_is_reported_and_nothing_is_saved(self, interaction, execute):
         execute(Database.HMAS, "DROP TABLE hma_nominations")
-        view = MultiNominationView("IVE - HEYA")
+        view = MultiNominationView(2026, "IVE - HEYA")
         choose(view.daesang_select, "soty")
 
         with pytest.raises(Exception) as caught:

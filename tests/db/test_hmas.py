@@ -1,6 +1,6 @@
 """Tests for db/hmas.py: the HallyU Music Awards.
 
-Every function that takes no year uses the current awards year (December 1 to November 30).
+Every function about one year's awards works on the awards year it is given.
 """
 
 import sqlite3
@@ -17,9 +17,8 @@ from db.hmas import (
 
 
 @pytest.fixture(autouse=True)
-def _hmas_database(databases, frozen_time):
+def _hmas_database(databases):
     databases(Database.HMAS)
-    frozen_time("2026-10-15 12:00:00")
 
 
 class TestSeedData:
@@ -75,28 +74,22 @@ class TestFamilyChoices:
 class TestAddNominations:
     """One nominee can be put forward for several categories at once."""
 
-    def test_saves_one_row_per_category_and_returns_the_year(self, query):
-        year = add_nominations(1, ["soty", "aoty"], "IVE - HEYA")
+    def test_saves_one_row_per_category_for_the_year(self, query):
+        add_nominations(2026, 1, ["soty", "aoty"], "IVE - HEYA")
 
-        assert year == 2026
         rows = query(Database.HMAS, "SELECT * FROM hma_nominations ORDER BY category_id")
         assert [(r["category_id"], r["user_id"], r["nomination_text"], r["award_year"]) for r in rows] == \
             [("aoty", 1, "IVE - HEYA", 2026), ("soty", 1, "IVE - HEYA", 2026)]
 
-    def test_a_december_nomination_counts_for_next_year(self, frozen_time):
-        frozen_time("2026-12-03 12:00:00")
-
-        assert add_nominations(1, ["soty"], "x") == 2027
-
     def test_an_unknown_category_saves_nothing_at_all(self, query):
         with pytest.raises(sqlite3.IntegrityError):
-            add_nominations(1, ["soty", "not_a_category"], "IVE - HEYA")
+            add_nominations(2026, 1, ["soty", "not_a_category"], "IVE - HEYA")
 
         assert query(Database.HMAS, "SELECT * FROM hma_nominations") == []
 
     def test_the_same_person_can_nominate_several_times(self, query):
-        add_nominations(1, ["soty"], "first")
-        add_nominations(1, ["soty"], "second")
+        add_nominations(2026, 1, ["soty"], "first")
+        add_nominations(2026, 1, ["soty"], "second")
 
         assert len(query(Database.HMAS, "SELECT * FROM hma_nominations")) == 2
 
@@ -108,24 +101,23 @@ class TestYearlyExport:
         assert not get_yearly_export_data(2026)
 
     def test_groups_by_family_and_category_with_who_nominated(self):
-        add_nominations(1, ["soty", "best_gg"], "IVE - HEYA")
-        add_nominations(2, ["soty"], "aespa - Supernova")
+        add_nominations(2026, 1, ["soty", "best_gg"], "IVE - HEYA")
+        add_nominations(2026, 2, ["soty"], "aespa - Supernova")
 
         data = get_yearly_export_data(2026)
 
         assert data["Daesang"]["Song of the Year"] == [(1, "IVE - HEYA"), (2, "aespa - Supernova")]
         assert data["Bonsang"]["Best Girl Group"] == [(1, "IVE - HEYA")]
 
-    def test_only_the_requested_year_is_returned(self, frozen_time):
-        add_nominations(1, ["soty"], "this year")
-        frozen_time("2027-03-01 12:00:00")
-        add_nominations(2, ["soty"], "next year")
+    def test_only_the_requested_year_is_returned(self):
+        add_nominations(2026, 1, ["soty"], "this year")
+        add_nominations(2027, 2, ["soty"], "next year")
 
         assert get_yearly_export_data(2026)["Daesang"]["Song of the Year"] == [(1, "this year")]
         assert get_yearly_export_data(2027)["Daesang"]["Song of the Year"] == [(2, "next year")]
 
     def test_a_year_with_nothing_is_empty(self):
-        add_nominations(1, ["soty"], "x")
+        add_nominations(2026, 1, ["soty"], "x")
 
         assert not get_yearly_export_data(2020)
 
@@ -134,122 +126,126 @@ class TestFinalNominees:
     """The vetted list for a category."""
 
     def test_none_yet(self):
-        assert get_hma_final_nominees("soty") == []
+        assert get_hma_final_nominees(2026, "soty") == []
 
-    def test_set_returns_the_year_and_they_come_back_sorted(self):
-        assert set_final_nominees("soty", ["IVE - HEYA", "aespa - Supernova", "BTS - Dynamite"]) == 2026
+    def test_set_says_it_worked_and_they_come_back_sorted(self):
+        assert set_final_nominees(2026, "soty", ["IVE - HEYA", "aespa - Supernova", "BTS - Dynamite"]) is True
 
-        assert get_hma_final_nominees("soty") == ["BTS - Dynamite", "IVE - HEYA", "aespa - Supernova"]
+        assert get_hma_final_nominees(2026, "soty") == ["BTS - Dynamite", "IVE - HEYA", "aespa - Supernova"]
 
     def test_setting_again_replaces_the_list(self):
-        set_final_nominees("soty", ["A", "B"])
+        set_final_nominees(2026, "soty", ["A", "B"])
 
-        set_final_nominees("soty", ["C"])
+        set_final_nominees(2026, "soty", ["C"])
 
-        assert get_hma_final_nominees("soty") == ["C"]
+        assert get_hma_final_nominees(2026, "soty") == ["C"]
 
     def test_categories_are_independent(self):
-        set_final_nominees("soty", ["A"])
-        set_final_nominees("aoty", ["B"])
+        set_final_nominees(2026, "soty", ["A"])
+        set_final_nominees(2026, "aoty", ["B"])
 
-        assert get_hma_final_nominees("soty") == ["A"]
-        assert get_hma_final_nominees("aoty") == ["B"]
+        assert get_hma_final_nominees(2026, "soty") == ["A"]
+        assert get_hma_final_nominees(2026, "aoty") == ["B"]
 
-    def test_only_the_current_year_is_replaced(self, frozen_time):
-        set_final_nominees("soty", ["this year"])
-        frozen_time("2027-03-01 12:00:00")
-        set_final_nominees("soty", ["next year"])
-        frozen_time("2026-10-15 12:00:00")
+    def test_only_the_given_year_is_replaced(self):
+        set_final_nominees(2026, "soty", ["this year"])
 
-        assert get_hma_final_nominees("soty") == ["this year"]
+        set_final_nominees(2027, "soty", ["next year"])
 
-    def test_an_unknown_category_returns_none_and_changes_nothing(self, query):
-        assert set_final_nominees("not_a_category", ["A"]) is None
+        assert get_hma_final_nominees(2026, "soty") == ["this year"]
+
+    def test_an_unknown_category_returns_false_and_changes_nothing(self, query):
+        assert set_final_nominees(2026, "not_a_category", ["A"]) is False
 
         assert query(Database.HMAS, "SELECT * FROM hma_final_nominees") == []
 
     def test_an_unknown_category_does_not_wipe_anything_else(self):
-        set_final_nominees("soty", ["A"])
+        set_final_nominees(2026, "soty", ["A"])
 
-        set_final_nominees("not_a_category", ["B"])
+        set_final_nominees(2026, "not_a_category", ["B"])
 
-        assert get_hma_final_nominees("soty") == ["A"]
+        assert get_hma_final_nominees(2026, "soty") == ["A"]
 
     def test_an_empty_list_clears_the_category(self):
-        set_final_nominees("soty", ["A"])
+        set_final_nominees(2026, "soty", ["A"])
 
-        set_final_nominees("soty", [])
+        set_final_nominees(2026, "soty", [])
 
-        assert get_hma_final_nominees("soty") == []
+        assert get_hma_final_nominees(2026, "soty") == []
 
 
 class TestVotes:
     """A ranked ballot of three per member per category."""
 
     def test_no_votes_yet(self):
-        assert get_user_hma_votes(1) == {}
+        assert get_user_hma_votes(2026, 1) == {}
 
     def test_votes_are_keyed_by_category(self):
-        save_hma_vote(1, "soty", "A", "B", "C")
-        save_hma_vote(1, "aoty", "D", "E", "F")
+        save_hma_vote(2026, 1, "soty", "A", "B", "C")
+        save_hma_vote(2026, 1, "aoty", "D", "E", "F")
 
-        votes = get_user_hma_votes(1)
+        votes = get_user_hma_votes(2026, 1)
 
         assert set(votes) == {"soty", "aoty"}
         assert votes["soty"] == {"category_id": "soty", "first_choice": "A", "second_choice": "B", "third_choice": "C"}
 
     def test_voting_again_in_a_category_replaces_the_ballot(self, query):
-        save_hma_vote(1, "soty", "A", "B", "C")
+        save_hma_vote(2026, 1, "soty", "A", "B", "C")
 
-        save_hma_vote(1, "soty", "C", "B", "A")
+        save_hma_vote(2026, 1, "soty", "C", "B", "A")
 
-        assert get_user_hma_votes(1)["soty"]["first_choice"] == "C"
+        assert get_user_hma_votes(2026, 1)["soty"]["first_choice"] == "C"
         assert len(query(Database.HMAS, "SELECT * FROM hma_votes")) == 1
 
     def test_votes_are_per_member(self):
-        save_hma_vote(1, "soty", "A", "B", "C")
+        save_hma_vote(2026, 1, "soty", "A", "B", "C")
 
-        assert get_user_hma_votes(2) == {}
+        assert get_user_hma_votes(2026, 2) == {}
 
-    def test_last_years_votes_are_not_this_years(self, frozen_time):
-        save_hma_vote(1, "soty", "A", "B", "C")
-        frozen_time("2027-03-01 12:00:00")
+    def test_another_years_votes_are_not_this_years(self):
+        save_hma_vote(2025, 1, "soty", "A", "B", "C")
 
-        assert get_user_hma_votes(1) == {}
+        assert get_user_hma_votes(2026, 1) == {}
 
 
 class TestCategorySuggestions:
     """Members suggest categories to add or drop."""
 
     def test_none_yet(self):
-        assert get_user_category_suggestion(1) is None
-        assert get_all_category_suggestions() == []
+        assert get_user_category_suggestion(2026, 1) is None
+        assert get_all_category_suggestions(2026) == []
 
-    def test_save_returns_the_year_and_can_be_read_back(self):
-        assert save_category_suggestion(1, "jo", "Best Fancam", "Best Band") == 2026
+    def test_a_suggestion_is_saved_for_the_year_and_can_be_read_back(self, query):
+        save_category_suggestion(2026, 1, "jo", "Best Fancam", "Best Band")
 
-        assert get_user_category_suggestion(1) == {"new_categories": "Best Fancam", "dropped_categories": "Best Band"}
+        assert query(Database.HMAS, "SELECT award_year FROM hma_category_suggestions")[0]["award_year"] == 2026
+        assert get_user_category_suggestion(2026, 1) == {
+            "new_categories": "Best Fancam", "dropped_categories": "Best Band"}
 
     def test_suggesting_again_replaces_the_earlier_one(self):
-        save_category_suggestion(1, "jo", "first", "")
+        save_category_suggestion(2026, 1, "jo", "first", "")
 
-        save_category_suggestion(1, "jo", "second", "")
+        save_category_suggestion(2026, 1, "jo", "second", "")
 
-        assert get_user_category_suggestion(1)["new_categories"] == "second"
-        assert len(get_all_category_suggestions()) == 1
+        assert get_user_category_suggestion(2026, 1)["new_categories"] == "second"
+        assert len(get_all_category_suggestions(2026)) == 1
 
-    def test_export_lists_this_years_suggestions(self, frozen_time):
-        save_category_suggestion(1, "old", "x", "y")
-        frozen_time("2027-03-01 12:00:00")
-        save_category_suggestion(2, "a", "x", "y")
-        save_category_suggestion(3, "b", "x", "y")
+    def test_another_years_suggestion_is_not_this_years(self):
+        save_category_suggestion(2025, 1, "jo", "x", "y")
 
-        assert sorted(row["username"] for row in get_all_category_suggestions()) == ["a", "b"]
+        assert get_user_category_suggestion(2026, 1) is None
+
+    def test_export_lists_the_years_suggestions(self):
+        save_category_suggestion(2025, 1, "old", "x", "y")
+        save_category_suggestion(2026, 2, "a", "x", "y")
+        save_category_suggestion(2026, 3, "b", "x", "y")
+
+        assert sorted(row["username"] for row in get_all_category_suggestions(2026)) == ["a", "b"]
 
     def test_either_field_can_be_empty(self):
-        save_category_suggestion(1, "jo", None, None)
+        save_category_suggestion(2026, 1, "jo", None, None)
 
-        assert get_user_category_suggestion(1) == {"new_categories": None, "dropped_categories": None}
+        assert get_user_category_suggestion(2026, 1) == {"new_categories": None, "dropped_categories": None}
 
 
 class TestCategoryLists:

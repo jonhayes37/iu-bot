@@ -1,7 +1,9 @@
-"""Database logic for the HMA nomination command"""
+"""Database logic for the HMA nomination command.
+
+Every function about one year's awards takes that awards year (the year of the hub or command that asked).
+"""
 from config import Database
 from db.connection import db_connection
-from utils.end_of_year import get_current_award_year
 
 
 def get_family_choices(family_id: str) -> list[tuple[str, str]]:
@@ -16,20 +18,16 @@ def get_family_choices(family_id: str) -> list[tuple[str, str]]:
         """, (family_id,))
         return cursor.fetchall()
 
-def add_nominations(user_id: int, category_ids: list[str], text: str) -> int:
+def add_nominations(award_year: int, user_id: int, category_ids: list[str], text: str):
     """
     Saves one nomination for each category, all in one transaction (so a failure saves none of
-    them), and returns the award year.
+    them).
     """
-    award_year = get_current_award_year()
-
     with db_connection(Database.HMAS) as conn:
         conn.executemany("""
             INSERT INTO hma_nominations (award_year, category_id, user_id, nomination_text)
             VALUES (?, ?, ?, ?)
         """, [(award_year, category_id, user_id, text) for category_id in category_ids])
-
-    return award_year
 
 def get_yearly_export_data(award_year: int) -> dict[str, dict[str, list[tuple[int, str]]]]:
     """Returns a nested dictionary grouping nominations by Family, then Category."""
@@ -59,18 +57,17 @@ def get_yearly_export_data(award_year: int) -> dict[str, dict[str, list[tuple[in
         return results
 
 
-def set_final_nominees(category_id: str, nominees: list[str]) -> int | None:
+def set_final_nominees(award_year: int, category_id: str, nominees: list[str]) -> bool:
     """
     Wipes any existing final nominees for the given category/year
-    and inserts the new vetted list. Returns the award year, or None if there is no such category.
+    and inserts the new vetted list. Returns False (changing nothing) if there is no such category.
     """
-    award_year = get_current_award_year()
     with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
 
         cursor.execute("SELECT 1 FROM hma_categories WHERE category_id = ?", (category_id,))
         if cursor.fetchone() is None:
-            return None
+            return False
 
         # Clear out the old list
         cursor.execute("""
@@ -85,8 +82,7 @@ def set_final_nominees(category_id: str, nominees: list[str]) -> int | None:
             VALUES (?, ?, ?)
         """, [(category_id, award_year, name) for name in nominees])
 
-
-    return award_year
+    return True
 
 # Add to db/hmas.py
 
@@ -97,9 +93,8 @@ def get_all_hma_categories() -> list[dict]:
         cursor.execute("SELECT category_id, name FROM hma_categories ORDER BY name")
         return [dict(row) for row in cursor.fetchall()]
 
-def get_user_hma_votes(user_id: int) -> dict:
+def get_user_hma_votes(award_year: int, user_id: int) -> dict:
     """Fetches a user's existing votes, keyed by category_id for instant lookups."""
-    award_year = get_current_award_year()
     with db_connection(Database.HMAS, row_factory=True) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -110,9 +105,8 @@ def get_user_hma_votes(user_id: int) -> dict:
         # Return a dictionary formatted like: {'soty': {'first_choice': 'IVE', ...}}
         return {row['category_id']: dict(row) for row in cursor.fetchall()}
 
-def get_hma_final_nominees(category_id: str) -> list[str]:
+def get_hma_final_nominees(award_year: int, category_id: str) -> list[str]:
     """Fetches the vetted list of final nominees for a specific category."""
-    award_year = get_current_award_year()
     with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -122,9 +116,8 @@ def get_hma_final_nominees(category_id: str) -> list[str]:
         """, (category_id, award_year))
         return [row[0] for row in cursor.fetchall()]
 
-def save_hma_vote(user_id: int, category_id: str, first: str, second: str, third: str):
+def save_hma_vote(award_year: int, user_id: int, category_id: str, first: str, second: str, third: str):
     """Saves or updates a user's ranked HMA ballot for a specific category."""
-    award_year = get_current_award_year()
     with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -133,9 +126,8 @@ def save_hma_vote(user_id: int, category_id: str, first: str, second: str, third
             VALUES (?, ?, ?, ?, ?, ?)
         """, (user_id, award_year, category_id, first, second, third))
 
-def save_category_suggestion(user_id: int, username: str, new_cats: str, dropped_cats: str) -> int:
+def save_category_suggestion(award_year: int, user_id: int, username: str, new_cats: str, dropped_cats: str):
     """Saves or updates a user's HMA category suggestions."""
-    award_year = get_current_award_year()
     with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -143,11 +135,9 @@ def save_category_suggestion(user_id: int, username: str, new_cats: str, dropped
             (user_id, award_year, username, new_categories, dropped_categories)
             VALUES (?, ?, ?, ?, ?)
         """, (user_id, award_year, username, new_cats, dropped_cats))
-    return award_year
 
-def get_user_category_suggestion(user_id: int) -> dict | None:
+def get_user_category_suggestion(award_year: int, user_id: int) -> dict | None:
     """Fetches a user's existing suggestions to pre-fill the modal."""
-    award_year = get_current_award_year()
     with db_connection(Database.HMAS, row_factory=True) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -158,9 +148,8 @@ def get_user_category_suggestion(user_id: int) -> dict | None:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def get_all_category_suggestions() -> list[dict]:
-    """Fetches all suggestions for the current award year to be exported."""
-    award_year = get_current_award_year()
+def get_all_category_suggestions(award_year: int) -> list[dict]:
+    """Fetches all suggestions for the award year to be exported."""
     with db_connection(Database.HMAS, row_factory=True) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM hma_category_suggestions WHERE award_year = ?", (award_year,))

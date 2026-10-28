@@ -200,6 +200,9 @@ also a raffle ticket, and one voter wins 5 hearts when it finishes.
 
 The server's end-of-year activities run in phases. Admins post the buttons or run the commands
 below, and members respond. Members can change their answers any time before the deadline.
+Although the eligibility window ends on November 30, the festivities that follow in December (deadlines on
+December 1, voting, exports) still count for that year: everything posted or run for the 2026 awards stays
+2026 until the new calendar year.
 
 ### Phase 1: Nominations and suggestions
 

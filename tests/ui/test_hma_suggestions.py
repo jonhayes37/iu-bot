@@ -43,7 +43,7 @@ class TestSuggestionModal:
     async def test_a_suggestion_is_saved_trimmed_and_confirmed(self, interaction):
         await _submit(interaction, new="  Best Fancam \n", drop="Best Band")
 
-        assert get_user_category_suggestion(interaction.user.id) == {
+        assert get_user_category_suggestion(2026, interaction.user.id) == {
             "new_categories": "Best Fancam", "dropped_categories": "Best Band"}
         [reply] = interaction.sent
         assert reply.content.startswith("✅ **Suggestions submitted!**")
@@ -52,21 +52,31 @@ class TestSuggestionModal:
     async def test_one_box_is_enough(self, interaction):
         await _submit(interaction, new="Best Fancam")
 
-        assert get_user_category_suggestion(interaction.user.id)["dropped_categories"] == ""
+        assert get_user_category_suggestion(2026, interaction.user.id)["dropped_categories"] == ""
 
     async def test_two_blank_boxes_are_refused(self, interaction):
         await _submit(interaction, new="   ", drop="\n")
 
         [reply] = interaction.sent
         assert reply.content == "❌ You left both fields blank! Please suggest at least one addition or removal."
-        assert get_all_category_suggestions() == []
+        assert get_all_category_suggestions(2026) == []
+
+    async def test_the_suggestion_is_saved_for_the_forms_year(self, interaction):
+        modal = HMACategorySuggestionModal(2025)
+        fill(modal.new_cats, "Best Fancam")
+        fill(modal.drop_cats, "")
+
+        await modal.on_submit(interaction)
+
+        assert get_user_category_suggestion(2025, interaction.user.id)["new_categories"] == "Best Fancam"
+        assert get_user_category_suggestion(2026, interaction.user.id) is None
 
     async def test_suggesting_again_replaces_the_earlier_one(self, interaction):
         await _submit(interaction, new="first")
         await _submit(interaction, new="second")
 
-        assert len(get_all_category_suggestions()) == 1
-        assert get_user_category_suggestion(interaction.user.id)["new_categories"] == "second"
+        assert len(get_all_category_suggestions(2026)) == 1
+        assert get_user_category_suggestion(2026, interaction.user.id)["new_categories"] == "second"
 
     async def test_a_failed_save_hands_both_boxes_back(self, interaction):
         modal = HMACategorySuggestionModal(2026)
@@ -101,12 +111,19 @@ class TestSuggestButton:
         assert (modal.year, modal.new_cats.default) == (2026, None)
 
     async def test_it_prefills_an_earlier_suggestion(self, interaction):
-        save_category_suggestion(interaction.user.id, "jo", "Best Fancam", "Best Band")
+        save_category_suggestion(2026, interaction.user.id, "jo", "Best Fancam", "Best Band")
 
         await HMASuggestButton(2026).callback(interaction)
 
         modal = interaction.response.send_modal.await_args.args[0]
         assert (modal.new_cats.default, modal.drop_cats.default) == ("Best Fancam", "Best Band")
+
+    async def test_it_does_not_prefill_another_years_suggestion(self, interaction):
+        save_category_suggestion(2025, interaction.user.id, "jo", "Best Fancam", "Best Band")
+
+        await HMASuggestButton(2026).callback(interaction)
+
+        assert interaction.response.send_modal.await_args.args[0].new_cats.default is None
 
     async def test_a_database_failure_is_reported(self, interaction, execute):
         execute(Database.HMAS, "DROP TABLE hma_category_suggestions")

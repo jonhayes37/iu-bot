@@ -50,7 +50,7 @@ class TestTop25Modal:
     async def test_valid_lists_are_saved_cleaned_and_confirmed(self, interaction):
         await _submit_top25(interaction)
 
-        saved = get_all_top_songs()[0]
+        saved = get_all_top_songs(2026)[0]
         assert (saved["user_id"], saved["username"], saved["award_year"]) == \
             (interaction.user.id, interaction.user.display_name, 2026)
         assert saved["top_25_raw"] == TWENTY_FIVE
@@ -67,7 +67,7 @@ class TestTop25Modal:
 
         await _submit_top25(interaction, "\n".join(lines))
 
-        assert get_all_top_songs()[0]["top_25_urls"].startswith("https://youtu.be/aaaaaaaaaaa,")
+        assert get_all_top_songs(2026)[0]["top_25_urls"].startswith("https://youtu.be/aaaaaaaaaaa,")
 
     async def test_a_top_25_of_the_wrong_length_is_refused_and_both_lists_handed_back(self, interaction):
         short = "\n".join(TWENTY_FIVE.splitlines()[:24])
@@ -79,7 +79,7 @@ class TestTop25Modal:
         assert "Honourable Mentions" not in reply.content
         assert [(f.filename, f.fp.read()) for f in reply.kwargs["files"]] == [
             ("top_25.txt", short.encode()), ("honourable_mentions.txt", THREE.encode())]
-        assert get_all_top_songs() == []
+        assert get_all_top_songs(2026) == []
 
     async def test_both_problems_are_listed_together(self, interaction):
         await _submit_top25(interaction, "just one", "IU - a\nIVE - b")
@@ -93,13 +93,23 @@ class TestTop25Modal:
 
         assert [f.filename for f in interaction.sent[0].kwargs["files"]] == ["top_25.txt"]
 
+    async def test_a_hub_used_after_december_1_still_saves_for_its_own_year(self, interaction, frozen_time):
+        # The nomination deadline is the evening of December 1, after the awards year has turned over
+        frozen_time("2026-12-02 03:00:00")
+
+        await _submit_top25(interaction)
+
+        assert [row["user_id"] for row in get_all_top_songs(2026)] == [interaction.user.id]
+        assert get_all_top_songs(2027) == []
+        assert interaction.sent[0].embed.title == "🎵 2026 Top 25 Submitted!"
+
     async def test_resubmitting_replaces_the_earlier_list(self, interaction):
         await _submit_top25(interaction)
         interaction.sent.clear()
 
         await _submit_top25(interaction, TWENTY_FIVE.replace("Song 1\n", "Different\n", 1))
 
-        assert len(get_all_top_songs()) == 1
+        assert len(get_all_top_songs(2026)) == 1
 
     async def test_a_failed_save_hands_both_lists_back(self, interaction, execute):
         execute(Database.TOP_SONGS, "DROP TABLE eoy_top_songs")
@@ -132,20 +142,22 @@ class TestHoFModal:
 
         await modal.on_submit(interaction)
 
-        assert get_hof_nomination(interaction.user.id) == "BTS, Girls' Generation"
+        assert get_hof_nomination(2026, interaction.user.id) == "BTS, Girls' Generation"
         [reply] = interaction.sent
         assert reply.ephemeral
         assert reply.embed.title == "🏛️ HallyU Hall of Fame Nominations Submitted!"
         assert "**2026 HallyU Hall of Fame**" in reply.embed.description
 
-    async def test_a_december_nomination_is_confirmed_for_next_year(self, interaction, frozen_time):
-        frozen_time("2026-12-05 12:00:00")
-        modal = HoFModal(2027)
+    async def test_a_nomination_made_in_december_is_for_the_hubs_year(self, interaction, frozen_time):
+        frozen_time("2026-12-02 03:00:00")
+        modal = HoFModal(2026)
         fill(modal.hof_text, "IU")
 
         await modal.on_submit(interaction)
 
-        assert "**2027 HallyU Hall of Fame**" in interaction.sent[0].embed.description
+        assert get_hof_nomination(2026, interaction.user.id) == "IU"
+        assert get_hof_nomination(2027, interaction.user.id) is None
+        assert "**2026 HallyU Hall of Fame**" in interaction.sent[0].embed.description
 
     async def test_a_failed_save_hands_the_text_back(self, interaction, execute):
         execute(Database.HALL_OF_FAME, "DROP TABLE hall_of_fame_nominations")
@@ -194,16 +206,27 @@ class TestButtons:
         assert (modal.year, modal.top_25.default, modal.hms.default) == (2026, None, None)
 
     async def test_the_top_25_button_prefills_an_earlier_submission(self, interaction):
-        save_top_songs(interaction.user.id, "jo", "raw25", "c", "", "rawhm", "c", "")
+        save_top_songs(2026, interaction.user.id, "jo", "raw25", "c", "", "rawhm", "c", "")
 
         await Top25Button(2026).callback(interaction)
 
         modal = interaction.response.send_modal.await_args.args[0]
         assert (modal.top_25.default, modal.hms.default) == ("raw25", "rawhm")
-        assert get_user_top_songs(interaction.user.id)
+        assert get_user_top_songs(2026, interaction.user.id)
+
+    async def test_a_button_only_prefills_a_submission_from_its_own_year(self, interaction, frozen_time):
+        save_top_songs(2025, interaction.user.id, "jo", "last year", "c", "", "rawhm", "c", "")
+        save_hof_nomination(2025, interaction.user.id, "jo", "BTS")
+        frozen_time("2026-12-01 12:00:00")
+
+        await Top25Button(2026).callback(interaction)
+        await HallOfFameNominationButton(2026).callback(interaction)
+
+        top_25_form, hof_form = [call.args[0] for call in interaction.response.send_modal.await_args_list]
+        assert (top_25_form.top_25.default, hof_form.hof_text.default) == (None, None)
 
     async def test_the_hall_of_fame_button_prefills_an_earlier_nomination(self, interaction):
-        save_hof_nomination(interaction.user.id, "jo", "BTS")
+        save_hof_nomination(2026, interaction.user.id, "jo", "BTS")
 
         await HallOfFameNominationButton(2026).callback(interaction)
 

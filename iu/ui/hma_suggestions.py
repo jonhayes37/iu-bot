@@ -51,6 +51,7 @@ class HMACategorySuggestionModal(SafeModal):
             return
 
         save_category_suggestion(
+            self.year,
             interaction.user.id,
             interaction.user.display_name,
             val_new,
@@ -83,7 +84,7 @@ class HMASuggestButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
-        existing_data = get_user_category_suggestion(interaction.user.id)
+        existing_data = get_user_category_suggestion(self.year, interaction.user.id)
         await interaction.response.send_modal(HMACategorySuggestionModal(self.year, existing_data))
 
 

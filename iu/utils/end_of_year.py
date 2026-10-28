@@ -16,6 +16,11 @@ def award_year_for(moment: datetime) -> int:
     return local.year + 1 if local.month == 12 else local.year
 
 
-def get_current_award_year() -> int:
-    """The awards year it is now."""
-    return award_year_for(datetime.now(AWARDS_TIME_ZONE))
+def get_festivities_year() -> int:
+    """
+    The awards year whose end of year festivities (category suggestions, nominations, voting and the
+    videos) are running now. They run in November and December, after that year's window closes on
+    November 30, so in December this is the year that just ended rather than the one that has begun:
+    the calendar year in Toronto.
+    """
+    return datetime.now(AWARDS_TIME_ZONE).year

@@ -5,7 +5,7 @@ from db.top_songs import get_all_top_songs
 from db.hall_of_fame import get_all_hof_nominations
 from ui.eoy_nominations import EOYNominationsHub
 from ui.eoy_voting import EOYVotingHub
-from utils.end_of_year import get_current_award_year
+from utils.end_of_year import get_festivities_year
 from utils.validation import admin_only
 
 
@@ -15,7 +15,7 @@ from utils.validation import admin_only
 async def end_of_year_nominations(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
-    year = get_current_award_year()
+    year = get_festivities_year()
 
     embed = discord.Embed(
         title=f"{year} End of Year Nominations!",
@@ -39,9 +39,9 @@ async def end_of_year_nominations(interaction: discord.Interaction):
 async def export_eoy_nominations(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
-    year = get_current_award_year()
-    top_songs_data = get_all_top_songs()
-    hof_data = get_all_hof_nominations()
+    year = get_festivities_year()
+    top_songs_data = get_all_top_songs(year)
+    hof_data = get_all_hof_nominations(year)
 
     if not top_songs_data and not hof_data:
         await interaction.followup.send(f"No End of Year submissions found for {year} yet!")
@@ -106,7 +106,7 @@ async def export_eoy_nominations(interaction: discord.Interaction):
 async def end_of_year_voting(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
-    year = get_current_award_year()
+    year = get_festivities_year()
     embed = discord.Embed(
         title=f"{year} End of Year Voting is Live!",
         description=(

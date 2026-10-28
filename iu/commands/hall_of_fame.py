@@ -1,6 +1,7 @@
 """Commands for the hall of fame"""
 import discord
 from db.hall_of_fame import set_hof_final_nominees
+from utils.end_of_year import get_festivities_year
 from utils.validation import admin_only, ballot_nominees_problem
 
 @discord.app_commands.command(name='hall-of-fame-set-nominees',
@@ -23,7 +24,8 @@ async def hall_of_fame_set_nominees(interaction: discord.Interaction, nominees_p
         await interaction.followup.send(problem)
         return
 
-    year = set_hof_final_nominees(nominees)
+    year = get_festivities_year()
+    set_hof_final_nominees(year, nominees)
     formatted_list = "\n".join([f"• {name}" for name in nominees])
     await interaction.followup.send(
         f"✅ **Saved {len(nominees)} Hall of Fame nominees for {year}!**\n\n{formatted_list}"

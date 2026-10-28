@@ -31,7 +31,7 @@ class HallOfFameVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
-        nominees = get_official_hof_nominees()
+        nominees = get_official_hof_nominees(self.year)
 
         if not nominees or len(nominees) < 3:
             await interaction.response.send_message(
@@ -40,7 +40,7 @@ class HallOfFameVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r
             )
             return
 
-        existing_vote = get_user_hof_vote(interaction.user.id)
+        existing_vote = get_user_hof_vote(self.year, interaction.user.id)
         view = HoFVotingView(self.year, nominees, existing_vote)
 
         msg = f"**{self.year} HallyU Hall of Fame Ballot**\nSelect your top 3 choices below:"
@@ -142,7 +142,7 @@ class HoFVotingView(SafeView):
             return
 
         # Save to database
-        save_hof_vote(interaction.user.id, v1, v2, v3)
+        save_hof_vote(self.year, interaction.user.id, v1, v2, v3)
         embed = discord.Embed(
             title=f"🏛️ {self.year} Hall of Fame Ballot Secured!",
             description="Your ranked votes have been successfully recorded.",
@@ -208,7 +208,7 @@ class HMABallotView(SafeView):
             return
 
         # Save the vote and immediately return them to the category selector!
-        save_hma_vote(interaction.user.id, self.category_id, v1, v2, v3)
+        save_hma_vote(self.year, interaction.user.id, self.category_id, v1, v2, v3)
         view = HMACategorySelectView(self.year, self.user_id)
         msg = f"✅ Saved vote for **{self.category_name}**!\n\n**HallyU Music Awards Ballot**\n" \
             "Select your next category:"
@@ -233,7 +233,7 @@ class HMACategoryDropdown(discord.ui.Select):
         category_id = self.values[0]
         category_name = next(opt.label for opt in self.options if opt.value == category_id)
 
-        nominees = get_hma_final_nominees(category_id)
+        nominees = get_hma_final_nominees(self.year, category_id)
         if not nominees or len(nominees) < 3:
             await interaction.response.send_message(
                 f"❌ Final nominees for **{category_name}** are not available yet!",
@@ -241,7 +241,7 @@ class HMACategoryDropdown(discord.ui.Select):
             )
             return
 
-        user_votes = get_user_hma_votes(self.user_id)
+        user_votes = get_user_hma_votes(self.year, self.user_id)
         existing_vote = user_votes.get(category_id)
 
         # Transition to the actual voting ballot for this category
@@ -257,7 +257,7 @@ class HMACategorySelectView(SafeView):
         self.user_id = user_id
 
         categories = get_all_hma_categories()
-        user_votes = get_user_hma_votes(user_id)
+        user_votes = get_user_hma_votes(year, user_id)
 
         unvoted_opts = []
         voted_opts = []

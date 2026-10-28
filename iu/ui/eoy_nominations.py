@@ -75,7 +75,7 @@ class Top25Modal(SafeModal):
         username = interaction.user.display_name
 
         save_top_songs(
-            user_id, username,
+            self.year, user_id, username,
             raw_t25, clean_t25, urls_t25,
             raw_hms, clean_hms, urls_hms
         )
@@ -113,14 +113,15 @@ class HoFModal(SafeModal):
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
-        award_year = save_hof_nomination(
+        save_hof_nomination(
+            self.year,
             interaction.user.id,
             interaction.user.display_name,
             self.hof_text.value
         )
         embed = discord.Embed(
             title="🏛️ HallyU Hall of Fame Nominations Submitted!",
-            description=f"Your nominees for the **{award_year} HallyU Hall of Fame** have been recorded.\n\n"
+            description=f"Your nominees for the **{self.year} HallyU Hall of Fame** have been recorded.\n\n"
                         "Need to make a change? Just click the button again to edit your submission!",
             color=discord.Color.gold()
         )
@@ -146,7 +147,7 @@ class Top25Button(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_top2
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
-        existing_data = get_user_top_songs(interaction.user.id)
+        existing_data = get_user_top_songs(self.year, interaction.user.id)
         t25_text = existing_data['top_25_raw'] if existing_data else None
         hms_text = existing_data['hms_raw'] if existing_data else None
         await interaction.response.send_modal(
@@ -169,7 +170,7 @@ class HallOfFameNominationButton(discord.ui.DynamicItem[discord.ui.Button], temp
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
-        existing_text = get_hof_nomination(interaction.user.id)
+        existing_text = get_hof_nomination(self.year, interaction.user.id)
         # Pass the year into the Modal
         await interaction.response.send_modal(HoFModal(year=self.year, existing_text=existing_text))
 

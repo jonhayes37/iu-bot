@@ -8,10 +8,11 @@ from services.youtube import contains_youtube_url
 class MultiNominationView(SafeView):
     """View for multi-select for nominations"""
 
-    def __init__(self, nominee: str):
+    def __init__(self, year: int, nominee: str):
         # No timeout: an expired menu would make Submit show "This interaction failed" and lose the
         # choices (see eoy_voting.BALLOT_TIMEOUT)
         super().__init__(timeout=None)
+        self.year = year
         self.nominee = nominee
 
         # Build options for Daesangs
@@ -96,14 +97,14 @@ class MultiNominationView(SafeView):
                 return
 
         # Process the nominations
-        award_year = add_nominations(interaction.user.id, selected_ids, self.nominee)
+        add_nominations(self.year, interaction.user.id, selected_ids, self.nominee)
 
         # Format the confirmation message
         formatted_categories = "\n".join([f"• {name}" for name in selected_names])
 
         embed = discord.Embed(
             title="🏆 Nominations Submitted!",
-            description=f"Your ballots for the **{award_year} HallyU Music Awards** have been securely recorded.",
+            description=f"Your ballots for the **{self.year} HallyU Music Awards** have been securely recorded.",
             color=discord.Color.gold()
         )
         embed.add_field(name="Nominee", value=f"**{self.nominee}**", inline=False)

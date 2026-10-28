@@ -34,12 +34,12 @@ class TestNominationsHub:
         assert isinstance(hub.kwargs["view"], EOYNominationsHub)
         assert button_labels(hub.kwargs["view"]) == ["Submit 2026 Top 25 Songs", "2026 HallyU Hall of Fame"]
 
-    async def test_in_december_it_is_for_next_year(self, admin_interaction, frozen_time):
+    async def test_in_december_it_is_still_for_the_year_being_celebrated(self, admin_interaction, frozen_time):
         frozen_time("2026-12-02 12:00:00")
 
         await end_of_year_nominations.callback(admin_interaction)
 
-        assert admin_interaction.channel.sent[0].embed.title == "2027 End of Year Nominations!"
+        assert admin_interaction.channel.sent[0].embed.title == "2026 End of Year Nominations!"
 
     async def test_the_admin_is_told_privately_that_it_worked(self, admin_interaction):
         await end_of_year_nominations.callback(admin_interaction)
@@ -60,9 +60,9 @@ class TestExport:
         assert "files" not in reply.kwargs
 
     async def test_attaches_a_file_each_for_top_25s_mentions_and_the_hall_of_fame(self, admin_interaction):
-        save_top_songs(1, "Jo", "raw", "1. A // a\n2. B // b", "", "raw", "1. X // x", "")
-        save_top_songs(2, "Sam", "raw", "1. C // c", "", "", "", "")
-        save_hof_nomination(1, "Jo", "BTS, Girls' Generation")
+        save_top_songs(2026, 1, "Jo", "raw", "1. A // a\n2. B // b", "", "raw", "1. X // x", "")
+        save_top_songs(2026, 2, "Sam", "raw", "1. C // c", "", "", "", "")
+        save_hof_nomination(2026, 1, "Jo", "BTS, Girls' Generation")
 
         await export_eoy_nominations.callback(admin_interaction)
 
@@ -74,7 +74,7 @@ class TestExport:
         assert files["hall_of_fame_2026.txt"] == "--- Jo ---\nBTS, Girls' Generation\n\n"
 
     async def test_a_file_is_only_attached_when_it_has_content(self, admin_interaction):
-        save_hof_nomination(1, "Jo", "BTS")
+        save_hof_nomination(2026, 1, "Jo", "BTS")
 
         await export_eoy_nominations.callback(admin_interaction)
 
@@ -82,16 +82,25 @@ class TestExport:
         assert admin_interaction.sent[0].content == \
             "✅ Exported **0** Top 25 lists and **1** Hall of Fame ballots for **2026**!"
 
-    async def test_other_years_are_not_exported(self, admin_interaction, frozen_time):
-        save_top_songs(1, "Old", "raw", "1. A // a", "", "", "", "")
-        frozen_time("2027-03-01 12:00:00")
+    async def test_other_years_are_not_exported(self, admin_interaction):
+        save_top_songs(2025, 1, "Old", "raw", "1. A // a", "", "", "", "")
 
         await export_eoy_nominations.callback(admin_interaction)
 
-        assert admin_interaction.sent[0].content == "No End of Year submissions found for 2027 yet!"
+        assert admin_interaction.sent[0].content == "No End of Year submissions found for 2026 yet!"
+
+    async def test_an_export_after_the_december_1_deadline_includes_the_november_submissions(
+            self, admin_interaction, frozen_time):
+        save_top_songs(2026, 1, "Jo", "raw", "1. A // a", "", "", "", "")
+        frozen_time("2026-12-02 12:00:00")
+
+        await export_eoy_nominations.callback(admin_interaction)
+
+        assert admin_interaction.sent[0].content == \
+            "✅ Exported **1** Top 25 lists and **0** Hall of Fame ballots for **2026**!"
 
     async def test_the_reply_is_private(self, admin_interaction):
-        save_hof_nomination(1, "Jo", "BTS")
+        save_hof_nomination(2026, 1, "Jo", "BTS")
 
         await export_eoy_nominations.callback(admin_interaction)
 
@@ -111,3 +120,12 @@ class TestVotingHub:
         assert "🥇 1st Choice = 3 Points" in description and "🥉 3rd Choice = 1 Point" in description
         assert isinstance(hub.kwargs["view"], EOYVotingHub)
         assert admin_interaction.sent[0].content == "End of Year Voting posted successfully!"
+
+    async def test_voting_opened_in_december_is_for_the_year_being_celebrated(self, admin_interaction, frozen_time):
+        frozen_time("2026-12-02 12:00:00")
+
+        await end_of_year_voting.callback(admin_interaction)
+
+        [hub] = admin_interaction.channel.sent
+        assert hub.embed.title == "2026 End of Year Voting is Live!"
+        assert button_labels(hub.kwargs["view"]) == ["2026 HallyU Hall of Fame", "2026 HallyU Music Awards"]

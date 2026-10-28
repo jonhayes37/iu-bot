@@ -31,7 +31,14 @@ class TestNomination:
         assert reply.content == "Nominating **IVE - HEYA**\nSelect all award categories below:"
         assert reply.ephemeral
         assert isinstance(reply.kwargs["view"], MultiNominationView)
-        assert reply.kwargs["view"].nominee == "IVE - HEYA"
+        assert (reply.kwargs["view"].year, reply.kwargs["view"].nominee) == (2026, "IVE - HEYA")
+
+    async def test_a_nomination_on_december_1_is_for_the_year_being_celebrated(self, interaction, frozen_time):
+        frozen_time("2026-12-01 23:00:00")
+
+        await hma_nomination.callback(interaction, "IVE - HEYA")
+
+        assert interaction.sent[0].kwargs["view"].year == 2026
 
     def test_the_nominee_text_is_limited_in_length(self):
         nominee = next(p for p in hma_nomination.parameters if p.name == "nominee")
@@ -44,7 +51,7 @@ class TestNominationExport:
 
     async def test_it_answers_privately_before_uploading_the_file(self, admin_interaction):
         # The upload can take longer than the 3 seconds Discord allows for a first response
-        add_nominations(11, ["soty"], "IVE - HEYA")
+        add_nominations(2026, 11, ["soty"], "IVE - HEYA")
         order = []
         admin_interaction.response.defer.side_effect = lambda *a, **k: order.append(("defer", k))
         admin_interaction.followup.send.side_effect = lambda *a, **k: order.append(("upload", {}))
@@ -61,8 +68,8 @@ class TestNominationExport:
         assert (reply.content, reply.ephemeral) == ("No nominations found for the 2026 awards yet.", True)
 
     async def test_attaches_the_nominations_grouped_by_family_and_category(self, admin_interaction):
-        add_nominations(11, ["soty", "best_gg"], "IVE - HEYA")
-        add_nominations(22, ["soty"], "aespa - Supernova")
+        add_nominations(2026, 11, ["soty", "best_gg"], "IVE - HEYA")
+        add_nominations(2026, 22, ["soty"], "aespa - Supernova")
 
         await hma_nomination_export.callback(admin_interaction)
 
@@ -79,10 +86,18 @@ class TestNominationExport:
         assert "### Best Girl Group ###\n- IVE - HEYA (Submitted by ID: 11)" in text
 
     async def test_another_year_can_be_asked_for(self, admin_interaction, frozen_time):
-        add_nominations(11, ["soty"], "Last year's pick")
+        add_nominations(2026, 11, ["soty"], "Last year's pick")
         frozen_time("2027-03-01 12:00:00")
 
         await hma_nomination_export.callback(admin_interaction, 2026)
+
+        assert admin_interaction.sent[0].kwargs["file"].filename == "2026_hma_nominations.txt"
+
+    async def test_in_december_it_exports_the_year_being_celebrated(self, admin_interaction, frozen_time):
+        add_nominations(2026, 11, ["soty"], "IVE - HEYA")
+        frozen_time("2026-12-02 12:00:00")
+
+        await hma_nomination_export.callback(admin_interaction)
 
         assert admin_interaction.sent[0].kwargs["file"].filename == "2026_hma_nominations.txt"
 
@@ -99,7 +114,7 @@ class TestSetNominees:
         await hma_set_nominees.callback(admin_interaction, "soty",
                                         "IVE - HEYA | aespa - Supernova | IU - Love wins all ")
 
-        assert get_hma_final_nominees("soty") == ["IU - Love wins all", "IVE - HEYA", "aespa - Supernova"]
+        assert get_hma_final_nominees(2026, "soty") == ["IU - Love wins all", "IVE - HEYA", "aespa - Supernova"]
         assert admin_interaction.sent[0].content == (
             "✅ **Saved 3 nominees for `soty` (2026)!**\n\n• IVE - HEYA\n• aespa - Supernova\n• IU - Love wins all")
 
@@ -115,20 +130,20 @@ class TestSetNominees:
         await hma_set_nominees.callback(admin_interaction, "soty", many)
 
         assert "a voting menu holds at most 25" in admin_interaction.sent[0].content
-        assert get_hma_final_nominees("soty") == []
+        assert get_hma_final_nominees(2026, "soty") == []
 
     async def test_exactly_the_most_a_menu_holds_is_fine(self, admin_interaction):
         many = " | ".join(f"Act {i}" for i in range(MAX_BALLOT_NOMINEES))
 
         await hma_set_nominees.callback(admin_interaction, "soty", many)
 
-        assert len(get_hma_final_nominees("soty")) == 25
+        assert len(get_hma_final_nominees(2026, "soty")) == 25
 
     async def test_fewer_than_a_ballot_ranks_are_refused(self, admin_interaction):
         await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa")
 
         assert admin_interaction.sent[0].content.startswith("❌ You gave 2 nominees, but voters rank their top 3")
-        assert get_hma_final_nominees("soty") == []
+        assert get_hma_final_nominees(2026, "soty") == []
 
     async def test_a_nominee_longer_than_a_menu_shows_is_refused(self, admin_interaction):
         long_name = "x" * (MAX_BALLOT_NOMINEE_LENGTH + 1)
@@ -136,7 +151,7 @@ class TestSetNominees:
         await hma_set_nominees.callback(admin_interaction, "soty", f"IVE | aespa | {long_name}")
 
         assert "at most 100 characters per nominee" in admin_interaction.sent[0].content
-        assert get_hma_final_nominees("soty") == []
+        assert get_hma_final_nominees(2026, "soty") == []
 
     async def test_the_same_nominee_twice_is_refused(self, admin_interaction):
         await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa | IVE")
@@ -144,17 +159,25 @@ class TestSetNominees:
         assert admin_interaction.sent[0].content == "❌ The list has the same nominee more than once."
 
     async def test_an_unknown_category_is_refused_and_nothing_changes(self, admin_interaction):
-        set_final_nominees("soty", ["Old"])
+        set_final_nominees(2026, "soty", ["Old"])
 
         await hma_set_nominees.callback(admin_interaction, "not_a_category", "IVE | aespa | IU")
 
         assert admin_interaction.sent[0].content.startswith("❌ There is no category called `not_a_category`.")
-        assert get_hma_final_nominees("soty") == ["Old"]
+        assert get_hma_final_nominees(2026, "soty") == ["Old"]
 
     async def test_the_reply_is_private(self, admin_interaction):
         await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa | IU")
 
         admin_interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+
+    async def test_in_december_the_finalists_are_for_the_year_being_celebrated(self, admin_interaction, frozen_time):
+        frozen_time("2026-12-03 12:00:00")
+
+        await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa | IU")
+
+        assert get_hma_final_nominees(2026, "soty") == ["IU", "IVE", "aespa"]
+        assert "(2026)" in admin_interaction.sent[0].content
 
 
 class TestSuggestionsHub:
@@ -197,9 +220,10 @@ class TestSuggestionsExport:
         assert admin_interaction.sent[0].content == "No suggestions have been submitted yet."
 
     async def test_attaches_each_members_suggestions(self, admin_interaction):
-        save_category_suggestion(1, "Jo", "Best Fancam", "Best Band")
-        save_category_suggestion(2, "Sam", "Best Cover", "")
-        save_category_suggestion(3, "Kit", "", "Best OST")
+        save_category_suggestion(2026, 1, "Jo", "Best Fancam", "Best Band")
+        save_category_suggestion(2026, 2, "Sam", "Best Cover", "")
+        save_category_suggestion(2026, 3, "Kit", "", "Best OST")
+        save_category_suggestion(2025, 4, "Old", "Last year's idea", "")
 
         await hma_suggestions_export.callback(admin_interaction)
 
@@ -212,3 +236,4 @@ class TestSuggestionsExport:
         assert "--- Jo ---\nADD:\nBest Fancam\n\nDROP/MERGE:\nBest Band\n" in text
         assert "--- Sam ---\nADD:\nBest Cover\n\n" in text and "DROP/MERGE:\nBest Cover" not in text
         assert "--- Kit ---\nDROP/MERGE:\nBest OST\n" in text and "ADD:\n\n" not in text
+        assert "--- Old ---" not in text
