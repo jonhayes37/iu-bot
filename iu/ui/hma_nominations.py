@@ -2,6 +2,7 @@
 
 import discord
 from ui.base import SafeView
+from ui.end_of_year import refuse_if_closed
 from db.hmas import add_nominations, get_family_choices
 from services.youtube import contains_youtube_url
 
@@ -95,6 +96,9 @@ class MultiNominationView(SafeView):
                     ephemeral=True
                 )
                 return
+
+        if await refuse_if_closed(interaction, self.year):
+            return
 
         # Process the nominations
         add_nominations(self.year, interaction.user.id, selected_ids, self.nominee)

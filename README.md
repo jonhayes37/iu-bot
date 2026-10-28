@@ -214,6 +214,9 @@ December 1, voting, exports) still count for that year: everything posted or run
   of the Year), **Bonsang** (best groups, soloists, choreography, covers and more) and **Fun**
   awards. Nominations for the Best Dance Cover and Best Vocal Cover categories must include a YouTube link.
 - **Category suggestions.** Admins can open a button for members to suggest categories to add or drop.
+  Admins then change the category list with `/add-hma-category` and `/remove-hma-category`. A removed
+  category disappears from nominations, the ballot and the results, but its data is kept, and adding it
+  again with the same ID brings it back. Each family holds at most 25 categories (one menu).
 
 ### Phase 2: Voting
 
@@ -225,6 +228,15 @@ ranked: 1st choice is worth 3 points, 2nd choice 2, and 3rd choice 1.
   vote are marked with a clock, and finished ones with a tick. A category needs at least 3
   finalists before it can be voted on.
 
+### Phase 3: Closing and results
+
+Once final voting is over, `/end-of-year-close` closes the year: every end of year post's buttons are
+greyed out, and any button, form, ballot or `/hma-nomination` still open for that year refuses. It
+can't be undone from Discord. `/end-of-year-results` then exports the top 5 of the Hall of Fame and
+every HMA category. Ties on points go to the nominee with the most 1st choices, then 2nd, then 3rd;
+nominees level on every count share a place (marked `T`), and a full tie for 1st is flagged at the
+top of the file for a tiebreaker.
+
 | Command | Who | Description |
 | --- | --- | --- |
 | `/hma-nomination nominee` | Everyone | Nominate someone or something for one or more HMA categories |
@@ -233,9 +245,13 @@ ranked: 1st choice is worth 3 points, 2nd choice 2, and 3rd choice 1.
 | `/export-end-of-year-nominations` | Admin | Exports the Top 25 lists, honourable mentions and Hall of Fame nominations |
 | `/hma-nomination-export [year]` | Admin | Exports the HMA nominations, grouped by category |
 | `/hma-suggestions-export` | Admin | Exports the category suggestions |
-| `/hma-set-nominees category_id nominees_pipe` | Admin | Sets the finalists for an HMA category (separated by `\|`): 3 to 25, each up to 100 characters, so the ballot menus can show them |
+| `/hma-set-nominees category_id nominees_pipe` | Admin | Sets the finalists for an active HMA category (the category is suggested as you type) (separated by `\|`): 3 to 25, each up to 100 characters, so the ballot menus can show them |
 | `/hall-of-fame-set-nominees nominees_pipe` | Admin | Sets the Hall of Fame finalists (separated by `\|`): 3 to 25, each up to 100 characters |
+| `/add-hma-category category_id family name` | Admin | Adds an HMA category (or restores a removed one with that ID). The ID is lowercase letters, numbers and `_`; the name is up to 100 characters |
+| `/remove-hma-category category_id` | Admin | Removes an HMA category from nominations, the ballot and the results, keeping its data |
 | `/end-of-year-voting` | Admin | Posts the voting buttons |
+| `/end-of-year-close` | Admin | Closes the year's festivities and greys out the buttons on its suggestions, nominations and voting posts |
+| `/end-of-year-results [year]` | Admin | Exports the top 5 in the Hall of Fame and every HMA category, with tiebreaks applied and full ties for 1st flagged |
 
 ## Bias cards
 

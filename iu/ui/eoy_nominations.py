@@ -3,6 +3,7 @@ import logging
 
 import discord
 from ui.base import SafeModal, report_interaction_error, reports_errors
+from ui.end_of_year import refuse_if_closed
 from db.hall_of_fame import save_hof_nomination, get_hof_nomination
 from db.top_songs import save_top_songs, get_user_top_songs
 from utils.discord_files import text_file
@@ -41,6 +42,9 @@ class Top25Modal(SafeModal):
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         raw_t25 = self.top_25.value
         raw_hms = self.hms.value
 
@@ -113,6 +117,9 @@ class HoFModal(SafeModal):
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         save_hof_nomination(
             self.year,
             interaction.user.id,
@@ -147,6 +154,9 @@ class Top25Button(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_top2
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         existing_data = get_user_top_songs(self.year, interaction.user.id)
         t25_text = existing_data['top_25_raw'] if existing_data else None
         hms_text = existing_data['hms_raw'] if existing_data else None
@@ -170,6 +180,9 @@ class HallOfFameNominationButton(discord.ui.DynamicItem[discord.ui.Button], temp
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         existing_text = get_hof_nomination(self.year, interaction.user.id)
         # Pass the year into the Modal
         await interaction.response.send_modal(HoFModal(year=self.year, existing_text=existing_text))
@@ -179,9 +192,11 @@ class EOYNominationsHub(discord.ui.View):
     """
     The end of year nominations message. Its buttons are dynamic items (registered once when the bot
     starts) that read the year from their own ID, so hubs from any year keep working across restarts.
+    `closed` greys the buttons out, for /end-of-year-close.
     """
 
-    def __init__(self, year: int):
+    def __init__(self, year: int, closed: bool = False):
         super().__init__(timeout=None)
-        self.add_item(Top25Button(year))
-        self.add_item(HallOfFameNominationButton(year))
+        for button in (Top25Button(year), HallOfFameNominationButton(year)):
+            button.item.disabled = closed
+            self.add_item(button)

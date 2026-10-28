@@ -1,11 +1,15 @@
 """Commands for the HMA nominations"""
 import io
+import re
 import discord
+from db.bot import EndOfYearPostKind
 from db.hmas import (
-    get_yearly_export_data,
+    AddCategoryResult, MAX_CATEGORIES_PER_FAMILY, RemoveCategoryResult,
+    add_category, get_active_hma_categories, get_yearly_export_data, remove_category,
     set_final_nominees, get_all_category_suggestions,
     get_current_categories_by_family
 )
+from ui.end_of_year import post_hub, refuse_if_closed
 from ui.hma_nominations import MultiNominationView
 from ui.hma_suggestions import HMASuggestionsHub
 from utils.end_of_year import get_festivities_year
@@ -13,6 +17,26 @@ from utils.validation import admin_only, ballot_nominees_problem
 
 # Long enough for a song title, artist and a YouTube link; the nominee is echoed in messages and embed fields
 MAX_NOMINEE_LENGTH = 300
+
+# Category IDs are typed in commands and stored as menu values: short, lowercase, no spaces
+CATEGORY_ID_PATTERN = re.compile(r"[a-z0-9_]{1,30}")
+# What a Discord menu option shows
+MAX_CATEGORY_NAME_LENGTH = 100
+
+FAMILY_CHOICES = [
+    discord.app_commands.Choice(name="Daesang", value="daesang"),
+    discord.app_commands.Choice(name="Bonsang", value="bonsang"),
+    discord.app_commands.Choice(name="Fun", value="fun"),
+]
+
+
+async def active_category_autocomplete(_: discord.Interaction, current: str):
+    """Suggests the active categories whose ID or name contains what the admin has typed."""
+    typed = current.casefold()
+    matches = [c for c in get_active_hma_categories()
+               if typed in c['category_id'].casefold() or typed in c['name'].casefold()]
+    return [discord.app_commands.Choice(name=f"{c['name']} ({c['category_id']})"[:100], value=c['category_id'])
+            for c in matches[:25]]
 
 
 @discord.app_commands.command(name='hma-nomination', description="Submit a nomination for the HallyU Music Awards!")
@@ -22,8 +46,11 @@ MAX_NOMINEE_LENGTH = 300
 async def hma_nomination(interaction: discord.Interaction,
                          nominee: discord.app_commands.Range[str, 1, MAX_NOMINEE_LENGTH]):
     """The Discord command logic for multi-category HMA nominations."""
+    year = get_festivities_year()
+    if await refuse_if_closed(interaction, year):
+        return
 
-    view = MultiNominationView(get_festivities_year(), nominee)
+    view = MultiNominationView(year, nominee)
     msg = f"Nominating **{nominee}**\nSelect all award categories below:"
     await interaction.response.send_message(content=msg, view=view, ephemeral=True)
 
@@ -78,9 +105,10 @@ async def hma_nomination_export(interaction: discord.Interaction, year: int = No
 
 @discord.app_commands.command(name='hma-set-nominees', description="[Admin] Set the nominees for an award category.")
 @discord.app_commands.describe(
-    category_id="The ID of the category (e.g., 'soty')",
+    category_id="The category (start typing its name or ID, e.g. 'soty')",
     nominees_pipe="Pipe-separated list of nominees (e.g., 'IVE - HEYA | aespa - Supernova')"
 )
+@discord.app_commands.autocomplete(category_id=active_category_autocomplete)
 @admin_only
 async def hma_set_nominees(interaction: discord.Interaction, category_id: str, nominees_pipe: str):
     await interaction.response.defer(ephemeral=True)
@@ -100,8 +128,8 @@ async def hma_set_nominees(interaction: discord.Interaction, category_id: str, n
     year = get_festivities_year()
     if not set_final_nominees(year, category_id, nominees):
         await interaction.followup.send(
-            f"❌ There is no category called `{category_id}`. Category IDs are listed in the "
-            "`hma_categories` table.")
+            f"❌ There is no active category called `{category_id}`. Pick one from the list as you type, "
+            "or add it with `/add-hma-category`.")
         return
 
     # Format the output for a clean visual confirmation
@@ -141,8 +169,60 @@ async def end_of_year_hma_suggestions(interaction: discord.Interaction):
         color=discord.Color.orange()
     )
 
-    await interaction.channel.send(embed=embed, view=HMASuggestionsHub(year))
-    await interaction.followup.send("HMA Category Suggestions posted!")
+    if await post_hub(interaction, year, EndOfYearPostKind.SUGGESTIONS, embed, HMASuggestionsHub(year)):
+        await interaction.followup.send("HMA Category Suggestions posted!")
+
+
+@discord.app_commands.command(name='add-hma-category', description="[Admin] Add an HMA award category.")
+@discord.app_commands.describe(
+    category_id="A short ID: lowercase letters, numbers and _ (e.g. 'best_ost'). Reuse a removed one's to restore it",
+    family="Which group of awards it belongs to",
+    name="The category's name, as members see it (e.g. 'Best OST')"
+)
+@discord.app_commands.choices(family=FAMILY_CHOICES)
+@admin_only
+async def add_hma_category(interaction: discord.Interaction, category_id: str,
+                           family: discord.app_commands.Choice[str],
+                           name: discord.app_commands.Range[str, 1, MAX_CATEGORY_NAME_LENGTH]):
+    category_id = category_id.strip().lower()
+    name = name.strip()
+    if not CATEGORY_ID_PATTERN.fullmatch(category_id):
+        await interaction.response.send_message(
+            "❌ A category ID can only use lowercase letters, numbers and `_`, up to 30 characters "
+            "(for example `best_ost`).", ephemeral=True)
+        return
+
+    result = add_category(category_id, family.value, name)
+    messages = {
+        AddCategoryResult.ADDED: f"✅ Added **{name}** (`{category_id}`) to the {family.name} awards.",
+        AddCategoryResult.RESTORED: f"✅ Brought back `{category_id}` as **{name}** in the {family.name} awards. "
+                                    "Its earlier nominations and votes are back with it.",
+        AddCategoryResult.ALREADY_ACTIVE: f"❌ There is already an active category with the ID `{category_id}`.",
+        AddCategoryResult.NAME_TAKEN: f"❌ There is already an active category called **{name}**.",
+        AddCategoryResult.FAMILY_FULL: f"❌ The {family.name} awards already have {MAX_CATEGORIES_PER_FAMILY} "
+                                       "categories, the most a nomination menu can show. Remove one first.",
+    }
+    text = messages[result]
+    if result in (AddCategoryResult.ADDED, AddCategoryResult.RESTORED):
+        text += ("\nIt now appears in `/hma-nomination` and on the voting ballot. Set its finalists with "
+                 "`/hma-set-nominees` before voting opens.")
+    await interaction.response.send_message(text, ephemeral=True)
+
+
+@discord.app_commands.command(name='remove-hma-category', description="[Admin] Remove an HMA award category.")
+@discord.app_commands.describe(category_id="The category to remove (start typing its name or ID)")
+@discord.app_commands.autocomplete(category_id=active_category_autocomplete)
+@admin_only
+async def remove_hma_category(interaction: discord.Interaction, category_id: str):
+    result = remove_category(category_id)
+    messages = {
+        RemoveCategoryResult.REMOVED: (
+            f"✅ Removed `{category_id}`. It no longer appears in `/hma-nomination`, the voting ballot or the "
+            "results. Its nominations and votes are kept: `/add-hma-category` with the same ID brings it back."),
+        RemoveCategoryResult.ALREADY_REMOVED: f"`{category_id}` was already removed, so nothing changed.",
+        RemoveCategoryResult.NO_SUCH_CATEGORY: f"❌ There is no category called `{category_id}`.",
+    }
+    await interaction.response.send_message(messages[result], ephemeral=True)
 
 @discord.app_commands.command(name='hma-suggestions-export', description="[Admin] Export all HMA category suggestions.")
 @admin_only

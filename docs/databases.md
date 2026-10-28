@@ -22,7 +22,7 @@ example `/mnt/user/appdata/iu-bot`).
 | `hall_of_fame.db` | Hall of Fame nominations, finalists and votes | `hall_of_fame_nominations`, `hof_official_nominees`, `hall_of_fame_votes` |
 | `hmas.db` | HallyU Music Awards categories, nominations, finalists, votes and suggestions | `hma_categories`, `hma_nominations`, `hma_final_nominees`, `hma_votes`, `hma_category_suggestions` |
 | `biases.db` | Members' bias cards | `ultimate_biases`, `artist_biases` |
-| `bot.db` | The saved status message, and which scheduled events have had their reminder thread | `statuses`, `notified_events` |
+| `bot.db` | The saved status message, which scheduled events have had their reminder thread, the end of year posts with buttons and which years are closed | `statuses`, `notified_events`, `end_of_year_posts`, `end_of_year_closed` |
 
 Next to them is `token.json`, the YouTube sign-in ([youtube.md](youtube.md)). Losing the folder loses
 all of this, which is why the [backups](#back-up-and-restore) below matter.
@@ -72,6 +72,7 @@ Only read (`SELECT`) while the bot is running.
 | Release links not yet on the playlist | `releases.db` | `SELECT video_id, original_url FROM new_releases WHERE processed = 0;` |
 | The saved status | `bot.db` | `SELECT * FROM statuses ORDER BY id DESC LIMIT 3;` |
 | Events whose reminder thread was posted (delete a row to have it posted again) | `bot.db` | `SELECT * FROM notified_events ORDER BY notified_at DESC LIMIT 5;` |
+| Closed end of year festivities (delete a year's row to reopen it; its posts stay greyed out) | `bot.db` | `SELECT * FROM end_of_year_closed;` |
 
 Discord user IDs are stored as numbers. In Discord, right-click a member with Developer Mode on and
 choose Copy User ID to look one up.

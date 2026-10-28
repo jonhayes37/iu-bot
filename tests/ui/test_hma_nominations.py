@@ -13,7 +13,7 @@ VIDEO_URL = "https://youtu.be/dQw4w9WgXcQ"
 
 @pytest.fixture(autouse=True)
 def _hmas_database(databases, frozen_time):
-    databases(Database.HMAS)
+    databases(Database.HMAS, Database.BOT)
     frozen_time("2026-10-15 12:00:00")
 
 

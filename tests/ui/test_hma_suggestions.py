@@ -14,7 +14,7 @@ from testsupport.ui import button_labels, fill, match_custom_id
 
 @pytest.fixture(autouse=True)
 def _hmas_database(databases, frozen_time):
-    databases(Database.HMAS)
+    databases(Database.HMAS, Database.BOT)
     frozen_time("2026-10-15 12:00:00")
 
 

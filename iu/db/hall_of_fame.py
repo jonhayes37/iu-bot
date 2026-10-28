@@ -86,3 +86,13 @@ def get_user_hof_vote(award_year: int, user_id: int) -> dict | None:
         """, (user_id, award_year))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+def get_hof_ballots(award_year: int) -> list[tuple[str, str, str]]:
+    """Every (1st, 2nd, 3rd choice) Hall of Fame ballot cast for the year."""
+    with db_connection(Database.HALL_OF_FAME) as conn:
+        rows = conn.execute("""
+            SELECT first_choice, second_choice, third_choice
+            FROM hall_of_fame_votes
+            WHERE award_year = ?
+        """, (award_year,)).fetchall()
+        return [tuple(row) for row in rows]

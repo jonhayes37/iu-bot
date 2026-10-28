@@ -20,7 +20,7 @@ THREE = "IU - Blueming\nIVE - All Night\nBTS - Butter"
 
 @pytest.fixture(autouse=True)
 def _databases(databases, frozen_time):
-    databases(Database.TOP_SONGS, Database.HALL_OF_FAME)
+    databases(Database.TOP_SONGS, Database.HALL_OF_FAME, Database.BOT)
     frozen_time("2026-10-15 12:00:00")
 
 

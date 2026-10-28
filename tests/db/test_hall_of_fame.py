@@ -9,7 +9,7 @@ import pytest
 
 from config import Database
 from db.hall_of_fame import (
-    get_all_hof_nominations, get_hof_nomination, get_official_hof_nominees, get_user_hof_vote,
+    get_all_hof_nominations, get_hof_ballots, get_hof_nomination, get_official_hof_nominees, get_user_hof_vote,
     save_hof_nomination, save_hof_vote, set_hof_final_nominees
 )
 
@@ -129,3 +129,17 @@ class TestVotes:
         save_hof_vote(2025, 1, "IU", "BTS", "EXO")
 
         assert get_user_hof_vote(2026, 1) is None
+
+
+class TestBallots:
+    """get_hof_ballots reads back every ballot for counting."""
+
+    def test_no_votes(self):
+        assert get_hof_ballots(2026) == []
+
+    def test_every_ballot_for_the_year_in_choice_order(self):
+        save_hof_vote(2026, 1, "IU", "BTS", "EXO")
+        save_hof_vote(2026, 2, "BTS", "IU", "EXO")
+        save_hof_vote(2025, 3, "Old", "Older", "Oldest")
+
+        assert sorted(get_hof_ballots(2026)) == [("BTS", "IU", "EXO"), ("IU", "BTS", "EXO")]

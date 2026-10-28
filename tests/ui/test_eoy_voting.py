@@ -7,7 +7,7 @@ import pytest
 
 from config import Database
 from db.hall_of_fame import get_user_hof_vote, save_hof_vote, set_hof_final_nominees
-from db.hmas import get_user_hma_votes, save_hma_vote, set_final_nominees
+from db.hmas import get_user_hma_votes, remove_category, save_hma_vote, set_final_nominees
 from ui.base import DATABASE_ERROR
 from ui.eoy_voting import (
     EOYVotingHub, HallOfFameVoteButton, HMABallotView, HMACategoryDropdown, HMACategorySelectView, HMAVoteButton,
@@ -21,7 +21,7 @@ CATEGORY_LIST_MESSAGE = "**HallyU Music Awards Ballot**\nCategories marked with 
 
 @pytest.fixture(autouse=True)
 def _databases(databases, frozen_time):
-    databases(Database.HMAS, Database.HALL_OF_FAME)
+    databases(Database.HMAS, Database.HALL_OF_FAME, Database.BOT)
     frozen_time("2026-10-15 12:00:00")
 
 
@@ -317,6 +317,14 @@ class TestHMACategorySelectView:
 
         long_option = next(o for d in view.children for o in d.options if o.value == "long")
         assert len(long_option.label) == 95
+
+    async def test_removed_categories_are_not_on_the_ballot(self, interaction):
+        remove_category("best_band")
+
+        view = HMACategorySelectView(2026, interaction.user.id)
+
+        offered = [o.value for d in view.children for o in d.options]
+        assert "best_band" not in offered and "soty" in offered
 
     async def test_votes_from_other_members_do_not_count(self, interaction):
         save_hma_vote(2026, 999, "soty", "A", "B", "C")

@@ -7,8 +7,9 @@ from commands.hmas import (
     hma_nomination_export, hma_set_nominees, hma_suggestions_export
 )
 from config import Database
+from db.bot import EndOfYearPost, EndOfYearPostKind, close_end_of_year, get_end_of_year_posts
 from db.hmas import (
-    add_nominations, get_hma_final_nominees, save_category_suggestion, set_final_nominees
+    add_nominations, get_hma_final_nominees, remove_category, save_category_suggestion, set_final_nominees
 )
 from ui.hma_nominations import MultiNominationView
 from ui.hma_suggestions import HMASuggestionsHub
@@ -17,7 +18,7 @@ from utils.validation import MAX_BALLOT_NOMINEES, MAX_BALLOT_NOMINEE_LENGTH
 
 @pytest.fixture(autouse=True)
 def _hmas_database(databases, frozen_time):
-    databases(Database.HMAS)
+    databases(Database.HMAS, Database.BOT)
     frozen_time("2026-10-15 12:00:00")
 
 
@@ -39,6 +40,15 @@ class TestNomination:
         await hma_nomination.callback(interaction, "IVE - HEYA")
 
         assert interaction.sent[0].kwargs["view"].year == 2026
+
+    async def test_once_the_year_is_closed_nominating_is_refused(self, interaction):
+        close_end_of_year(2026)
+
+        await hma_nomination.callback(interaction, "IVE - HEYA")
+
+        [reply] = interaction.sent
+        assert reply.content.startswith("🔒 The 2026 end of year festivities are closed")
+        assert reply.ephemeral and "view" not in reply.kwargs
 
     def test_the_nominee_text_is_limited_in_length(self):
         nominee = next(p for p in hma_nomination.parameters if p.name == "nominee")
@@ -163,8 +173,16 @@ class TestSetNominees:
 
         await hma_set_nominees.callback(admin_interaction, "not_a_category", "IVE | aespa | IU")
 
-        assert admin_interaction.sent[0].content.startswith("❌ There is no category called `not_a_category`.")
+        assert admin_interaction.sent[0].content.startswith("❌ There is no active category called `not_a_category`.")
         assert get_hma_final_nominees(2026, "soty") == ["Old"]
+
+    async def test_a_removed_category_is_refused(self, admin_interaction):
+        remove_category("soty")
+
+        await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa | IU")
+
+        assert admin_interaction.sent[0].content.startswith("❌ There is no active category called `soty`.")
+        assert get_hma_final_nominees(2026, "soty") == []
 
     async def test_the_reply_is_private(self, admin_interaction):
         await hma_set_nominees.callback(admin_interaction, "soty", "IVE | aespa | IU")
@@ -194,6 +212,21 @@ class TestSuggestionsHub:
         assert "**Daesang**\n • Album of the Year" in description
         assert isinstance(hub.kwargs["view"], HMASuggestionsHub)
         assert admin_interaction.sent[0].content == "HMA Category Suggestions posted!"
+
+    async def test_the_post_is_remembered_so_it_can_be_closed(self, admin_interaction):
+        await end_of_year_hma_suggestions.callback(admin_interaction)
+
+        [post] = get_end_of_year_posts(2026)
+        assert (post.kind, post.channel_id) == (EndOfYearPostKind.SUGGESTIONS, admin_interaction.channel.id)
+        assert isinstance(post, EndOfYearPost)
+
+    async def test_nothing_is_posted_once_the_year_is_closed(self, admin_interaction):
+        close_end_of_year(2026)
+
+        await end_of_year_hma_suggestions.callback(admin_interaction)
+
+        assert admin_interaction.channel.sent == []
+        assert admin_interaction.sent[0].content.startswith("🔒 The 2026 end of year festivities are closed")
 
     async def test_with_no_categories_it_says_so(self, admin_interaction, execute):
         execute(Database.HMAS, "UPDATE hma_categories SET is_active = 0")

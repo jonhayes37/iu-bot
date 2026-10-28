@@ -10,9 +10,11 @@ import pytest
 from config import Database
 from db.initialize import initialize_databases
 from db.hmas import (
-    add_nominations, get_all_category_suggestions, get_all_hma_categories, get_current_categories_by_family,
-    get_family_choices, get_hma_final_nominees, get_user_category_suggestion, get_user_hma_votes,
-    get_yearly_export_data, save_category_suggestion, save_hma_vote, set_final_nominees
+    MAX_CATEGORIES_PER_FAMILY, AddCategoryResult, RemoveCategoryResult,
+    add_category, add_nominations, get_active_hma_categories, get_all_category_suggestions,
+    get_current_categories_by_family, get_family_choices, get_hma_ballots, get_hma_final_nominees,
+    get_user_category_suggestion, get_user_hma_votes, get_yearly_export_data, remove_category,
+    save_category_suggestion, save_hma_vote, set_final_nominees
 )
 
 
@@ -249,13 +251,21 @@ class TestCategorySuggestions:
 
 
 class TestCategoryLists:
-    """The lists of categories shown to admins and in the suggestions post."""
+    """The lists of categories shown to admins, on the ballot and in the suggestions post."""
 
-    def test_all_categories_are_sorted_by_name(self):
-        categories = get_all_hma_categories()
+    def test_active_categories_come_daesangs_first_then_by_name(self):
+        categories = get_active_hma_categories()
 
-        assert [c["name"] for c in categories] == sorted(c["name"] for c in categories)
-        assert {"category_id": "soty", "name": "Song of the Year"} in categories
+        families = [c["family"] for c in categories]
+        assert families == sorted(families, key=["Daesang", "Bonsang", "Fun"].index)
+        daesangs = [c["name"] for c in categories if c["family"] == "Daesang"]
+        assert daesangs == sorted(daesangs)
+        assert {"category_id": "soty", "name": "Song of the Year", "family": "Daesang"} in categories
+
+    def test_removed_categories_are_not_active(self):
+        remove_category("soty")
+
+        assert "soty" not in [c["category_id"] for c in get_active_hma_categories()]
 
     def test_current_categories_are_grouped_by_family_name(self):
         grouped = get_current_categories_by_family()
@@ -268,4 +278,109 @@ class TestCategoryLists:
         execute(Database.HMAS, "UPDATE hma_categories SET is_active = 0 WHERE category_id = 'soty'")
 
         assert "Song of the Year" not in get_current_categories_by_family()["Daesang"]
-        assert {"category_id": "soty", "name": "Song of the Year"} in get_all_hma_categories()
+
+
+class TestAddCategory:
+    """Admins add categories, or bring back removed ones."""
+
+    def test_a_new_category_is_added_active(self, query):
+        assert add_category("best_fancam", "fun", "Best Fancam") is AddCategoryResult.ADDED
+
+        [row] = query(Database.HMAS, "SELECT * FROM hma_categories WHERE category_id = 'best_fancam'")
+        assert (row["family_id"], row["name"], row["is_active"]) == ("fun", "Best Fancam", 1)
+        assert ("best_fancam", "Best Fancam") in get_family_choices("fun")
+
+    def test_a_removed_category_is_restored_with_the_new_name_and_family(self, query):
+        remove_category("best_band")
+
+        assert add_category("best_band", "fun", "Best Band (Fun)") is AddCategoryResult.RESTORED
+
+        [row] = query(Database.HMAS, "SELECT * FROM hma_categories WHERE category_id = 'best_band'")
+        assert (row["family_id"], row["name"], row["is_active"]) == ("fun", "Best Band (Fun)", 1)
+
+    def test_restoring_brings_back_the_earlier_nominations(self):
+        add_nominations(2026, 1, ["best_band"], "DAY6")
+        remove_category("best_band")
+
+        add_category("best_band", "bonsang", "Best Band")
+
+        assert get_yearly_export_data(2026)["Bonsang"]["Best Band"] == [(1, "DAY6")]
+
+    def test_an_active_id_is_refused(self, query):
+        assert add_category("soty", "fun", "Something else") is AddCategoryResult.ALREADY_ACTIVE
+
+        assert query(Database.HMAS, "SELECT name FROM hma_categories WHERE category_id = 'soty'")[0]["name"] == \
+            "Song of the Year"
+
+    def test_an_active_name_is_refused_whatever_its_case(self):
+        assert add_category("soty2", "fun", "song of the YEAR") is AddCategoryResult.NAME_TAKEN
+
+    def test_a_removed_categorys_name_can_be_reused(self):
+        remove_category("soty")
+
+        assert add_category("song", "daesang", "Song of the Year") is AddCategoryResult.ADDED
+
+    def test_a_full_family_is_refused(self):
+        free = MAX_CATEGORIES_PER_FAMILY - len(get_family_choices("fun"))
+        for i in range(free):
+            assert add_category(f"fun_{i}", "fun", f"Fun {i}") is AddCategoryResult.ADDED
+
+        assert add_category("one_more", "fun", "One more") is AddCategoryResult.FAMILY_FULL
+        assert len(get_family_choices("fun")) == MAX_CATEGORIES_PER_FAMILY
+
+    def test_an_unknown_family_is_rejected_by_the_database(self):
+        with pytest.raises(sqlite3.IntegrityError):
+            add_category("x", "not_a_family", "X")
+
+
+class TestRemoveCategory:
+    """Removing a category hides it but keeps its data."""
+
+    def test_removing_hides_it_from_the_nomination_menus(self, query):
+        assert remove_category("soty") is RemoveCategoryResult.REMOVED
+
+        assert "soty" not in [category_id for category_id, _ in get_family_choices("daesang")]
+        assert query(Database.HMAS, "SELECT is_active FROM hma_categories WHERE category_id = 'soty'")[0][0] == 0
+
+    def test_the_nominations_finalists_and_votes_are_kept(self, query):
+        add_nominations(2026, 1, ["soty"], "IVE - HEYA")
+        set_final_nominees(2026, "soty", ["A", "B", "C"])
+        save_hma_vote(2026, 1, "soty", "A", "B", "C")
+
+        remove_category("soty")
+
+        assert len(query(Database.HMAS, "SELECT * FROM hma_nominations")) == 1
+        assert get_hma_final_nominees(2026, "soty") == ["A", "B", "C"]
+        assert get_user_hma_votes(2026, 1)["soty"]["first_choice"] == "A"
+
+    def test_removing_twice_says_so(self):
+        remove_category("soty")
+
+        assert remove_category("soty") is RemoveCategoryResult.ALREADY_REMOVED
+
+    def test_an_unknown_category(self):
+        assert remove_category("not_a_category") is RemoveCategoryResult.NO_SUCH_CATEGORY
+
+    def test_a_removed_category_cannot_get_finalists(self):
+        remove_category("soty")
+
+        assert set_final_nominees(2026, "soty", ["A", "B", "C"]) is False
+        assert get_hma_final_nominees(2026, "soty") == []
+
+
+class TestBallots:
+    """get_hma_ballots reads back every ballot for counting."""
+
+    def test_no_votes(self):
+        assert not get_hma_ballots(2026)
+
+    def test_ballots_are_grouped_by_category_for_the_year(self):
+        save_hma_vote(2026, 1, "soty", "A", "B", "C")
+        save_hma_vote(2026, 2, "soty", "B", "A", "C")
+        save_hma_vote(2026, 1, "aoty", "X", "Y", "Z")
+        save_hma_vote(2025, 1, "soty", "Old", "Older", "Oldest")
+
+        ballots = get_hma_ballots(2026)
+
+        assert sorted(ballots["soty"]) == [("A", "B", "C"), ("B", "A", "C")]
+        assert ballots["aoty"] == [("X", "Y", "Z")]

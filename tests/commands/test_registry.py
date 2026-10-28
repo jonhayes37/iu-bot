@@ -19,7 +19,7 @@ def _name(command):
 def test_finds_the_commands_of_every_module():
     names = {command.name for command in COMMANDS}
 
-    assert len(COMMANDS) == len(names) == 46           # and none is registered twice
+    assert len(COMMANDS) == len(names) == 50           # and none is registered twice
     assert {"check-balance", "draw-raffle", "my-ultimate-bias", "listen-game-start", "set-status",
             "new-tournament", "register-role", "export-lists"} <= names
 

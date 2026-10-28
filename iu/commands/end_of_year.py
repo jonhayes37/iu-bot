@@ -1,12 +1,31 @@
 """Commands for the End of Year festivities."""
 import io
+import logging
 import discord
+from db.bot import EndOfYearPost, EndOfYearPostKind, close_end_of_year, get_end_of_year_posts
+from db.hall_of_fame import get_all_hof_nominations, get_hof_ballots
+from db.hmas import get_active_hma_categories, get_hma_ballots
 from db.top_songs import get_all_top_songs
-from db.hall_of_fame import get_all_hof_nominations
+from ui.end_of_year import post_hub
 from ui.eoy_nominations import EOYNominationsHub
 from ui.eoy_voting import EOYVotingHub
+from ui.hma_suggestions import HMASuggestionsHub
+from utils.ballots import count_ballots, rank_tallies, tied_for_first
+from utils.discord_files import text_file
 from utils.end_of_year import get_festivities_year
 from utils.validation import admin_only
+
+logger = logging.getLogger('iu-bot')
+
+# How many places the results list for each category
+RESULTS_PLACES = 5
+
+# The hub each kind of post shows, so /end-of-year-close can redraw it with its buttons greyed out
+HUBS = {
+    EndOfYearPostKind.SUGGESTIONS: HMASuggestionsHub,
+    EndOfYearPostKind.NOMINATIONS: EOYNominationsHub,
+    EndOfYearPostKind.VOTING: EOYVotingHub,
+}
 
 
 @discord.app_commands.command(name='end-of-year-nominations',
@@ -29,8 +48,8 @@ async def end_of_year_nominations(interaction: discord.Interaction):
         color=discord.Color.gold()
     )
 
-    await interaction.channel.send(embed=embed, view=EOYNominationsHub(year))
-    await interaction.followup.send("End of Year Hub posted successfully!")
+    if await post_hub(interaction, year, EndOfYearPostKind.NOMINATIONS, embed, EOYNominationsHub(year)):
+        await interaction.followup.send("End of Year Hub posted successfully!")
 
 
 @discord.app_commands.command(name='export-end-of-year-nominations',
@@ -121,5 +140,121 @@ async def end_of_year_voting(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
 
-    await interaction.channel.send(embed=embed, view=EOYVotingHub(year))
-    await interaction.followup.send("End of Year Voting posted successfully!")
+    if await post_hub(interaction, year, EndOfYearPostKind.VOTING, embed, EOYVotingHub(year)):
+        await interaction.followup.send("End of Year Voting posted successfully!")
+
+
+def _results_section(title: str, ballots: list[tuple[str, str, str]]) -> tuple[list[str], list[str]]:
+    """One category's lines for the results file, and the nominees tied for 1st on every count (if any)."""
+    lines = [f"### {title} ({len(ballots)} {'ballot' if len(ballots) == 1 else 'ballots'}) ###"]
+    if not ballots:
+        return lines + ["No votes.", ""], []
+
+    placings = rank_tallies(count_ballots(ballots))
+    for placing in placings:
+        if placing.rank > RESULTS_PLACES:
+            break
+        tally = placing.tally
+        rank = f"T{placing.rank}" if placing.tied else str(placing.rank)
+        lines.append(f"{rank}. {tally.nominee}: {tally.points} points "
+                     f"(1st: {tally.firsts}, 2nd: {tally.seconds}, 3rd: {tally.thirds})")
+
+    tied = tied_for_first(placings)
+    if tied:
+        lines.append(f"⚠️ TIED FOR 1ST on every count: {', '.join(tied)}. Needs a tiebreaker.")
+    return lines + [""], tied
+
+
+@discord.app_commands.command(name='end-of-year-results',
+                              description="[Admin] Export the top 5 in every HMA category and the Hall of Fame.")
+@discord.app_commands.describe(year="The award year to count (defaults to this year's festivities)")
+@admin_only
+async def end_of_year_results(interaction: discord.Interaction, year: int = None):
+    await interaction.response.defer(ephemeral=True)
+    year = year or get_festivities_year()
+
+    hof_ballots = get_hof_ballots(year)
+    hma_ballots = get_hma_ballots(year)
+    categories = get_active_hma_categories()
+    if not hof_ballots and not any(hma_ballots.get(c['category_id']) for c in categories):
+        await interaction.followup.send(f"No votes found for {year} yet.")
+        return
+
+    body = []
+    ties = []
+
+    lines, tied = _results_section("HallyU Hall of Fame", hof_ballots)
+    body += ["████ HALL OF FAME ████", ""] + lines
+    if tied:
+        ties.append(("HallyU Hall of Fame", tied))
+
+    family = None
+    for category in categories:
+        if category['family'] != family:
+            family = category['family']
+            body += [f"████ {family.upper()} ████", ""]
+        lines, tied = _results_section(category['name'], hma_ballots.get(category['category_id'], []))
+        body += lines
+        if tied:
+            ties.append((category['name'], tied))
+
+    header = [
+        f"🏆 {year} End of Year Results 🏆", "=" * 50,
+        "Points: 1st choice = 3, 2nd = 2, 3rd = 1. Ties are broken by the most 1st choices, then 2nd, then 3rd.",
+        f"The top {RESULTS_PLACES} of each category. T marks nominees level on every count.", "",
+    ]
+    if ties:
+        header += ["⚠️ NEEDS A TIEBREAKER (tied for 1st on every count):"]
+        header += [f"- {title}: {', '.join(names)}" for title, names in ties]
+    else:
+        header += ["✅ Every 1st place is decided."]
+    header += ["", "=" * 50, ""]
+
+    summary = f"✅ Here are the **{year}** results."
+    if ties:
+        summary += f"\n⚠️ Tied for 1st on every count: {', '.join(title for title, _ in ties)}."
+    await interaction.followup.send(
+        summary, file=text_file("\n".join(header + body), f"{year}_end_of_year_results.txt"))
+
+
+async def _close_post(interaction: discord.Interaction, year: int, post: EndOfYearPost) -> str:
+    """Greys out one post's buttons. Returns 'closed', 'gone' (the post or its channel was deleted) or 'failed'."""
+    channel = interaction.guild.get_channel(post.channel_id) if interaction.guild else None
+    if channel is None:
+        return "gone"
+    try:
+        message = await channel.fetch_message(post.message_id)
+        await message.edit(view=HUBS[post.kind](year, closed=True))
+    except discord.NotFound:
+        return "gone"
+    except discord.HTTPException as ex:
+        logger.warning("Could not close end of year post %s: %s", post.message_id, ex)
+        return "failed"
+    return "closed"
+
+
+@discord.app_commands.command(name='end-of-year-close',
+                              description="[Admin] Close this year's end of year posts once final voting has ended.")
+@admin_only
+async def end_of_year_close(interaction: discord.Interaction):
+    # Editing each post is a Discord API call or two
+    await interaction.response.defer(ephemeral=True)
+    year = get_festivities_year()
+
+    newly_closed = close_end_of_year(year)
+    outcomes = [await _close_post(interaction, year, post) for post in get_end_of_year_posts(year)]
+
+    lines = [
+        f"🔒 The **{year}** end of year festivities are closed." if newly_closed
+        else f"🔒 The **{year}** end of year festivities were already closed.",
+        "Anyone who presses an old button, sends a form or runs `/hma-nomination` is told they're closed.",
+        f"Buttons greyed out on **{outcomes.count('closed')}** "
+        f"{'post' if outcomes.count('closed') == 1 else 'posts'}.",
+    ]
+    if outcomes.count("gone"):
+        lines.append(f"{outcomes.count('gone')} had already been deleted.")
+    if outcomes.count("failed"):
+        lines.append(f"⚠️ {outcomes.count('failed')} couldn't be edited (check IU can still see that channel). "
+                     "Their buttons refuse anyway.")
+    lines.append("Run `/end-of-year-results` for the winners.")
+    await interaction.followup.send("\n".join(lines))

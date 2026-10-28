@@ -3,9 +3,10 @@ import logging
 
 import discord
 from ui.base import SafeView, reports_errors
+from ui.end_of_year import refuse_if_closed
 from db.hall_of_fame import get_official_hof_nominees, save_hof_vote, get_user_hof_vote
 from db.hmas import (
-    get_all_hma_categories, get_hma_final_nominees, save_hma_vote, get_user_hma_votes
+    get_active_hma_categories, get_hma_final_nominees, save_hma_vote, get_user_hma_votes
 )
 
 logger = logging.getLogger('iu-bot')
@@ -31,6 +32,9 @@ class HallOfFameVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         nominees = get_official_hof_nominees(self.year)
 
         if not nominees or len(nominees) < 3:
@@ -62,6 +66,9 @@ class HMAVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_vo
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         view = HMACategorySelectView(self.year, interaction.user.id)
         msg = "**HallyU Music Awards Ballot**\nCategories marked with ⏰ need your vote. ✅ are completed!"
         await interaction.response.send_message(content=msg, view=view, ephemeral=True)
@@ -70,13 +77,15 @@ class HMAVoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn_vo
 class EOYVotingHub(discord.ui.View):
     """
     The end of year voting message. Its buttons are dynamic items that read the year from their own
-    ID, so hubs from any year keep working across restarts.
+    ID, so hubs from any year keep working across restarts. `closed` greys the buttons out, for
+    /end-of-year-close.
     """
 
-    def __init__(self, year: int):
+    def __init__(self, year: int, closed: bool = False):
         super().__init__(timeout=None)
-        self.add_item(HallOfFameVoteButton(year))
-        self.add_item(HMAVoteButton(year))
+        for button in (HallOfFameVoteButton(year), HMAVoteButton(year)):
+            button.item.disabled = closed
+            self.add_item(button)
 
 
 class HoFVotingView(SafeView):
@@ -139,6 +148,9 @@ class HoFVotingView(SafeView):
                 "Please adjust your choices above and try again.", 
                 ephemeral=True
             )
+            return
+
+        if await refuse_if_closed(interaction, self.year):
             return
 
         # Save to database
@@ -207,6 +219,9 @@ class HMABallotView(SafeView):
                 ephemeral=True)
             return
 
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         # Save the vote and immediately return them to the category selector!
         save_hma_vote(self.year, interaction.user.id, self.category_id, v1, v2, v3)
         view = HMACategorySelectView(self.year, self.user_id)
@@ -256,7 +271,7 @@ class HMACategorySelectView(SafeView):
         self.year = year
         self.user_id = user_id
 
-        categories = get_all_hma_categories()
+        categories = get_active_hma_categories()
         user_votes = get_user_hma_votes(year, user_id)
 
         unvoted_opts = []

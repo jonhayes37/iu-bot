@@ -4,6 +4,7 @@ import logging
 
 import discord
 from ui.base import SafeModal, report_interaction_error, reports_errors
+from ui.end_of_year import refuse_if_closed
 from db.hmas import save_category_suggestion, get_user_category_suggestion
 
 logger = logging.getLogger('iu-bot')
@@ -40,6 +41,9 @@ class HMACategorySuggestionModal(SafeModal):
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         val_new = self.new_cats.value.strip()
         val_drop = self.drop_cats.value.strip()
 
@@ -84,13 +88,21 @@ class HMASuggestButton(discord.ui.DynamicItem[discord.ui.Button], template=r"btn
 
     @reports_errors
     async def callback(self, interaction: discord.Interaction):
+        if await refuse_if_closed(interaction, self.year):
+            return
+
         existing_data = get_user_category_suggestion(self.year, interaction.user.id)
         await interaction.response.send_modal(HMACategorySuggestionModal(self.year, existing_data))
 
 
 class HMASuggestionsHub(discord.ui.View):
-    """The category suggestions message, with a button that reads the year from its own ID."""
+    """
+    The category suggestions message, with a button that reads the year from its own ID. `closed` greys
+    the button out, for /end-of-year-close.
+    """
 
-    def __init__(self, year: int):
+    def __init__(self, year: int, closed: bool = False):
         super().__init__(timeout=None)
-        self.add_item(HMASuggestButton(year))
+        button = HMASuggestButton(year)
+        button.item.disabled = closed
+        self.add_item(button)

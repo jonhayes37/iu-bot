@@ -42,7 +42,7 @@ class TestCreation:
 
     async def test_every_command_in_the_commands_package_is_registered(self, bot):
         assert {c.name for c in bot.tree.get_commands()} == {c.name for c in all_commands()}
-        assert len(bot.tree.get_commands()) == 46
+        assert len(bot.tree.get_commands()) == 50
 
     async def test_command_errors_are_reported_by_the_shared_handler(self, bot):
         assert bot.tree.on_error is on_app_command_error

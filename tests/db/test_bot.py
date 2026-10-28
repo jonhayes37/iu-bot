@@ -5,7 +5,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from config import Database
-from db.bot import get_active_bot_status_db, mark_event_notified_db, save_bot_status_db, was_event_notified_db
+from db.bot import (
+    EndOfYearPost, EndOfYearPostKind, close_end_of_year, get_active_bot_status_db, get_end_of_year_posts,
+    is_end_of_year_closed, mark_event_notified_db, record_end_of_year_post, save_bot_status_db,
+    was_event_notified_db
+)
 
 
 @pytest.fixture(autouse=True)
@@ -95,3 +99,42 @@ def test_of_two_statuses_saved_in_the_same_second_the_later_one_wins(execute, fr
     _save_at(execute, "second", 7, "2026-03-17 12:00:00")
 
     assert get_active_bot_status_db() == "second"
+
+
+class TestEndOfYearPosts:
+    """The end of year hubs are remembered so /end-of-year-close can find them."""
+
+    def test_none_recorded(self):
+        assert get_end_of_year_posts(2026) == []
+
+    def test_posts_come_back_for_their_year_in_the_order_posted(self):
+        record_end_of_year_post(2026, EndOfYearPostKind.SUGGESTIONS, 10, 100)
+        record_end_of_year_post(2026, EndOfYearPostKind.VOTING, 11, 101)
+        record_end_of_year_post(2025, EndOfYearPostKind.NOMINATIONS, 10, 50)
+
+        assert get_end_of_year_posts(2026) == [
+            EndOfYearPost(EndOfYearPostKind.SUGGESTIONS, 10, 100), EndOfYearPost(EndOfYearPostKind.VOTING, 11, 101)]
+
+    def test_recording_the_same_message_twice_keeps_one(self):
+        record_end_of_year_post(2026, EndOfYearPostKind.VOTING, 11, 101)
+        record_end_of_year_post(2026, EndOfYearPostKind.VOTING, 11, 101)
+
+        assert len(get_end_of_year_posts(2026)) == 1
+
+
+class TestEndOfYearClosed:
+    """Closing a year's festivities."""
+
+    def test_a_year_starts_open(self):
+        assert is_end_of_year_closed(2026) is False
+
+    def test_closing_says_it_changed_something_the_first_time_only(self):
+        assert close_end_of_year(2026) is True
+        assert close_end_of_year(2026) is False
+
+        assert is_end_of_year_closed(2026) is True
+
+    def test_years_are_closed_separately(self):
+        close_end_of_year(2025)
+
+        assert is_end_of_year_closed(2026) is False

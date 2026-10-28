@@ -2,8 +2,30 @@
 
 Every function about one year's awards takes that awards year (the year of the hub or command that asked).
 """
+import enum
+
 from config import Database
 from db.connection import db_connection
+
+# A Discord select menu holds at most 25 options, and each family is one menu on the nomination form
+MAX_CATEGORIES_PER_FAMILY = 25
+
+
+class AddCategoryResult(enum.Enum):
+    """What add_category did."""
+    ADDED = "added"
+    RESTORED = "restored"               # a removed category with that ID is back, with the new name and family
+    ALREADY_ACTIVE = "already_active"
+    NAME_TAKEN = "name_taken"           # another active category already has that name
+    FAMILY_FULL = "family_full"
+
+
+class RemoveCategoryResult(enum.Enum):
+    """What remove_category did."""
+    REMOVED = "removed"
+    ALREADY_REMOVED = "already_removed"
+    NO_SUCH_CATEGORY = "no_such_category"
+
 
 
 def get_family_choices(family_id: str) -> list[tuple[str, str]]:
@@ -60,12 +82,12 @@ def get_yearly_export_data(award_year: int) -> dict[str, dict[str, list[tuple[in
 def set_final_nominees(award_year: int, category_id: str, nominees: list[str]) -> bool:
     """
     Wipes any existing final nominees for the given category/year
-    and inserts the new vetted list. Returns False (changing nothing) if there is no such category.
+    and inserts the new vetted list. Returns False (changing nothing) if there is no such active category.
     """
     with db_connection(Database.HMAS) as conn:
         cursor = conn.cursor()
 
-        cursor.execute("SELECT 1 FROM hma_categories WHERE category_id = ?", (category_id,))
+        cursor.execute("SELECT 1 FROM hma_categories WHERE category_id = ? AND is_active = 1", (category_id,))
         if cursor.fetchone() is None:
             return False
 
@@ -84,14 +106,81 @@ def set_final_nominees(award_year: int, category_id: str, nominees: list[str]) -
 
     return True
 
-# Add to db/hmas.py
-
-def get_all_hma_categories() -> list[dict]:
-    """Fetches all award categories."""
+def get_active_hma_categories() -> list[dict]:
+    """
+    The categories in this year's awards (removed ones are left out), Daesangs first, then Bonsangs,
+    then Fun awards, each family sorted by name. Each row has category_id, name and family (its display name).
+    """
     with db_connection(Database.HMAS, row_factory=True) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT category_id, name FROM hma_categories ORDER BY name")
+        # The families were seeded in order (Daesang, Bonsang, Fun), so their rowid gives that order
+        cursor.execute("""
+            SELECT c.category_id, c.name, f.display_name AS family
+            FROM hma_categories c
+            JOIN hma_families f ON c.family_id = f.family_id
+            WHERE c.is_active = 1
+            ORDER BY f.rowid, c.name
+        """)
         return [dict(row) for row in cursor.fetchall()]
+
+def add_category(category_id: str, family_id: str, name: str) -> AddCategoryResult:
+    """
+    Adds an award category, or brings back a removed one with the same ID (taking the new name and
+    family). Refuses a duplicate ID or name among the active categories, and a family that is full.
+    """
+    with db_connection(Database.HMAS) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            "SELECT is_active FROM hma_categories WHERE category_id = ?", (category_id,)).fetchone()
+        if existing and existing[0]:
+            return AddCategoryResult.ALREADY_ACTIVE
+
+        same_name = conn.execute(
+            "SELECT 1 FROM hma_categories WHERE is_active = 1 AND name = ? COLLATE NOCASE", (name,)).fetchone()
+        if same_name:
+            return AddCategoryResult.NAME_TAKEN
+
+        in_family = conn.execute(
+            "SELECT COUNT(*) FROM hma_categories WHERE is_active = 1 AND family_id = ?", (family_id,)).fetchone()[0]
+        if in_family >= MAX_CATEGORIES_PER_FAMILY:
+            return AddCategoryResult.FAMILY_FULL
+
+        if existing:
+            conn.execute("UPDATE hma_categories SET family_id = ?, name = ?, is_active = 1 WHERE category_id = ?",
+                         (family_id, name, category_id))
+            return AddCategoryResult.RESTORED
+
+        conn.execute("INSERT INTO hma_categories (category_id, family_id, name, is_active) VALUES (?, ?, ?, 1)",
+                     (category_id, family_id, name))
+        return AddCategoryResult.ADDED
+
+def remove_category(category_id: str) -> RemoveCategoryResult:
+    """
+    Takes a category out of the awards. Its row, nominations, finalists and votes are kept (other
+    tables refer to it), so adding it again with the same ID brings it all back.
+    """
+    with db_connection(Database.HMAS) as conn:
+        row = conn.execute("SELECT is_active FROM hma_categories WHERE category_id = ?", (category_id,)).fetchone()
+        if row is None:
+            return RemoveCategoryResult.NO_SUCH_CATEGORY
+        if not row[0]:
+            return RemoveCategoryResult.ALREADY_REMOVED
+        conn.execute("UPDATE hma_categories SET is_active = 0 WHERE category_id = ?", (category_id,))
+        return RemoveCategoryResult.REMOVED
+
+def get_hma_ballots(award_year: int) -> dict[str, list[tuple[str, str, str]]]:
+    """Every (1st, 2nd, 3rd choice) ballot cast for the year, by category ID."""
+    with db_connection(Database.HMAS) as conn:
+        rows = conn.execute("""
+            SELECT category_id, first_choice, second_choice, third_choice
+            FROM hma_votes
+            WHERE award_year = ?
+        """, (award_year,)).fetchall()
+
+    ballots: dict[str, list[tuple[str, str, str]]] = {}
+    for category_id, first, second, third in rows:
+        ballots.setdefault(category_id, []).append((first, second, third))
+    return ballots
 
 def get_user_hma_votes(award_year: int, user_id: int) -> dict:
     """Fetches a user's existing votes, keyed by category_id for instant lookups."""
