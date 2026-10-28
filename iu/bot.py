@@ -9,6 +9,7 @@ from config import Channel, guild_id
 from tasks.heartbeat import write_heartbeat
 from tasks.listen_game import check_listen_game_reminders
 from tasks.scheduled_events import check_upcoming_events
+from tasks.secret_polls import close_secret_polls
 from tasks.status import refresh_status, show_saved_status
 from tasks.tournaments import tournament_resolution_loop
 from triggers.member import add_trainee_role, welcome_member
@@ -24,6 +25,7 @@ from ui.eoy_voting import HallOfFameVoteButton, HMAVoteButton
 from ui.hma_suggestions import HMASuggestButton
 from ui.listen_game import JoinGameView
 from ui.lists import SubmitListButton
+from ui.secret_poll import SecretVoteButton
 
 logger = logging.getLogger('iu-bot')
 
@@ -99,7 +101,7 @@ class IUBot(discord.Client):
         """
         self.add_dynamic_items(
             SubmitListButton, Top25Button, HallOfFameNominationButton,
-            HallOfFameVoteButton, HMAVoteButton, HMASuggestButton
+            HallOfFameVoteButton, HMAVoteButton, HMASuggestButton, SecretVoteButton
         )
         self.add_view(JoinGameView())
         logger.info("Persistent buttons registered.")
@@ -140,6 +142,10 @@ class IUBot(discord.Client):
         if not check_listen_game_reminders.is_running():
             check_listen_game_reminders.start(self, guild_id())
             logger.info("Listen game reminder task started.")
+
+        if not close_secret_polls.is_running():
+            close_secret_polls.start(self)
+            logger.info("Secret poll closing task started.")
 
         # Show the saved status, and keep it up to date (it goes away when it expires). The loop's first
         # run shows it; after a reconnect the loop is already running, so show it straight away.

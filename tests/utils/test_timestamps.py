@@ -1,10 +1,10 @@
 """Tests for utils/timestamps.py"""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from utils.timestamps import parse_db_timestamp
+from utils.timestamps import format_db_timestamp, parse_db_timestamp
 
 
 def test_parses_a_sqlite_timestamp_as_utc():
@@ -30,3 +30,15 @@ def test_result_can_be_compared_with_an_aware_datetime():
 def test_rejects_anything_that_is_not_a_current_timestamp_value(bad_value):
     with pytest.raises(ValueError):
         parse_db_timestamp(bad_value)
+
+
+def test_formats_any_aware_moment_as_utc_to_the_second():
+    toronto_evening = datetime(2026, 12, 11, 23, 59, 30, 999, tzinfo=timezone(timedelta(hours=-5)))
+
+    assert format_db_timestamp(toronto_evening) == "2026-12-12 04:59:30"
+
+
+def test_formatting_and_parsing_round_trip():
+    moment = datetime(2026, 3, 17, 15, 0, 0, tzinfo=timezone.utc)
+
+    assert parse_db_timestamp(format_db_timestamp(moment)) == moment

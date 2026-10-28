@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from config import Database
 from db.connection import db_connection
-from utils.timestamps import parse_db_timestamp
+from utils.timestamps import format_db_timestamp, parse_db_timestamp
 
 def save_bot_status_db(status_text: str, days: int) -> None:
     """Saves a new status to the ledger."""
@@ -103,3 +103,123 @@ def is_end_of_year_closed(award_year: int) -> bool:
     with db_connection(Database.BOT) as conn:
         row = conn.execute("SELECT 1 FROM end_of_year_closed WHERE award_year = ?", (award_year,)).fetchone()
         return row is not None
+
+
+@dataclass(frozen=True)
+class SecretPoll:
+    """A secret poll. Its options are numbered from 0 in the order they were given."""
+    poll_id: int
+    title: str
+    created_by: int
+    channel_id: int
+    message_id: int | None
+    closes_at: datetime
+    closed: bool
+
+
+class SecretVoteResult(enum.Enum):
+    """What record_secret_vote did."""
+    VOTED = "voted"
+    CLOSED = "closed"             # the poll is closed or past its closing time
+    NO_SUCH_OPTION = "no_such_option"
+
+
+def _secret_poll(row) -> SecretPoll:
+    poll_id, title, created_by, channel_id, message_id, closes_at, closed = row
+    return SecretPoll(poll_id, title, created_by, channel_id, message_id, parse_db_timestamp(closes_at), bool(closed))
+
+
+_SECRET_POLL_COLUMNS = "poll_id, title, created_by, channel_id, message_id, closes_at, closed"
+
+
+def create_secret_poll(title: str, options: list[str], created_by: int, channel_id: int,
+                       closes_at: datetime) -> int:
+    """Saves a new secret poll and its options (not yet posted), and returns its ID."""
+    with db_connection(Database.BOT) as conn:
+        cursor = conn.execute("""
+            INSERT INTO secret_polls (title, created_by, channel_id, closes_at) VALUES (?, ?, ?, ?)
+        """, (title, created_by, channel_id, format_db_timestamp(closes_at)))
+        poll_id = cursor.lastrowid
+        conn.executemany("INSERT INTO secret_poll_options (poll_id, position, label) VALUES (?, ?, ?)",
+                         [(poll_id, position, label) for position, label in enumerate(options)])
+        return poll_id
+
+def set_secret_poll_message(poll_id: int, message_id: int) -> None:
+    """Records the message the poll was posted in."""
+    with db_connection(Database.BOT) as conn:
+        conn.execute("UPDATE secret_polls SET message_id = ? WHERE poll_id = ?", (message_id, poll_id))
+
+def delete_secret_poll(poll_id: int) -> None:
+    """Deletes a poll and everything under it (for a poll that could not be posted)."""
+    with db_connection(Database.BOT) as conn:
+        conn.execute("DELETE FROM secret_polls WHERE poll_id = ?", (poll_id,))
+
+def get_secret_poll(poll_id: int) -> SecretPoll | None:
+    """The poll, or None if there is no poll with that ID."""
+    with db_connection(Database.BOT) as conn:
+        row = conn.execute(f"SELECT {_SECRET_POLL_COLUMNS} FROM secret_polls WHERE poll_id = ?",
+                           (poll_id,)).fetchone()
+        return _secret_poll(row) if row else None
+
+def get_recent_secret_polls(limit: int = 25) -> list[SecretPoll]:
+    """The newest polls first, for picking one in a command."""
+    with db_connection(Database.BOT) as conn:
+        rows = conn.execute(f"SELECT {_SECRET_POLL_COLUMNS} FROM secret_polls ORDER BY poll_id DESC LIMIT ?",
+                            (limit,)).fetchall()
+        return [_secret_poll(row) for row in rows]
+
+def get_secret_poll_options(poll_id: int) -> list[str]:
+    """The poll's option labels, in order."""
+    with db_connection(Database.BOT) as conn:
+        rows = conn.execute("SELECT label FROM secret_poll_options WHERE poll_id = ? ORDER BY position",
+                            (poll_id,)).fetchall()
+        return [row[0] for row in rows]
+
+def record_secret_vote(poll_id: int, user_id: int, position: int, now: datetime) -> SecretVoteResult:
+    """
+    Saves a member's vote, replacing any earlier one, as long as the poll is still open at `now`
+    (checked in the same transaction, so a vote can't land after the poll closes).
+    """
+    with db_connection(Database.BOT) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        is_open = conn.execute("SELECT 1 FROM secret_polls WHERE poll_id = ? AND closed = 0 AND closes_at > ?",
+                               (poll_id, format_db_timestamp(now))).fetchone()
+        if not is_open:
+            return SecretVoteResult.CLOSED
+        option = conn.execute("SELECT 1 FROM secret_poll_options WHERE poll_id = ? AND position = ?",
+                              (poll_id, position)).fetchone()
+        if not option:
+            return SecretVoteResult.NO_SUCH_OPTION
+        conn.execute("""
+            INSERT INTO secret_poll_votes (poll_id, user_id, position) VALUES (?, ?, ?)
+            ON CONFLICT (poll_id, user_id) DO UPDATE SET position = excluded.position, voted_at = CURRENT_TIMESTAMP
+        """, (poll_id, user_id, position))
+        return SecretVoteResult.VOTED
+
+def get_secret_poll_counts(poll_id: int) -> list[tuple[str, int]]:
+    """Every option with its number of votes (0 included), in the order the options were given."""
+    with db_connection(Database.BOT) as conn:
+        rows = conn.execute("""
+            SELECT o.label, COUNT(v.user_id)
+            FROM secret_poll_options o
+            LEFT JOIN secret_poll_votes v ON v.poll_id = o.poll_id AND v.position = o.position
+            WHERE o.poll_id = ?
+            GROUP BY o.position
+            ORDER BY o.position
+        """, (poll_id,)).fetchall()
+        return list(rows)
+
+def get_due_secret_polls(now: datetime) -> list[SecretPoll]:
+    """Open polls whose closing time has passed."""
+    with db_connection(Database.BOT) as conn:
+        rows = conn.execute(f"""
+            SELECT {_SECRET_POLL_COLUMNS} FROM secret_polls
+            WHERE closed = 0 AND closes_at <= ? ORDER BY closes_at, poll_id
+        """, (format_db_timestamp(now),)).fetchall()
+        return [_secret_poll(row) for row in rows]
+
+def mark_secret_poll_closed(poll_id: int) -> bool:
+    """Closes the poll. Returns False if it was already closed, so its results are only sent once."""
+    with db_connection(Database.BOT) as conn:
+        cursor = conn.execute("UPDATE secret_polls SET closed = 1 WHERE poll_id = ? AND closed = 0", (poll_id,))
+        return cursor.rowcount == 1

@@ -17,6 +17,7 @@ Most features are used through Discord's `/` commands. A few only work in a part
 - [Lists](#lists)
 - [Tournaments](#tournaments)
 - [End of year: Top 25, Hall of Fame and HMAs](#end-of-year-top-25-hall-of-fame-and-hmas)
+- [Secret polls](#secret-polls)
 - [Bias cards](#bias-cards)
 - [New releases playlist](#new-releases-playlist)
 - [Watch parties and events](#watch-parties-and-events)
@@ -252,6 +253,19 @@ top of the file for a tiebreaker.
 | `/end-of-year-voting` | Admin | Posts the voting buttons |
 | `/end-of-year-close` | Admin | Closes the year's festivities and greys out the buttons on its suggestions, nominations and voting posts |
 | `/end-of-year-results [year]` | Admin | Exports the top 5 in the Hall of Fame and every HMA category, with tiebreaks applied and full ties for 1st flagged |
+
+## Secret polls
+
+A vote whose result only the admin who started it sees, for things like a tiebreaker revealed later
+in a video. IU posts the question with a button per option. Members press one to vote (they're told
+privately what they picked and can change it), and nobody sees any counts. When time runs out, IU
+greys out the buttons, changes the post to "Voting has closed." and DMs the results to the admin who
+started the poll. If the bot was down at closing time, it closes the poll as soon as it's back.
+
+| Command | Who | Description |
+| --- | --- | --- |
+| `/secret-poll title options [hours]` | Admin | Posts a secret poll in the current channel. Options are separated by `\|`: 2 to 25, each up to 80 characters. Voting stays open for `hours` (24 by default, up to a week) |
+| `/secret-poll-results poll` | Admin | Privately shows a poll's votes, open or closed (the poll is suggested as you type). Use it if the DM didn't arrive |
 
 ## Bias cards
 

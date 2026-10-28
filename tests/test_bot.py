@@ -19,6 +19,7 @@ from ui.eoy_voting import HallOfFameVoteButton, HMAVoteButton
 from ui.hma_suggestions import HMASuggestButton
 from ui.listen_game import JoinGameView
 from ui.lists import SubmitListButton
+from ui.secret_poll import SecretVoteButton
 from testsupport import fakes
 
 
@@ -42,7 +43,7 @@ class TestCreation:
 
     async def test_every_command_in_the_commands_package_is_registered(self, bot):
         assert {c.name for c in bot.tree.get_commands()} == {c.name for c in all_commands()}
-        assert len(bot.tree.get_commands()) == 50
+        assert len(bot.tree.get_commands()) == 52
 
     async def test_command_errors_are_reported_by_the_shared_handler(self, bot):
         assert bot.tree.on_error is on_app_command_error
@@ -144,7 +145,7 @@ class TestStartup:
 
         assert set(started.add_dynamic_items.call_args.args) == {
             SubmitListButton, Top25Button, HallOfFameNominationButton, HallOfFameVoteButton, HMAVoteButton,
-            HMASuggestButton}
+            HMASuggestButton, SecretVoteButton}
 
     async def test_the_join_button_survives_a_restart(self, started):
         await started.setup_hook()
@@ -195,7 +196,7 @@ class TestOnReady:
             monkeypatch.setattr(loop, "is_running", mock.Mock(return_value=False))
             loops[name] = loop
         bot.loops = loops
-        for loop in (bot_module.write_heartbeat, bot_module.refresh_status):
+        for loop in (bot_module.write_heartbeat, bot_module.refresh_status, bot_module.close_secret_polls):
             monkeypatch.setattr(loop, "start", mock.Mock())
             monkeypatch.setattr(loop, "is_running", mock.Mock(return_value=False))
         return bot
@@ -207,6 +208,7 @@ class TestOnReady:
 
         assert not any(loop.start.called for loop in ready.loops.values())
         bot_module.refresh_status.start.assert_not_called()
+        bot_module.close_secret_polls.start.assert_not_called()
         ready.change_presence.assert_not_awaited()
 
     async def test_the_heartbeat_starts_even_without_a_server_configured(self, ready, monkeypatch):
@@ -236,6 +238,13 @@ class TestOnReady:
 
         ready.loops["tournament_resolution_loop"].start.assert_not_called()
         ready.loops["check_upcoming_events"].start.assert_called_once()
+
+    async def test_the_secret_poll_closer_starts_once(self, ready):
+        await ready.on_ready()
+        bot_module.close_secret_polls.is_running.return_value = True
+        await ready.on_ready()
+
+        bot_module.close_secret_polls.start.assert_called_once_with(ready)
 
     async def test_the_status_refresh_starts_and_its_first_run_shows_the_status(self, ready):
         await ready.on_ready()

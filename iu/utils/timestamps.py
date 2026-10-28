@@ -9,3 +9,8 @@ def parse_db_timestamp(value: str) -> datetime:
     datetime.
     """
     return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def format_db_timestamp(moment: datetime) -> str:
+    """The reverse of parse_db_timestamp: a timezone-aware datetime as SQLite's UTC text, to the second."""
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
