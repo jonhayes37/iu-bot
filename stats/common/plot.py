@@ -14,8 +14,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from matplotlib import patheffects
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
+
+from stats.common.fonts import drawable, use_chart_fonts
 
 PINK = "#ff4980"
 LIGHT_PINK = "#ffb3c8"
@@ -128,11 +131,17 @@ def _shorten(label: str) -> str:
     return label if len(label) <= MAX_LABEL_LENGTH else label[:MAX_LABEL_LENGTH - 1].rstrip() + "…"
 
 
-class _LabelPlacer:
+class LabelPlacer:
     """Finds each label a clear spot, in the order labels are placed (the first get the closest spots)."""
 
-    def __init__(self, fig: Figure, ax, obstacles: list[Box], lines: list, area: Box):
+    def __init__(self, fig: Figure, ax, obstacles: list[Box], lines: list, area: Box, *,
+                 fontsize: float = FONT_SIZE, color: str = TEXT_COLOUR, halo: bool = False, gap: float = 1.5):
         self.fig, self.ax = fig, ax
+        # Pixels a label keeps from everything else (more where dots are close, so it's clear whose it is)
+        self.gap = gap
+        # A white outline keeps a label readable where it crosses a line (the network charts' edges)
+        self.style = {"fontsize": fontsize, "color": color,
+                      "path_effects": [patheffects.withStroke(linewidth=2.5, foreground="white")] if halo else []}
         self.renderer = fig.canvas.get_renderer()
         self.obstacles = obstacles
         self.lines = lines  # the trend and cutoff lines, which labels shouldn't sit on
@@ -141,11 +150,11 @@ class _LabelPlacer:
         self.leaders: list[tuple[tuple[float, float], tuple[float, float]]] = []
         self.crowded: list[str] = []
 
-    def _measure(self, text: str, xy: tuple[float, float], radius: float, angle: float):
+    def _measure(self, text: str, xy: tuple[float, float], radius: float, angle: float, style: dict):
         ha, va, relpos = _alignment(angle)
         offset = (radius * math.cos(math.radians(angle)), radius * math.sin(math.radians(angle)))
-        probe = self.ax.annotate(text, xy, xytext=offset, textcoords="offset points", fontsize=FONT_SIZE,
-                                 ha=ha, va=va)
+        probe = self.ax.annotate(text, xy, xytext=offset, textcoords="offset points", ha=ha, va=va,
+                                 fontsize=style["fontsize"], fontweight=style.get("fontweight", "normal"))
         extent = probe.get_window_extent(self.renderer)
         probe.remove()
         box = (extent.x0, extent.y0, extent.x1, extent.y1)
@@ -159,7 +168,7 @@ class _LabelPlacer:
         if not (box[0] >= self.area[0] and box[1] >= self.area[1]
                 and box[2] <= self.area[2] and box[3] <= self.area[3]):
             cost += 1e6
-        padded = _grow(box, 1.5)
+        padded = _grow(box, self.gap)
         cost += sum(_overlap_area(padded, other) + 50 for other in self.obstacles if _overlaps(padded, other))
         cost += sum(_overlap_area(padded, other) + 200 for other in self.taken if _overlaps(padded, other))
         cost += sum(100 for start, end in self.leaders if _segment_hits(start, end, padded))
@@ -168,10 +177,16 @@ class _LabelPlacer:
             cost += sum(100 for other in self.taken if _segment_hits(*leader, other))
         return cost
 
-    def place(self, text: str, xy: tuple[float, float]) -> Box:
+    def place(self, text: str, xy: tuple[float, float], clearance: float = 0.0, emphasis: dict | None = None) -> Box:
+        """
+        Places a label for the point at xy. clearance: the point's marker radius beyond the usual, in points.
+        emphasis: text settings for this label only (a bigger fontsize, fontweight="bold").
+        """
+        text = drawable(text)
+        text_style = {**self.style, **(emphasis or {})}
         options = []  # nearest first, up to the first clear spot
         for radius, angle in ((r, a) for r in RINGS for a in DIRECTIONS if r > LEADER_FROM or a in BESIDE):
-            box, leader, style = self._measure(text, xy, radius, angle)
+            box, leader, style = self._measure(text, xy, clearance + radius, angle, text_style)
             options.append((self._cost(box, leader, radius > LEADER_FROM), radius, box, leader, style))
             if options[-1][0] == 0:
                 break
@@ -181,10 +196,10 @@ class _LabelPlacer:
         arrow = None
         if radius > LEADER_FROM:
             arrow = {"arrowstyle": "-", "color": LEADER_COLOUR, "lw": 0.5, "shrinkA": 0,
-                     "shrinkB": MARKER_RADIUS + 0.5, "relpos": relpos}
+                     "shrinkB": max(clearance, MARKER_RADIUS) + 0.5, "relpos": relpos}
             self.leaders.append(leader)
-        self.ax.annotate(text, xy, xytext=offset, textcoords="offset points", fontsize=FONT_SIZE, ha=ha, va=va,
-                         color=TEXT_COLOUR, arrowprops=arrow, zorder=5)
+        self.ax.annotate(text, xy, xytext=offset, textcoords="offset points", ha=ha, va=va, arrowprops=arrow,
+                         zorder=5, **text_style)
         self.taken.append(box)
         return box
 
@@ -192,6 +207,7 @@ class _LabelPlacer:
 def scatter_chart(dots: Sequence[Dot], *, title: str, cutoff_points: int | None, cutoff_label: str,
                   path: Path) -> ChartResult:
     """Draws the chart and saves it as a PNG at path."""
+    use_chart_fonts()
     xs = spread_same_spots(dots)
     ys = [dot.points for dot in dots]
     max_picks, max_points = max(dot.picks for dot in dots), max(ys)
@@ -245,7 +261,7 @@ def scatter_chart(dots: Sequence[Dot], *, title: str, cutoff_points: int | None,
     area = _grow((ax.bbox.x0, ax.bbox.y0, ax.bbox.x1, ax.bbox.y1), -3)
 
     pixel_lines = [tuple(tuple(to_pixels(point)) for point in line) for line in lines]
-    placer = _LabelPlacer(fig, ax, obstacles, pixel_lines, area)
+    placer = LabelPlacer(fig, ax, obstacles, pixel_lines, area)
     labelled = sorted((i for i, dot in enumerate(dots) if dot.label), key=lambda i: (-ys[i], -dots[i].picks))
     label_boxes = [placer.place(_shorten(dots[i].label), (xs[i], ys[i])) for i in labelled]
 

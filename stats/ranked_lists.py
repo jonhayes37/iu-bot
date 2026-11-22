@@ -45,9 +45,9 @@ class ListFormat:
 
 
 FORMATS = {
-    "top_100": ListFormat("End of Year Top 100 ({year})", ranked=25, cutoff=100,
+    "top_100": ListFormat("Top 25 Songs of {year}", ranked=25, cutoff=100,
                           chart_title="Top K-Pop Songs of {year}", chart_labels=20),
-    "mid_year": ListFormat("Top 15 So Far ({year})", ranked=15, honourable=1, cutoff=15, ranking_rows=25,
+    "mid_year": ListFormat("Top 15 Songs of {year} So Far", ranked=15, honourable=1, cutoff=15, ranking_rows=25,
                            chart_title="Top K-Pop Songs of {year} So Far", chart_labels=15),
     # Few songs repeat on all-time lists, so the artists are what's ranked
     "all_time": ListFormat("All-Time Top 15 ({year})", ranked=15, by_artist=True, compare_lists=False),
