@@ -19,7 +19,7 @@ example `/mnt/user/appdata/iu-bot`).
 | `releases.db` | Links posted in `#new-releases` and the yearly playlists | `new_releases`, `youtube_playlists` |
 | `roles.db` | The self-assign roles, their aliases and the `#roles` messages | `role_categories`, `assignable_roles`, `role_aliases`, `display_messages` |
 | `top_songs.db` | End of year Top 25 lists and honourable mentions | `eoy_top_songs` |
-| `hall_of_fame.db` | Hall of Fame nominations, finalists and votes | `hall_of_fame_nominations`, `hof_official_nominees`, `hall_of_fame_votes` |
+| `hall_of_fame.db` | Hall of Fame nominations, finalists and votes, and who has been inducted (Hall of Famers and lifetime achievement awards, seeded from the schema) | `hall_of_fame_nominations`, `hof_official_nominees`, `hall_of_fame_votes`, `hall_of_famers`, `lifetime_achievers` |
 | `hmas.db` | HallyU Music Awards categories, nominations, finalists, votes and suggestions | `hma_categories`, `hma_nominations`, `hma_final_nominees`, `hma_votes`, `hma_category_suggestions` |
 | `biases.db` | Members' bias cards | `ultimate_biases`, `artist_biases` |
 | `bot.db` | The saved status message, which scheduled events have had their reminder thread, the end of year posts with buttons and which years are closed, and secret polls with their options and votes | `statuses`, `notified_events`, `end_of_year_posts`, `end_of_year_closed`, `secret_polls`, `secret_poll_options`, `secret_poll_votes` |

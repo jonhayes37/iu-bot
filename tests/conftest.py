@@ -68,7 +68,8 @@ def _no_real_browser(monkeypatch):
 @pytest.fixture
 def databases(tmp_path, monkeypatch) -> Callable[..., dict[Database, Path]]:
     """
-    Factory that creates real, empty SQLite databases in a temporary folder and points the bot at them.
+    Factory that creates real SQLite databases in a temporary folder and points the bot at them. They are
+    empty apart from rows a schema seeds (the hall_of_fame inductees; see `no_inductees`).
 
         def test_something(databases):
             databases(Database.MERCH, Database.LISTS)
@@ -136,6 +137,18 @@ def execute() -> Callable[..., None]:
 
 
 # --- Time --------------------------------------------------------------------------------------
+
+@pytest.fixture
+def no_inductees(request) -> None:
+    """
+    The hall_of_fame database with the inductees its schema seeds (every Hall of Famer and lifetime
+    achievement award so far) removed, for tests that start from nobody inducted.
+    """
+    request.getfixturevalue("databases")(Database.HALL_OF_FAME)
+    write = request.getfixturevalue("execute")
+    write(Database.HALL_OF_FAME, "DELETE FROM hall_of_famers")
+    write(Database.HALL_OF_FAME, "DELETE FROM lifetime_achievers")
+
 
 @pytest.fixture
 def frozen_time() -> Iterator[Callable[[str], object]]:

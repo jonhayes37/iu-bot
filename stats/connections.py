@@ -4,35 +4,56 @@ Taste connections: how everyone's lists overlap, and who connects to whom.
     uv run python -m stats.connections top_100 stats/data/top_100/top_25_2025.txt
 
 Takes the same formats and files as stats.ranked_lists (built for the end of year Top 25 lists, but
-any ranked list file works). Saves three charts and a report in stats/output/:
+any ranked list file works). Saves four charts and a report in stats/output/:
 
 - <file>_taste_network.png: members joined by how many songs they share, in taste groups;
 - <file>_shared_songs_map.png: members around a ring and the songs several of them picked between them;
-- <file>_overlap_matrix.png: the number of shared songs for every pair.
+- <file>_overlap_matrix.png: the number of shared songs for every pair;
+- <file>_consensus_target.png: how close each member's ranked picks came to the community's Top 15/25.
+
+The community Top N is ranked as in stats.ranked_lists, ties included: `--seed N` repeats a draw there.
 """
 
 import argparse
+import random
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from stats.common.network import Connections, bridging_songs, connect, group_favourites
-from stats.common.network_charts import (GROUP_NAMES, MIN_EDGE, MIN_PICKERS_ON_MAP, overlap_matrix,
-                                         shared_songs_map, taste_network)
+from stats.common.network_charts import (GROUP_NAMES, MIN_EDGE, MIN_PICKERS_ON_MAP, consensus_target,
+                                         overlap_matrix, shared_songs_map, taste_network)
 from stats.common.parsing import ListFileError, load_lists
 from stats.common.report import OUTPUT_DIR, Report, write_report
 from stats.common.sections import data_notes
-from stats.common.tally import Tallies, song_of
+from stats.common.similarity import shared_by_position
+from stats.common.tally import Tallies, competition_ranks, rank_by_points, song_of, standing
 from stats.ranked_lists import FORMATS, year_of
 
 STRONGEST_PAIRS = 10
 FAVOURITES_PER_GROUP = 5
 
 
-def build_report(fmt_name: str, path: Path, out_dir: Path) -> Report:
+@dataclass(frozen=True)
+class Alignment:
+    """How close one member's ranked picks came to the community's Top N."""
+    member: str
+    shared: int  # of their ranked picks, how many made the community Top N
+    by_position: float  # the same, weighted by how near they ranked each to where the community did (%)
+
+
+def build_report(fmt_name: str, path: Path, out_dir: Path, seed: int = 1) -> Report:
     fmt = FORMATS[fmt_name]
     submissions = load_lists(path, expected_count=fmt.ranked + fmt.honourable)
     tallies = Tallies(submissions, ranked=fmt.ranked)
     connections = connect({s.user: [song_of(p) for p in s.picks] for s in submissions})
+    placings = rank_by_points(tallies.songs.values(), random.Random(seed))
+    community = [placing.tally.key for placing in placings[:fmt.ranked]]
+    alignments = [Alignment(s.user, len({song_of(p) for p in s.picks[:fmt.ranked]} & set(community)),
+                            shared_by_position([song_of(p) for p in s.picks[:fmt.ranked]], community))
+                  for s in submissions]
+    cutoff_drawn = len(placings) > fmt.ranked and standing(placings[fmt.ranked - 1].tally) == \
+        standing(placings[fmt.ranked].tally)
     video = fmt.title.format(year=year_of(path))
     members = connections.members
     pairs = len(members) * (len(members) - 1) // 2
@@ -46,8 +67,11 @@ def build_report(fmt_name: str, path: Path, out_dir: Path) -> Report:
     _bridges(report, connections, tallies)
     _strongest(report, connections, tallies)
     _members(report, connections)
-    _charts(report, connections, tallies, video, out_dir / path.stem)
-    data_notes(report, tallies)
+    _alignment(report, connections, alignments, fmt.ranked)
+    _charts(report, connections, tallies, video, out_dir / path.stem, alignments, fmt.ranked)
+    data_notes(report, tallies, *([f"The last places of the community Top {fmt.ranked} were tied and decided by the "
+                                   f"random draw (seed {seed}; add --seed {seed} to repeat it)."]
+                                  if cutoff_drawn else []))
     return report
 
 
@@ -100,13 +124,27 @@ def _members(report: Report, connections: Connections):
     report.table(["Member", "Group", "Connected", "Shared", "Closest"], rows)
 
 
-def _charts(report: Report, connections: Connections, tallies: Tallies, video: str, stem: Path):
+def _alignment(report: Report, connections: Connections, alignments: list[Alignment], top_n: int):
+    ordered = sorted(alignments, key=lambda a: (-a.shared, -a.by_position, a.member.casefold()))
+    report.section(f"Closest to the community Top {top_n}",
+                   f"Shared: how many of each member's {top_n} ranked picks made the community Top {top_n}. By "
+                   "position: the same, counting each song less the further their placing was from the community's.")
+    report.table(["#", "Member", "Group", "Shared", "By position"],
+                 [[rank, a.member, _group_label(connections, a.member), a.shared, f"{a.by_position:.0f}%"]
+                  for rank, a in competition_ranks(ordered, lambda a: a.shared)])
+
+
+def _charts(report: Report, connections: Connections, tallies: Tallies, video: str, stem: Path,
+            alignments: list[Alignment], top_n: int):
     report.section("Charts")
     results = [
         taste_network(connections, title=f"Nearest Neighbours - {video}",
                       path=stem.with_name(f"{stem.name}_taste_network.png")),
         shared_songs_map(connections, tallies.song_name, title=f"Song Connections - {video}",
                          path=stem.with_name(f"{stem.name}_shared_songs_map.png")),
+        consensus_target(connections, {a.member: a.shared for a in alignments}, top_n,
+                         title=f"Closest to the Community - {video}",
+                         path=stem.with_name(f"{stem.name}_consensus_target.png")),
     ]
     matrix = overlap_matrix(connections, title=f"Overlap Matrix - {video}",
                             path=stem.with_name(f"{stem.name}_overlap_matrix.png"))
@@ -123,10 +161,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("format", choices=FORMATS)
     parser.add_argument("path", type=Path, help="the file IU exported")
+    parser.add_argument("--seed", type=int, help="repeat an earlier random draw for ties at the Top N cutoff")
     parser.add_argument("--out-dir", type=Path, default=OUTPUT_DIR)
     args = parser.parse_args(argv)
+    seed = args.seed if args.seed is not None else random.SystemRandom().randrange(1, 1_000_000)
     try:
-        report = build_report(args.format, args.path, args.out_dir)
+        report = build_report(args.format, args.path, args.out_dir, seed)
     except (ListFileError, FileNotFoundError) as ex:
         print(f"Error: {ex}", file=sys.stderr)
         return 1

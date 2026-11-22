@@ -12,7 +12,7 @@ readers in any pairing), and every coloured mark is named, so colour is never th
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import networkx as nx
@@ -20,7 +20,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Circle, Rectangle
 
 from stats.common.fonts import drawable, use_chart_fonts
 from stats.common.network import MAX_GROUPS, Connections
@@ -34,6 +34,8 @@ INK = "#0b0b0b"
 SECONDARY_INK = "#52514e"
 EDGE_COLOUR = "#52514e"
 EMPTY_CELL = "#f0efec"
+GRID_COLOUR = "#e1e0d9"  # hairlines: the consensus target's rings
+MUTED_INK = "#898781"  # ring labels
 BLUE_RAMP = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b")
 
 LAYOUT_SEED = 7  # the force layout is randomised; a fixed seed draws the same chart every run
@@ -47,6 +49,9 @@ SONG_DIAMETER_PER_LIST = 3.0  # points: a song on 7 lists is 21pt across, one on
 HEAVY_HITTER = 5  # songs on at least this many lists get their count inside the dot and a bold label
 MAP_SIZE = (13, 12.5)  # inches
 MAP_LIMITS = (1.45, 1.3)  # data units either side of the centre (the ring has radius 1)
+TARGET_CENTRE = 0.22  # the consensus target: radius of a member sharing every song (the edge of the centre)
+TARGET_SIZE = (12.5, 12)  # inches
+TARGET_DOT = 130  # points², a member's dot on the target
 AXES_SHARE = (0.94, 0.84)  # the share of the figure the chart area takes (see _figure)
 # Points per data unit on the map (equal aspect, so the tighter of the two directions)
 MAP_SCALE = 72 * min(MAP_SIZE[0] * AXES_SHARE[0] / (2 * MAP_LIMITS[0]),
@@ -257,6 +262,91 @@ def shared_songs_map(connections: Connections, song_name: Callable[[object], str
     placer = LabelPlacer(fig, ax, dot_boxes + obstacles, [], _area(ax), fontsize=7, color=INK, halo=True, gap=5)
     labels = [placer.place(song_name(s), pos[("song", s)], clearance=math.sqrt(size) / 2,
                            emphasis=_song_label_style(len(pickers[s]))) for s, size in zip(songs, song_sizes)]
+    return _save(fig, path, labels, dot_boxes, placer.crowded)
+
+
+def target_radius(shared: int, top_n: int) -> float:
+    """How far from the centre a member sharing this many of the top_n songs sits: 0 shared is the outer ring."""
+    return TARGET_CENTRE + (1 - TARGET_CENTRE) * (top_n - shared) / top_n
+
+
+def ring_step(top_n: int) -> int:
+    """Shared-song counts between the rings: about five rings whatever the list length (5 for 25, 3 for 15)."""
+    return max(1, round(top_n / 5))
+
+
+def _target_angles(connections: Connections, shared: Mapping[str, int]) -> dict[str, float]:
+    """
+    Each member's angle in radians, clockwise from the top: a slice of the circle per taste group (closest
+    to the community first within it), a gap between groups, and an empty slot at the top for the ring labels.
+    """
+    segments = [sorted(group, key=lambda m: (-shared[m], m.casefold())) for group in connections.groups]
+    if connections.ungrouped:
+        segments.append(sorted(connections.ungrouped, key=lambda m: (-shared[m], m.casefold())))
+    slots = sum(len(segment) for segment in segments) + len(segments)  # one gap after each segment
+    step = 2 * math.pi / slots
+    angles, slot = {}, 0.5  # half a slot in, so the label gap is centred on the top
+    for segment in segments:
+        for member in segment:
+            angles[member] = math.pi / 2 - (slot + 0.5) * step
+            slot += 1
+        slot += 1
+    return angles
+
+
+def consensus_target(connections: Connections, shared: Mapping[str, int], top_n: int, *, title: str,
+                     path: Path) -> ChartResult:
+    """
+    The community's Top N in the middle, and each member at a distance from it set by how many of their
+    ranked picks made it: the more they share, the closer in.
+    """
+    angles = _target_angles(connections, shared)
+    members = list(angles)
+    places = {m: (target_radius(shared[m], top_n) * math.cos(angles[m]),
+                  target_radius(shared[m], top_n) * math.sin(angles[m])) for m in members}
+    step = ring_step(top_n)
+    rings = list(range(0, top_n, step))  # 0 is the outer ring; top_n itself is the centre's edge
+
+    fig, ax = _figure(TARGET_SIZE)
+    _titles(fig, title, f"Each member is a dot: the closer to the centre, the more of their {top_n} ranked picks made "
+                        f"the community Top {top_n}.\nRings mark every {step} songs shared. Colours are taste groups.")
+    for k in rings:
+        ax.add_patch(Circle((0, 0), target_radius(k, top_n), fill=False, edgecolor=GRID_COLOUR, linewidth=0.8,
+                            zorder=0))
+    hub = TARGET_CENTRE * 0.82
+    ax.add_patch(Circle((0, 0), hub, facecolor=INK, edgecolor="none", zorder=2))
+    spokes = []
+    for member in members:
+        start = (hub * math.cos(angles[member]), hub * math.sin(angles[member]))
+        ax.plot([start[0], places[member][0]], [start[1], places[member][1]], color=group_colour(connections, member),
+                linewidth=1.2, alpha=0.35, solid_capstyle="round", zorder=1)
+        spokes.append((start, places[member]))
+    ax.scatter([places[m][0] for m in members], [places[m][1] for m in members], s=TARGET_DOT,
+               c=[group_colour(connections, m) for m in members], edgecolors=SURFACE, linewidths=2, zorder=3)
+    ax.set_xlim(-1.3, 1.3)
+    ax.set_ylim(-1.15, 1.15)
+    ax.set_aspect("equal")
+    centre_label = ax.text(0, 0, f"Community\nTop {top_n}", ha="center", va="center", fontsize=10, fontweight="bold",
+                           color=SURFACE, zorder=4, linespacing=1.3)
+    ring_labels = [ax.text(0, target_radius(k, top_n), f"{k} shared" if k else "0", ha="center", va="center",
+                           fontsize=8, color=MUTED_INK, zorder=4,
+                           bbox={"boxstyle": "round,pad=0.2", "facecolor": SURFACE, "edgecolor": "none"})
+                   for k in rings]
+    legend = _legend(ax, connections, loc="upper right")
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+
+    obstacles = [_box(artist, renderer) for artist in (legend, centre_label, *ring_labels)]
+    centre_px = ax.transData.transform((0, 0))
+    hub_px = ax.transData.transform((hub, 0))[0] - centre_px[0]
+    obstacles.append((centre_px[0] - hub_px, centre_px[1] - hub_px, centre_px[0] + hub_px, centre_px[1] + hub_px))
+    dot_boxes = _marker_boxes(ax, fig, [places[m] for m in members], [TARGET_DOT] * len(members))
+    pixel_spokes = [tuple(tuple(ax.transData.transform(point)) for point in spoke) for spoke in spokes]
+    placer = LabelPlacer(fig, ax, dot_boxes + obstacles, pixel_spokes, _area(ax), fontsize=9, color=INK, halo=True,
+                         gap=3)
+    order = sorted(members, key=lambda m: (-shared[m], m.casefold()))  # the closest get the nearest spots
+    labels = [placer.place(f"{member} ({shared[member]})", places[member], clearance=math.sqrt(TARGET_DOT) / 2)
+              for member in order]
     return _save(fig, path, labels, dot_boxes, placer.crowded)
 
 

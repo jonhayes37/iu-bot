@@ -92,8 +92,9 @@ CI should be green: it runs the whole suite (about 20 seconds) and requires 98% 
 
 | Fixture | Gives you |
 | --- | --- |
-| `databases(Database.MERCH, ...)` | Real empty SQLite files in `tmp_path`, created by the same `initialize_databases()` as production, with the env vars set. Databases you don't request stay unconfigured. Returns the paths |
+| `databases(Database.MERCH, ...)` | Real SQLite files (empty apart from the inductees `hall_of_fame.sql` seeds) in `tmp_path`, created by the same `initialize_databases()` as production, with the env vars set. Databases you don't request stay unconfigured. Returns the paths |
 | `all_databases` | All eleven of them |
+| `no_inductees` | The hall_of_fame database with its seeded Hall of Famers and lifetime achievers removed, for tests that start from nobody inducted |
 | `query(Database.X, sql, *params)` / `execute(Database.X, sql, *params)` | Read rows back / seed rows directly, to assert on stored state without using the code under test |
 | `frozen_time("2026-12-01 05:00:00")` | Freezes `datetime.now()` at a UTC moment; call again to move the clock. SQLite's `CURRENT_TIMESTAMP` is not frozen, so insert explicit timestamps |
 | `interaction`, `admin_interaction`, `make_interaction(channel=..., user=..., guild=..., administrator=...)` | A fake slash command/button/modal interaction. `await command.callback(interaction, ...)`, then assert on `interaction.sent` (a list of `Sent` with `.text`, `.content`, `.embed`, `.ephemeral`, `.via`) |

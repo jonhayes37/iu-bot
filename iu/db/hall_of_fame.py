@@ -1,10 +1,20 @@
-"""Database operations for Hall of Fame nominations.
+"""Database operations for Hall of Fame nominations, and the record of who has been inducted.
 
-Every function takes the awards year it works on (the year of the hub or command that asked).
+Every nomination and voting function takes the awards year it works on (the year of the hub or command
+that asked).
 """
+
+from dataclasses import dataclass
 
 from config import Database
 from db.connection import db_connection
+
+
+@dataclass(frozen=True)
+class Inductee:
+    """Someone in the Hall of Fame, or given a lifetime achievement award."""
+    name: str
+    year_inducted: int
 
 def save_hof_nomination(award_year: int, user_id: int, username: str, text: str):
     """Saves or updates a user's Hall of Fame nomination."""
@@ -96,3 +106,61 @@ def get_hof_ballots(award_year: int) -> list[tuple[str, str, str]]:
             WHERE award_year = ?
         """, (award_year,)).fetchall()
         return [tuple(row) for row in rows]
+
+
+# The two tables have the same columns. The table name can't be a bound parameter, so it always comes
+# from these constants, never from user input.
+_HALL_OF_FAMERS = "hall_of_famers"
+_LIFETIME_ACHIEVERS = "lifetime_achievers"
+
+
+def _induct(table: str, name: str, year: int) -> bool:
+    """Adds `name`; False (and nothing changes) when they are already in, in any capitalisation."""
+    with db_connection(Database.HALL_OF_FAME) as conn:
+        cursor = conn.execute(f"""
+            INSERT INTO {table} (name, year_inducted) VALUES (?, ?)
+            ON CONFLICT (name) DO NOTHING
+        """, (name, year))
+        return cursor.rowcount == 1
+
+
+def _find(table: str, name: str) -> Inductee | None:
+    with db_connection(Database.HALL_OF_FAME) as conn:
+        row = conn.execute(f"SELECT name, year_inducted FROM {table} WHERE name = ?", (name,)).fetchone()
+        return Inductee(*row) if row else None
+
+
+def _all(table: str) -> list[Inductee]:
+    with db_connection(Database.HALL_OF_FAME) as conn:
+        rows = conn.execute(f"SELECT name, year_inducted FROM {table} ORDER BY year_inducted, name").fetchall()
+        return [Inductee(*row) for row in rows]
+
+
+def add_hall_of_famer(name: str, year: int) -> bool:
+    """Inducts `name` into the Hall of Fame in `year`. False if they're already in it (ignoring case)."""
+    return _induct(_HALL_OF_FAMERS, name, year)
+
+
+def find_hall_of_famer(name: str) -> Inductee | None:
+    """The Hall of Famer with this name (ignoring case), or None."""
+    return _find(_HALL_OF_FAMERS, name)
+
+
+def get_hall_of_famers() -> list[Inductee]:
+    """Everyone in the Hall of Fame, oldest induction first, then by name."""
+    return _all(_HALL_OF_FAMERS)
+
+
+def add_lifetime_achiever(name: str, year: int) -> bool:
+    """Gives `name` the lifetime achievement award in `year`. False if they already have it (ignoring case)."""
+    return _induct(_LIFETIME_ACHIEVERS, name, year)
+
+
+def find_lifetime_achiever(name: str) -> Inductee | None:
+    """The lifetime achievement award winner with this name (ignoring case), or None."""
+    return _find(_LIFETIME_ACHIEVERS, name)
+
+
+def get_lifetime_achievers() -> list[Inductee]:
+    """Every lifetime achievement award winner, oldest first, then by name."""
+    return _all(_LIFETIME_ACHIEVERS)

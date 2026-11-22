@@ -3,14 +3,16 @@
 import sqlite3
 from unittest import mock
 
+import discord
 import pytest
 
 from config import Database
-from db.hall_of_fame import get_hof_nomination, save_hof_nomination
+from db.hall_of_fame import Inductee, add_hall_of_famer, get_hof_nomination, save_hof_nomination
 from db.top_songs import get_all_top_songs, get_user_top_songs, save_top_songs
 from ui.base import DATABASE_ERROR
 from ui.eoy_nominations import (
-    EOYNominationsHub, HallOfFameNominationButton, HoFModal, Top25Button, Top25Modal
+    MAX_TEXT_DISPLAY_LENGTH, EOYNominationsHub, HallOfFameNominationButton, HoFModal, Top25Button, Top25Modal,
+    hall_of_famers_text
 )
 from testsupport.ui import button_labels, fill, match_custom_id, text_input_label
 
@@ -133,8 +135,23 @@ class TestHoFModal:
         modal = HoFModal(2026, existing_text="BTS")
 
         assert modal.title == "2026 Hall of Fame Nominations"
-        assert text_input_label(modal.hof_text) == "Who should be inducted in 2026?"
+        assert modal.hof_label.text == "Who should be inducted in 2026?"
         assert modal.hof_text.default == "BTS"
+
+    async def test_the_hall_of_famers_are_listed_above_the_box(self):
+        hall_of_famers = [Inductee("IU", 2024), Inductee("BTS", 2025)]
+        modal = HoFModal(2026, hall_of_famers=hall_of_famers)
+
+        assert len(modal.children) == 2
+        assert isinstance(modal.children[0], discord.ui.TextDisplay)
+        assert modal.children[0].content == hall_of_famers_text(hall_of_famers)
+        assert modal.children[1] is modal.hof_label
+
+    @pytest.mark.parametrize("hall_of_famers", [None, []])
+    async def test_with_nobody_inducted_there_is_only_the_box(self, hall_of_famers):
+        modal = HoFModal(2026, hall_of_famers=hall_of_famers)
+
+        assert modal.children == [modal.hof_label]
 
     async def test_submitting_saves_and_confirms_the_award_year(self, interaction):
         modal = HoFModal(2026)
@@ -169,6 +186,30 @@ class TestHoFModal:
         [reply] = interaction.sent
         assert reply.content.startswith(DATABASE_ERROR)
         assert [(f.filename, f.fp.read()) for f in reply.kwargs["files"]] == [("hall_of_fame.txt", b"BTS")]
+
+
+class TestHallOfFamersText:
+    """The list of inductees at the top of the nominations form."""
+
+    def test_nobody_inducted_means_no_list(self):
+        assert hall_of_famers_text([]) is None
+
+    def test_one_line_per_year_oldest_first(self):
+        inductees = [Inductee("BTS", 2025), Inductee("Girls' Generation", 2024), Inductee("IU", 2024)]
+
+        assert hall_of_famers_text(inductees) == (
+            "🏛️ **Already in the Hall of Fame**:\n"
+            "**2024:** Girls' Generation, IU\n"
+            "**2025:** BTS")
+
+    def test_years_that_dont_fit_are_left_off_with_a_note(self):
+        inductees = [Inductee(f"{'x' * 90} {year}", year) for year in range(1900, 2000)]
+
+        text = hall_of_famers_text(inductees)
+
+        assert len(text) <= MAX_TEXT_DISPLAY_LENGTH
+        assert "**1900:**" in text and "**1999:**" not in text
+        assert text.endswith("\n…and more (too many to list)")
 
 
 class TestButtons:
@@ -233,6 +274,22 @@ class TestButtons:
         modal = interaction.response.send_modal.await_args.args[0]
         assert isinstance(modal, HoFModal)
         assert (modal.year, modal.hof_text.default) == (2026, "BTS")
+
+    async def test_the_hall_of_fame_button_lists_who_is_already_in(self, interaction):
+        add_hall_of_famer("Mamamoo", 2026)
+
+        await HallOfFameNominationButton(2026).callback(interaction)
+
+        listing = interaction.response.send_modal.await_args.args[0].children[0]
+        assert listing.content.splitlines()[1:] == [
+            "**2020:** Boa, BTS, Girls' Generation",
+            "**2021:** Bigbang, KARA, SHINee",
+            "**2022:** IU, Psy, Twice",
+            "**2023:** 2NE1, Blackpink, Seventeen",
+            "**2024:** 4Minute, Red Velvet, Shinsadong Tiger",
+            "**2025:** GFriend, JYP, Kenzie",
+            "**2026:** Mamamoo",
+        ]
 
     async def test_a_database_failure_is_reported_to_the_user(self, interaction, execute):
         execute(Database.TOP_SONGS, "DROP TABLE eoy_top_songs")

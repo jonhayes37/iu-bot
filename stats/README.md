@@ -62,7 +62,7 @@ the stats don't read them.
 
 `stats.connections` shows how everyone's lists overlap. Run it for both the end of year Top 25 and the
 Top 15 So Far (it takes any ranked list file, with the same formats as `ranked_lists`; the mid-year
-honourable mention counts as a shared song). Besides the report, it saves three charts:
+honourable mention counts as a shared song). Besides the report, it saves four charts:
 
 - **Taste network** (`*_taste_network.png`): each member is a dot, sized by how many members they share
   at least one song with. A line joins two members who share at least one song, thicker for more, and the
@@ -72,6 +72,13 @@ honourable mention counts as a shared song). Besides the report, it saves three 
   song coloured like a taste group was picked only inside that group; grey ones were picked across groups.
 - **Overlap matrix** (`*_overlap_matrix.png`): the exact number of songs every pair shares, darker for
   more, with members grouped by taste group.
+- **Closest to the community** (`*_consensus_target.png`): the community's Top 25 (or Top 15) in the
+  middle, and each member as a dot whose distance from it shows how many of their ranked picks made it:
+  closer means more in common, with rings every 5 songs (every 3 for a Top 15). Each taste group has its
+  own slice of the circle, closest member first, so you can see when a whole group sits far from the
+  consensus. The community Top N is the points ranking from `ranked_lists`, with the same tiebreaks: when
+  the draw decides its last places, **Data notes** gives the seed, and `--seed N` repeats it (pass the same
+  seed as the ranked-list report to match its Top N).
 
 **Taste groups** come from the data, not from any labels: community detection (Louvain, with a fixed seed
 so the same lists always give the same groups) splits the members so that people share more songs inside
@@ -81,8 +88,9 @@ more, the closest groups are merged until three are left. Someone who shares too
 belong to a group is shown grey, "in no group". On the sample files, the Top 25 and mid-year lists
 split into three groups, the all-time lists into three with two members on their own, and October's What
 Are You Listening To into two. The report lists each group's members and the songs most of them picked,
-the songs picked across groups, the strongest pairs with their shared songs, and each member's
-connections.
+the songs picked across groups, the strongest pairs with their shared songs, each member's
+connections, and the table behind the community chart (songs shared, and the same weighted by how close
+each member ranked them to the community).
 
 Charts can't draw colour emoji, so names like "Alexrandia 🖤🩶🤍💜" appear as "Alexrandia" on them (the
 report keeps the full name). Korean, Japanese and Chinese titles are drawn with a fallback font when one

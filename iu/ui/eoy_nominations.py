@@ -1,16 +1,40 @@
 """UI elements for end of year nominations"""
 import logging
+from itertools import groupby
 
 import discord
 from ui.base import SafeModal, report_interaction_error, reports_errors
 from ui.end_of_year import refuse_if_closed
 from ui.hma_nominations import HMANominationsButton
-from db.hall_of_fame import save_hof_nomination, get_hof_nomination
+from db.hall_of_fame import Inductee, get_hall_of_famers, get_hof_nomination, save_hof_nomination
 from db.top_songs import save_top_songs, get_user_top_songs
 from utils.discord_files import text_file
 from utils.validation import sanitize_list
 
 logger = logging.getLogger('iu-bot')
+
+# The most text a modal's text display can hold
+MAX_TEXT_DISPLAY_LENGTH = 4000
+
+
+def hall_of_famers_text(inductees: list[Inductee]) -> str | None:
+    """
+    The Hall of Fame so far, one line per year (oldest first), for the top of the nominations form.
+    None when nobody has been inducted. Years that don't fit are left off the end, with a note.
+    """
+    if not inductees:
+        return None
+    by_year = sorted(inductees, key=lambda inductee: inductee.year_inducted)
+    lines = [f"**{year}:** " + ", ".join(inductee.name for inductee in group)
+             for year, group in groupby(by_year, key=lambda inductee: inductee.year_inducted)]
+    text = "🏛️ **Already in the Hall of Fame**:"
+    cut_note = "\n…and more (too many to list)"
+    for line in lines:
+        if len(text) + 1 + len(line) + len(cut_note) > MAX_TEXT_DISPLAY_LENGTH:
+            return text + cut_note
+        text += "\n" + line
+    return text
+
 
 class Top25Modal(SafeModal):
     """Modal for submitting top songs of the year and honourable mentions"""
@@ -101,20 +125,25 @@ class Top25Modal(SafeModal):
 
 
 class HoFModal(SafeModal):
-    """Modal for submitting Hall of Fame nominations"""
-    def __init__(self, year: int, existing_text: str = None):
+    """Modal for submitting Hall of Fame nominations, listing who is already in so they aren't nominated again"""
+    def __init__(self, year: int, existing_text: str = None, hall_of_famers: list[Inductee] | None = None):
         super().__init__(title=f'{year} Hall of Fame Nominations')
         self.year = year
 
+        already_in = hall_of_famers_text(hall_of_famers or [])
+        if already_in:
+            self.add_item(discord.ui.TextDisplay(already_in))
+
         self.hof_text = discord.ui.TextInput(
-            label=f'Who should be inducted in {self.year}?',
             style=discord.TextStyle.paragraph,
             placeholder="BTS\nGirls' Generation\nSeventeen\n...",
             default=existing_text,
             required=True,
             max_length=4000
         )
-        self.add_item(self.hof_text)
+        # Titled with a Label (Discord's current way for modal boxes, as the HMA forms do), below the list
+        self.hof_label = discord.ui.Label(text=f'Who should be inducted in {self.year}?', component=self.hof_text)
+        self.add_item(self.hof_label)
 
     # pylint: disable=arguments-differ
     async def on_submit(self, interaction: discord.Interaction):
@@ -185,8 +214,8 @@ class HallOfFameNominationButton(discord.ui.DynamicItem[discord.ui.Button], temp
             return
 
         existing_text = get_hof_nomination(self.year, interaction.user.id)
-        # Pass the year into the Modal
-        await interaction.response.send_modal(HoFModal(year=self.year, existing_text=existing_text))
+        await interaction.response.send_modal(HoFModal(
+            year=self.year, existing_text=existing_text, hall_of_famers=get_hall_of_famers()))
 
 
 class EOYNominationsHub(discord.ui.View):

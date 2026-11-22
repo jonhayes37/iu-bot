@@ -4,13 +4,15 @@ Every function works on the awards year it is given (the year of the hub or comm
 """
 
 import sqlite3
+from typing import Callable, NamedTuple
 
 import pytest
 
 from config import Database
 from db.hall_of_fame import (
-    get_all_hof_nominations, get_hof_ballots, get_hof_nomination, get_official_hof_nominees, get_user_hof_vote,
-    save_hof_nomination, save_hof_vote, set_hof_final_nominees
+    Inductee, add_hall_of_famer, add_lifetime_achiever, find_hall_of_famer, find_lifetime_achiever,
+    get_all_hof_nominations, get_hall_of_famers, get_hof_ballots, get_hof_nomination, get_lifetime_achievers,
+    get_official_hof_nominees, get_user_hof_vote, save_hof_nomination, save_hof_vote, set_hof_final_nominees
 )
 
 
@@ -143,3 +145,85 @@ class TestBallots:
         save_hof_vote(2025, 3, "Old", "Older", "Oldest")
 
         assert sorted(get_hof_ballots(2026)) == [("BTS", "IU", "EXO"), ("IU", "BTS", "EXO")]
+
+
+class InducteeList(NamedTuple):
+    """The functions for one of the two lists, which keep the same record."""
+    add: Callable[[str, int], bool]
+    find: Callable[[str], Inductee | None]
+    get_all: Callable[[], list[Inductee]]
+    table: str
+
+
+INDUCTEE_LISTS = [
+    pytest.param(InducteeList(add_hall_of_famer, find_hall_of_famer, get_hall_of_famers, "hall_of_famers"),
+                 id="hall of fame"),
+    pytest.param(InducteeList(add_lifetime_achiever, find_lifetime_achiever, get_lifetime_achievers,
+                              "lifetime_achievers"), id="lifetime achievement"),
+]
+
+
+@pytest.mark.usefixtures("no_inductees")
+@pytest.mark.parametrize("inductees", INDUCTEE_LISTS)
+class TestInductees:
+    """Who has been inducted, and when. Each name is in a list once."""
+
+    def test_with_nobody_inducted_the_list_is_empty(self, inductees):
+        assert inductees.get_all() == []
+        assert inductees.find("IU") is None
+
+    def test_adding_stores_the_name_and_year(self, inductees, query):
+        assert inductees.add("IU", 2026) is True
+
+        rows = query(Database.HALL_OF_FAME, f"SELECT * FROM {inductees.table}")
+        assert [tuple(row) for row in rows] == [("IU", 2026)]
+
+    def test_a_name_already_in_is_not_added_again_whatever_its_capitals(self, inductees):
+        inductees.add("Girls' Generation", 2024)
+
+        assert inductees.add("girls' GENERATION", 2026) is False
+
+        assert inductees.get_all() == [Inductee("Girls' Generation", 2024)]
+        assert inductees.find("GIRLS' GENERATION") == Inductee("Girls' Generation", 2024)
+
+    def test_everyone_is_listed_oldest_first_then_by_name(self, inductees):
+        for name, year in [("BTS", 2025), ("iu", 2024), ("EXO", 2024), ("2NE1", 2025)]:
+            inductees.add(name, year)
+
+        assert inductees.get_all() == [Inductee("EXO", 2024), Inductee("iu", 2024), Inductee("2NE1", 2025),
+                                       Inductee("BTS", 2025)]
+
+
+@pytest.mark.usefixtures("no_inductees")
+def test_the_two_lists_are_separate():
+    add_hall_of_famer("IU", 2024)
+
+    assert add_lifetime_achiever("IU", 2026) is True
+    assert get_hall_of_famers() == [Inductee("IU", 2024)]
+    assert get_lifetime_achievers() == [Inductee("IU", 2026)]
+
+
+class TestSeededInductees:
+    """The schema seeds everyone inducted before the commands existed."""
+
+    def test_three_hall_of_famers_a_year_from_2020_to_2025(self):
+        hall_of_famers = get_hall_of_famers()
+
+        assert len(hall_of_famers) == 18
+        assert {year: sum(1 for i in hall_of_famers if i.year_inducted == year) for year in range(2020, 2026)} == \
+            dict.fromkeys(range(2020, 2026), 3)
+        assert hall_of_famers[:3] == [Inductee("Boa", 2020), Inductee("BTS", 2020), Inductee("Girls' Generation", 2020)]
+        assert find_hall_of_famer("Kenzie") == Inductee("Kenzie", 2025)
+
+    def test_one_lifetime_achiever_a_year_from_2020_to_2025(self):
+        assert get_lifetime_achievers() == [
+            Inductee("IU", 2020), Inductee("Psy", 2021), Inductee("JYP", 2022), Inductee("Min Hee Jin", 2023),
+            Inductee("Shinsadong Tiger", 2024), Inductee("Teddy", 2025)]
+
+    def test_restarting_doesnt_seed_them_twice_or_undo_later_inductions(self, databases):
+        add_hall_of_famer("Mamamoo", 2026)
+
+        databases(Database.HALL_OF_FAME)  # initializes the same database again, as a restart does
+
+        assert len(get_hall_of_famers()) == 19
+        assert len(get_lifetime_achievers()) == 6

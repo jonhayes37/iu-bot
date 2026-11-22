@@ -209,7 +209,8 @@ December 1, voting, exports) still count for that year: everything posted or run
 
 - **The nominations hub.** Admins post one hub with three buttons: a member's ranked **Top 25 Songs**
   of the year (plus 3 honourable mentions, in the same `Artist // Song` format as [Lists](#lists)),
-  their **HMA Nominations**, and their **Hall of Fame** nominations.
+  their **HMA Nominations**, and their **Hall of Fame** nominations. The Hall of Fame form lists
+  everyone already inducted, by year, so they aren't nominated again.
 - **HallyU Music Awards (HMAs).** The HMA button opens a private menu of pages. Each award family
   (**Daesang**, **Bonsang**, **Fun**) has its own pages of up to 5 categories, in alphabetical order (the
   17 Bonsangs make pages of 5, 5, 5 and 2). A page is a form with a box per category, where members type
@@ -250,6 +251,8 @@ top of the file for a tiebreaker.
 | `/hma-suggestions-export` | Admin | Exports the category suggestions |
 | `/hma-set-nominees category_id nominees_pipe` | Admin | Sets the finalists for an active HMA category (the category is suggested as you type) (separated by `\|`): 3 to 25, each up to 100 characters, so the ballot menus can show them |
 | `/hall-of-fame-set-nominees nominees_pipe` | Admin | Sets the Hall of Fame finalists (separated by `\|`): 3 to 25, each up to 100 characters |
+| `/add-hall-of-famer name` | Admin | Inducts someone into the Hall of Fame for the current calendar year (so run it before January 1). The Hall of Fame nomination form lists everyone inducted so far, so members don't nominate them again |
+| `/add-lifetime-achiever name` | Admin | Gives someone the lifetime achievement award for the current calendar year (so run it before January 1) |
 | `/add-hma-category category_id family name` | Admin | Adds an HMA category (or restores a removed one with that ID). The ID is lowercase letters, numbers and `_`; the name is up to 45 characters (the most a form box's title shows) |
 | `/remove-hma-category category_id` | Admin | Removes an HMA category from nominations, the ballot and the results, keeping its data |
 | `/end-of-year-voting` | Admin | Posts the voting buttons |
