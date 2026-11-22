@@ -44,7 +44,12 @@ COPY --from=build /app/.venv /app/.venv
 # is installed: that is what launch(headless=True) runs, and the full browser would add ~600 MB. It
 # lives outside any home folder so the non-root user can run it. The apt lists are removed in the
 # same layer.
-RUN playwright install --with-deps --only-shell chromium \
+# libatomic1 comes first: the Node.js that Playwright bundles (to install the browser, and to drive it
+# at run time) needs it since Playwright 1.65, and --with-deps can't install it because that step runs
+# on the same Node. The slim image doesn't include it.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && playwright install --with-deps --only-shell chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # The data folder is a mount point; the app code stays read-only to the bot user.
