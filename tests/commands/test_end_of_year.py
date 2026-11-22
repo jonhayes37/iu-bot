@@ -39,13 +39,13 @@ class TestNominationsHub:
 
         [hub] = admin_interaction.channel.sent
         assert hub.embed.title == "2026 End of Year Nominations!"
-        assert "**2. HallyU Hall of Fame:** Nominate the K-Pop legends who deserve to be in our 2026 class of " \
+        assert "**2. HallyU Music Awards:** Nominate as many as you like in each award category." \
+            in hub.embed.description
+        assert "**3. HallyU Hall of Fame:** Nominate the K-Pop legends who deserve to be in our 2026 class of " \
             "inductees!" in hub.embed.description
         assert isinstance(hub.kwargs["view"], EOYNominationsHub)
-        assert button_labels(hub.kwargs["view"]) == ["Submit 2026 Top 25 Songs", "2026 HallyU Hall of Fame",
-                                                     "2026 HMA Nominations"]
-        assert "**3. HallyU Music Awards:** Nominate as many as you like in each award category." \
-            in hub.embed.description
+        assert button_labels(hub.kwargs["view"]) == ["Submit 2026 Top 25 Songs", "2026 HMA Nominations",
+                                                     "2026 HallyU Hall of Fame"]
 
     async def test_in_december_it_is_still_for_the_year_being_celebrated(self, admin_interaction, frozen_time):
         frozen_time("2026-12-02 12:00:00")

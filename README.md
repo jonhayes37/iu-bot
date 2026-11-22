@@ -209,7 +209,7 @@ December 1, voting, exports) still count for that year: everything posted or run
 
 - **The nominations hub.** Admins post one hub with three buttons: a member's ranked **Top 25 Songs**
   of the year (plus 3 honourable mentions, in the same `Artist // Song` format as [Lists](#lists)),
-  their **Hall of Fame** nominations, and their **HMA Nominations**.
+  their **HMA Nominations**, and their **Hall of Fame** nominations.
 - **HallyU Music Awards (HMAs).** The HMA button opens a private menu of pages. Each award family
   (**Daesang**, **Bonsang**, **Fun**) has its own pages of up to 5 categories, in alphabetical order (the
   17 Bonsangs make pages of 5, 5, 5 and 2). A page is a form with a box per category, where members type
@@ -243,7 +243,7 @@ top of the file for a tiebreaker.
 
 | Command | Who | Description |
 | --- | --- | --- |
-| `/end-of-year-nominations` | Admin | Posts the Top 25, Hall of Fame and HMA nomination buttons |
+| `/end-of-year-nominations` | Admin | Posts the Top 25, HMA and Hall of Fame nomination buttons |
 | `/end-of-year-hma-suggestions` | Admin | Posts the category suggestions button |
 | `/export-end-of-year-nominations` | Admin | Exports the Top 25 lists, honourable mentions and Hall of Fame nominations |
 | `/hma-nomination-export [year]` | Admin | Exports the HMA nominations, grouped by category |

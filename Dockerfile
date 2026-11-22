@@ -8,7 +8,7 @@ ARG PYTHON_IMAGE=python:3.14-slim
 FROM ${PYTHON_IMAGE} AS build
 
 # Pin uv itself; bump deliberately.
-COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \

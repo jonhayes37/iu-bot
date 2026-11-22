@@ -171,7 +171,8 @@ def _process_export_data(event_name: str, submissions: list[dict]) -> tuple[str,
         clean_text = sub.get('cleaned_text', '')
         urls_raw = sub.get('extracted_urls', '')
 
-        stats_buffer.write(f"{username}\n{clean_text}\n")
+        # The same "--- name ---" header as the end of year export, so stats/ reads both the same way
+        stats_buffer.write(f"--- {username} ---\n{clean_text}\n\n")
         if urls_raw:
             urls = urls_raw.split(',')
             lines = clean_text.split('\n')

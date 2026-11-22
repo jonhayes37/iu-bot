@@ -222,7 +222,8 @@ class TestExportLists:
         [reply] = admin.sent
         assert reply.content == "Exported **2** submissions for `mid_2026`!"
         files = {f.filename: f.fp.read().decode("utf-8") for f in reply.kwargs["files"]}
-        assert files["mid_2026_stats.txt"] == "Jo\n1. A // a\n2. B // b\nSam\n1. C // c\n2. D // d\n"
+        assert files["mid_2026_stats.txt"] == ("--- Jo ---\n1. A // a\n2. B // b\n\n"
+                                               "--- Sam ---\n1. C // c\n2. D // d\n\n")
         assert files["mid_2026_urls.txt"].startswith("URL REFERENCE SHEET: Mid-year List\n" + "=" * 50)
         sheet = files["mid_2026_urls.txt"]
         assert "--- Jo ---\n1. A // a\n-> https://youtu.be/aaaaaaaaaaa?t=58s (starts at 0:58)" in sheet
@@ -258,7 +259,7 @@ class TestProcessExportData:
             {"username": "Jo", "cleaned_text": "1. A // a", "extracted_urls": ""},
             {"username": "Sam", "cleaned_text": "1. B // b", "extracted_urls": ""}])
 
-        assert stats == "Jo\n1. A // a\nSam\n1. B // b\n"
+        assert stats == "--- Jo ---\n1. A // a\n\n--- Sam ---\n1. B // b\n\n"
 
     def test_members_without_links_are_left_off_the_sheet(self):
         sheet = self._sheet("1. A // a\n2. B // b", ",")

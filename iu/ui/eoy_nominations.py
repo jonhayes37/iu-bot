@@ -109,7 +109,7 @@ class HoFModal(SafeModal):
         self.hof_text = discord.ui.TextInput(
             label=f'Who should be inducted in {self.year}?',
             style=discord.TextStyle.paragraph,
-            placeholder="BTS, Girls' Generation, Seventeen...",
+            placeholder="BTS\nGirls' Generation\nSeventeen\n...",
             default=existing_text,
             required=True,
             max_length=4000
@@ -171,7 +171,7 @@ class HallOfFameNominationButton(discord.ui.DynamicItem[discord.ui.Button], temp
 
     def __init__(self, year: int):
         super().__init__(discord.ui.Button(
-            label=f"{year} HallyU Hall of Fame", style=discord.ButtonStyle.success,
+            label=f"{year} HallyU Hall of Fame", style=discord.ButtonStyle.primary,
             custom_id=f"btn_nom_hof_{year}", emoji="🏛️"))
         self.year = year
 
@@ -198,6 +198,6 @@ class EOYNominationsHub(discord.ui.View):
 
     def __init__(self, year: int, closed: bool = False):
         super().__init__(timeout=None)
-        for button in (Top25Button(year), HallOfFameNominationButton(year), HMANominationsButton(year)):
+        for button in (Top25Button(year), HMANominationsButton(year), HallOfFameNominationButton(year)):
             button.item.disabled = closed
             self.add_item(button)

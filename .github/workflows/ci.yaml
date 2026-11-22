@@ -14,10 +14,10 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v10
         with:
           python-version: '3.14'
           enable-cache: true
@@ -28,7 +28,7 @@ jobs:
 
       - name: Lint
         run: |
-          uv run --frozen pylint iu tests
+          uv run --frozen pylint iu tests stats
 
       - name: Unit test
         run: uv run --frozen pytest --cov=iu

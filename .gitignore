@@ -20,3 +20,6 @@ requirements-audit.txt
 
 # macOS (no slash, so it matches in every folder)
 .DS_Store
+
+# stats/ reports and charts
+stats/output/

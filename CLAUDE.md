@@ -17,11 +17,13 @@ All code lives in `iu/` and imports are **relative to `iu/`** (`from db.lists im
 - `services/` — `youtube.py` (YouTube Data API client, one client per thread; the HTTP layer isn't thread-safe), and the listen game helpers: `listen_game.py` (`require_active_round`, `send_dm`, `update_submission_tracker`), `listen_game_playlist.py`, `listen_game_reveal.py`.
 - `utils/` — pure helpers (`strings.py`, `validation.py`, `end_of_year.py`).
 
+Outside `iu/`, `stats/` is a separate package (imported as `stats.common...`, run with `uv run python -m stats.<script>` from the repo root) that makes the community stats for the list videos from the files `/export-lists` and `/export-end-of-year-nominations` write. It isn't part of the bot or the Docker image; see [stats/README.md](stats/README.md). Both exports head each list with `--- username ---`, which `stats/common/parsing.py` relies on, so keep the two in step if you change an export's layout.
+
 ## Commands
 
 ```bash
 uv sync                    # create .venv from uv.lock (runtime deps + dev tools); install uv: https://docs.astral.sh/uv/
-uv run pylint iu tests     # lint the code and the tests (config in .pylintrc, max line 120; run from the repo root)
+uv run pylint iu tests stats  # lint the code, the tests and stats/ (config in .pylintrc, max line 120; run from the repo root)
 uv run pytest --cov=iu     # tests; CI then requires coverage >= 98% (lines and branches)
 uv add <package>           # add a runtime dependency (edits pyproject.toml and uv.lock); add --dev for a dev tool
 uv lock --upgrade          # refresh the transitive versions only: direct deps are pinned with ==, so bump those in pyproject.toml (docs/playbook.md 1.9)
@@ -36,7 +38,7 @@ CI ([.github/workflows/ci.yaml](.github/workflows/ci.yaml)) runs on every PR and
 
 Deploying, Unraid and logs are covered in [docs/playbook.md](docs/playbook.md). Setup facts (Discord app, required channels/roles, settings) are in [docs/setup.md](docs/setup.md), YouTube credentials and quota in [docs/youtube.md](docs/youtube.md), and database inspection, permissions, backups and adding a new database in [docs/databases.md](docs/databases.md). Keep them in step with changes: a new channel or role name goes in `config.py` and `docs/setup.md`; a new database goes in `docs/databases.md`.
 
-**After finishing any set of code changes, run `pylint iu tests` and fix everything it reports before calling the work done** (it must exit 0, since CI fails on any message). Don't silence a finding with `# pylint: disable` or by editing `.pylintrc` unless the user agrees; fix the code instead. The size/complexity checks (`too-many-*`) and `duplicate-code` are disabled in `.pylintrc` because existing handlers exceed them, so new code shouldn't rely on that as a reason to write sprawling functions.
+**After finishing any set of code changes, run `pylint iu tests stats` and fix everything it reports before calling the work done** (it must exit 0, since CI fails on any message). Don't silence a finding with `# pylint: disable` or by editing `.pylintrc` unless the user agrees; fix the code instead. The size/complexity checks (`too-many-*`) and `duplicate-code` are disabled in `.pylintrc` because existing handlers exceed them, so new code shouldn't rely on that as a reason to write sprawling functions.
 
 ## Environment
 
@@ -74,7 +76,7 @@ Read through `config.py` (never call `os.getenv` elsewhere): `DISCORD_TOKEN`, `D
 
 ## Testing
 
-`pytest`, `pytest-asyncio` (`asyncio_mode = "auto"`, so `async def test_...` just works), `pytest-cov`, `freezegun` and `parameterized` are the tools, all in the `dev` group. **Every package under `iu/` is tested** (about 1,900 tests, near 100% line and branch coverage), mirroring the layout below. [pyproject.toml](pyproject.toml) sets `testpaths = ["tests"]`, `--import-mode=importlib`, `pythonpath = ["iu", "tests"]` (so `from db.x import ...` and `from testsupport.fakes import ...` both resolve) and the coverage settings (`source = iu`, `branch = true`, omitting `main.py` and `scripts/`).
+`pytest`, `pytest-asyncio` (`asyncio_mode = "auto"`, so `async def test_...` just works), `pytest-cov`, `freezegun` and `parameterized` are the tools, all in the `dev` group. **Every package under `iu/` is tested** (about 1,900 tests, near 100% line and branch coverage), mirroring the layout below. [pyproject.toml](pyproject.toml) sets `testpaths = ["tests"]`, `--import-mode=importlib`, `pythonpath = ["iu", "tests", "."]` (so `from db.x import ...`, `from testsupport.fakes import ...` and `from stats.common... import ...` all resolve) and the coverage settings (`source = iu`, `branch = true`, omitting `main.py` and `scripts/`).
 
 An unclosed SQLite connection or file surfaces as an unraisable `ResourceWarning`, which `filterwarnings` in [pyproject.toml](pyproject.toml) turns into a test failure, so leaks in `db/` code can't slip in. (`with sqlite3.connect(...)` only commits; wrap it in `contextlib.closing(...)` or use `db_connection`.)
 
@@ -110,7 +112,7 @@ Patch other external calls (`services.youtube` functions) in the module that imp
 
 ### Test layout
 
-Tests live in a top-level `tests/` directory that **mirrors `iu/`**, not next to the source (unlike Go's `foo_test.go`):
+Tests live in a top-level `tests/` directory that **mirrors `iu/`** (plus `tests/stats/` for `stats/`, outside the coverage figure), not next to the source (unlike Go's `foo_test.go`):
 
 ```text
 iu/db/lists.py          ->  tests/db/test_lists.py
@@ -122,7 +124,7 @@ iu/utils/validation.py  ->  tests/utils/test_validation.py
 
 - **Do not colocate tests inside `iu/`.** the Docker build copies `iu/`, and coverage measures `iu/`, so colocated tests would be shipped in the image and counted in the coverage denominator. `.dockerignore` already excludes a top-level `tests/`.
 - **No `__init__.py` files in `tests/`, and use `--import-mode=importlib`.** Otherwise same-named files (`tests/db/test_lists.py` vs `tests/ui/test_lists.py`) collide, and a `tests/db/` package could shadow the real `db` package that the code imports as `from db.lists import ...`.
-- Tests are linted like the code (`pylint iu tests`). Fixtures from `conftest.py` are fine as parameters; if a fixture is defined and used in the same file, give the function a different name with `@pytest.fixture(name="thing")` instead of disabling `redefined-outer-name`.
+- Tests are linted like the code (`pylint iu tests stats`). Fixtures from `conftest.py` are fine as parameters; if a fixture is defined and used in the same file, give the function a different name with `@pytest.fixture(name="thing")` instead of disabling `redefined-outer-name`.
 - Name files `test_<module>.py` and functions `test_<behaviour>`. Pylint's file (1000 lines) and class (20 tests) size limits apply to tests too: split a big module's tests by area (`test_listen_game_gm.py` and `test_listen_game_gm_submissions.py`) or a big class by situation (`TestSubmitSong` / `TestSubmitSongWhenYouTubeIsOverQuota`, sharing setup through a `_`-prefixed base class, which pytest doesn't collect). Use `@pytest.mark.parametrize` (or `parameterized`) for table-driven cases, the closest match to Go table tests.
 - Put fixtures shared across files in `tests/conftest.py`; folder-specific ones in that folder's `conftest.py`. Importable helpers live in `tests/testsupport/` (the only package under `tests/`; its name is unique so it can't clash with the code).
 
